@@ -128,6 +128,13 @@ export const ReliabilityInputSchema = z
     /** Configured client→dependency timeout to verify (ms, per client request). */
     expectTimeout: Ms.optional(),
     /**
+     * Longest plausible outbound timeout budget of the app (timeout × attempts + backoff). A
+     * black-hole is only reported as "no outbound timeout" when ≥ 3 requests were observed waiting
+     * longer than this (needs workload.timeout and the fault duration above it); shorter windows are
+     * inconclusive (limitation `timeout-window-too-short`). Default 30 s.
+     */
+    maxOutboundBudget: Ms.default(30_000),
+    /**
      * Duplicate-operation invariants evaluated after the recovery phase of every repetition:
      * no-duplicates, count-matches, conserved (see invariants.ts).
      */

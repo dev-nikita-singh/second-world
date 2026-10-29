@@ -10,10 +10,29 @@
  * 3. Per-fault TTL timers (`armTtl`) that auto-revert in-process.
  * 4. For faults that outlive the process (Docker, Toxiproxy): a persistent ledger of serialisable
  *    revert actions (`cleanupAll()` replays it from a fresh process) and an optional detached
- *    watchdog process that runs the revert actions after the TTL even if this process crashed.
+ *    watchdog process that runs the revert actions after the TTL even if this process crashed, and
+ *    then clears its own ledger entry (only when every action succeeded or was already done).
+ *
+ * Ledger writes are atomic and serialised: every read-modify-write holds `<ledger>.lock` (created
+ * with O_EXCL; a lock older than LEDGER_LOCK_STALE_MS is a crashed writer's and is broken) and
+ * replaces the file by writing a uniquely named temp file and renaming it over the ledger (retried on
+ * transient Windows EPERM/EACCES/EBUSY). Readers never see a torn file and concurrent writers
+ * (engine processes, `sw reliability cleanup`, watchdogs) never lose each other's entries.
+ * (Lock-free temp+rename alone lost 58 of 80 entries with 4 concurrent writer processes.)
  */
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import {
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -224,27 +243,131 @@ export function readLedger(path = defaultLedgerPath()): LedgerEntry[] {
   }
 }
 
+const RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+const sleepBuf = new Int32Array(new SharedArrayBuffer(4));
+/** How long a ledger rename/read keeps retrying transient Windows sharing errors. */
+const FS_RETRY_BUDGET_MS = 5_000;
+/** How long a writer waits for the ledger lock before breaking it as stale. */
+export const LEDGER_LOCK_STALE_MS = 10_000;
+let tmpSeq = 0;
+
+function pause(i: number): void {
+  Atomics.wait(sleepBuf, 0, 0, Math.min(1 + i, 20));
+}
+
+function errCode(e: unknown): string {
+  return (e as NodeJS.ErrnoException | undefined)?.code ?? "";
+}
+
+/**
+ * Read inside the lock: a missing file is empty; transient sharing errors are retried; an unparsable
+ * file (never written by this code: writes are atomic) is moved aside to `<path>.corrupt` instead of
+ * being silently overwritten.
+ */
+function readLedgerLocked(path: string): LedgerEntry[] {
+  const deadline = performance.now() + FS_RETRY_BUDGET_MS;
+  for (let i = 0; ; i++) {
+    let raw: string;
+    try {
+      raw = readFileSync(path, "utf8");
+    } catch (e) {
+      if (errCode(e) === "ENOENT") return [];
+      if (RETRY_CODES.has(errCode(e)) && performance.now() < deadline) {
+        pause(i);
+        continue;
+      }
+      throw e;
+    }
+    try {
+      const v = JSON.parse(raw) as unknown;
+      if (Array.isArray(v)) return v as LedgerEntry[];
+    } catch {
+      // fall through
+    }
+    renameSync(path, `${path}.corrupt`);
+    return [];
+  }
+}
+
+/** Atomic replace: unique temp file + rename (retried on transient Windows sharing errors). */
 function writeLedger(entries: LedgerEntry[], path: string): void {
   if (entries.length === 0) {
-    rmSync(path, { force: true });
+    rmSync(path, { force: true, maxRetries: 20, retryDelay: 10 });
     return;
   }
-  mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.tmp`;
+  const tmp = `${path}.${process.pid}-${++tmpSeq}-${randomBytes(4).toString("hex")}.tmp`;
   writeFileSync(tmp, JSON.stringify(entries, null, 2));
-  renameSync(tmp, path);
+  const deadline = performance.now() + FS_RETRY_BUDGET_MS;
+  for (let i = 0; ; i++) {
+    try {
+      renameSync(tmp, path);
+      return;
+    } catch (e) {
+      // Windows: replacing a file another process has open fails transiently.
+      if (RETRY_CODES.has(errCode(e)) && performance.now() < deadline) {
+        pause(i);
+        continue;
+      }
+      rmSync(tmp, { force: true });
+      throw e;
+    }
+  }
+}
+
+/**
+ * Runs `fn` holding `<path>.lock` (created with O_EXCL, atomic on every OS). Writers hold it for a
+ * read + write (milliseconds); a lock older than LEDGER_LOCK_STALE_MS is left by a crashed writer and
+ * is broken. The same protocol is implemented by the watchdog script.
+ */
+function withLedgerLock<T>(path: string, fn: () => T): T {
+  mkdirSync(dirname(path), { recursive: true });
+  const lock = `${path}.lock`;
+  for (let i = 0; ; i++) {
+    try {
+      const fd = openSync(lock, "wx");
+      try {
+        writeSync(fd, String(process.pid));
+      } finally {
+        closeSync(fd);
+      }
+      break;
+    } catch (e) {
+      if (errCode(e) !== "EEXIST" && !RETRY_CODES.has(errCode(e))) throw e;
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > LEDGER_LOCK_STALE_MS) {
+          rmSync(lock, { force: true });
+          continue;
+        }
+      } catch {
+        // lock vanished meanwhile: retry at once
+        continue;
+      }
+      pause(i);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    rmSync(lock, { force: true, maxRetries: 20, retryDelay: 10 });
+  }
+}
+
+/** Read → mutate → atomic write, under the ledger lock. `mutate` returns null for "nothing to do". */
+function mutateLedger(path: string, mutate: (all: LedgerEntry[]) => LedgerEntry[] | null): void {
+  withLedgerLock(path, () => {
+    const next = mutate(readLedgerLocked(path));
+    if (next !== null) writeLedger(next, path);
+  });
 }
 
 export function ledgerAdd(entry: LedgerEntry, path = defaultLedgerPath()): void {
-  const all = readLedger(path).filter((e) => e.id !== entry.id);
-  all.push(entry);
-  writeLedger(all, path);
+  mutateLedger(path, (all) => [...all.filter((e) => e.id !== entry.id), entry]);
 }
 
-export function ledgerRemove(id: string, path = defaultLedgerPath()): void {
-  const all = readLedger(path);
-  const next = all.filter((e) => e.id !== id);
-  if (next.length !== all.length) writeLedger(next, path);
+/** Removes entry `id` (only the one created at `createdAt`, when given). */
+export function ledgerRemove(id: string, path = defaultLedgerPath(), createdAt?: string): void {
+  const match = (e: LedgerEntry) => e.id === id && (createdAt === undefined || e.createdAt === createdAt);
+  mutateLedger(path, (all) => (all.some(match) ? all.filter((e) => !match(e)) : null));
 }
 
 /** Executes one revert action (async). Throws on failure. */
@@ -277,33 +400,120 @@ export function runRevertActionSync(a: RevertAction): void {
   if (a.kind === "exec") spawnSync(a.file, a.args, { timeout: 10_000, stdio: "ignore", windowsHide: true });
 }
 
+/** Ledger entry a watchdog clears after a successful revert. */
+export interface WatchdogLedgerRef {
+  path: string;
+  id: string;
+  /** Only the entry with this createdAt is removed (a re-applied fault with the same id is kept). */
+  createdAt: string;
+}
+
 /**
- * Spawns a detached watchdog process that runs `actions` after `ttlMs`, surviving a crash of this
- * process. Returns a disarm function (kills the watchdog). Errors in the watchdog are ignored.
+ * Body of the detached watchdog (plain JS for `node -e`; argv: actions JSON, ttlMs, ledger ref JSON
+ * or ""). Runs every revert action after the TTL; when all succeeded (or were already done: HTTP
+ * 404, exec output matching `alreadyDone`) it removes its own ledger entry with the same lock +
+ * temp-file + rename protocol as {@link ledgerRemove}. A failed action leaves the entry for
+ * `sw reliability cleanup`.
  */
-export function spawnWatchdog(ttlMs: number, actions: RevertAction[]): () => void {
-  const script = `
-const actions = JSON.parse(process.argv[1]);
+export const WATCHDOG_SCRIPT = `
 const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const crypto = require("node:crypto");
+const actions = JSON.parse(process.argv[1]);
+const ttl = Number(process.argv[2]);
+const ref = process.argv[3] ? JSON.parse(process.argv[3]) : null;
+const pause = new Int32Array(new SharedArrayBuffer(4));
+const RETRY = ["EPERM", "EACCES", "EBUSY"];
+const wait = (i) => Atomics.wait(pause, 0, 0, Math.min(1 + i, 20));
+function read(p) {
+  const deadline = performance.now() + 5000;
+  for (let i = 0; ; i++) {
+    try {
+      const v = JSON.parse(fs.readFileSync(p, "utf8"));
+      if (!Array.isArray(v)) throw new Error("ledger is not an array");
+      return v;
+    } catch (e) {
+      if (e && e.code === "ENOENT") return [];
+      if (RETRY.includes(e && e.code) && performance.now() < deadline) { wait(i); continue; }
+      throw e; // unreadable / corrupt: leave it for sw reliability cleanup
+    }
+  }
+}
+function write(p, entries) {
+  if (entries.length === 0) { fs.rmSync(p, { force: true, maxRetries: 20, retryDelay: 10 }); return; }
+  const tmp = p + "." + process.pid + "-wd-" + crypto.randomBytes(4).toString("hex") + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(entries, null, 2));
+  const deadline = performance.now() + 5000;
+  for (let i = 0; ; i++) {
+    try { fs.renameSync(tmp, p); return; } catch (e) {
+      if (RETRY.includes(e && e.code) && performance.now() < deadline) { wait(i); continue; }
+      fs.rmSync(tmp, { force: true }); throw e;
+    }
+  }
+}
+function withLock(p, fn) {
+  const lock = p + ".lock";
+  for (let i = 0; ; i++) {
+    try { const fd = fs.openSync(lock, "wx"); try { fs.writeSync(fd, String(process.pid)); } finally { fs.closeSync(fd); } break; }
+    catch (e) {
+      if (!(e && (e.code === "EEXIST" || RETRY.includes(e.code)))) throw e;
+      try { if (Date.now() - fs.statSync(lock).mtimeMs > ${LEDGER_LOCK_STALE_MS}) { fs.rmSync(lock, { force: true }); continue; } } catch { continue; }
+      wait(i);
+    }
+  }
+  try { return fn(); } finally { fs.rmSync(lock, { force: true, maxRetries: 20, retryDelay: 10 }); }
+}
+function clearEntry() {
+  const match = (e) => e && e.id === ref.id && e.createdAt === ref.createdAt;
+  withLock(ref.path, () => {
+    const all = read(ref.path);
+    if (all.some(match)) write(ref.path, all.filter((e) => !match(e)));
+  });
+}
 setTimeout(async () => {
+  let ok = true;
   for (const a of actions) {
     try {
       if (a.kind === "http") {
-        await fetch(a.url, { method: a.method, body: a.body === undefined ? undefined : JSON.stringify(a.body),
+        const res = await fetch(a.url, { method: a.method, body: a.body === undefined ? undefined : JSON.stringify(a.body),
           headers: a.body === undefined ? undefined : { "content-type": "application/json" }, signal: AbortSignal.timeout(10000) });
+        await res.arrayBuffer();
+        if (!res.ok && res.status !== 404) ok = false;
       } else {
-        spawnSync(a.file, a.args, { timeout: 10000, stdio: "ignore", windowsHide: true });
+        const r = spawnSync(a.file, a.args, { timeout: 10000, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", windowsHide: true });
+        if (r.status !== 0) {
+          const out = String(r.stderr || "") + String(r.stdout || "") + (r.error ? String(r.error) : "");
+          if (!(a.alreadyDone && new RegExp(a.alreadyDone, "i").test(out))) ok = false;
+        }
       }
-    } catch {}
+    } catch { ok = false; }
   }
+  if (ok && ref) { try { clearEntry(); } catch {} }
   process.exit(0);
-}, ${Math.max(0, Math.round(ttlMs))});`;
+}, ttl);`;
+
+/**
+ * Spawns a detached watchdog process that runs `actions` after `ttlMs`, surviving a crash of this
+ * process, then clears its own ledger entry (`ledger`) when every action succeeded. Returns a disarm
+ * function (kills the watchdog). Errors in the watchdog are ignored.
+ */
+export function spawnWatchdog(
+  ttlMs: number,
+  actions: RevertAction[],
+  ledger?: WatchdogLedgerRef,
+): () => void {
   try {
-    const child = spawn(process.execPath, ["-e", script, JSON.stringify(actions)], {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    });
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        WATCHDOG_SCRIPT,
+        JSON.stringify(actions),
+        String(Math.max(0, Math.round(ttlMs))),
+        ledger ? JSON.stringify(ledger) : "",
+      ],
+      { detached: true, stdio: "ignore", windowsHide: true },
+    );
     child.on("error", () => {});
     child.unref();
     return () => {
@@ -353,7 +563,7 @@ export async function cleanupAll(opts: { ledgerPath?: string } = {}): Promise<Cl
         });
       }
     }
-    if (ok) ledgerRemove(e.id, path);
+    if (ok) ledgerRemove(e.id, path, e.createdAt);
     ledger++;
   }
   return { inProcess, ledger, errors };

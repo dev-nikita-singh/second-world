@@ -153,6 +153,10 @@ export class ToxiproxyInjector extends ExternalInjectorBase {
           attributes: { rate: Math.max(1, Math.round(fault.bytesPerSecond / 1024)) },
         };
       case "reset":
+        if (fault.when === "after-response")
+          throw new Error(
+            'toxiproxy cannot reset after the upstream responded (reset_peer acts on the connection, not per response); use the built-in proxy for when: "after-response"',
+          );
         return { ...base, type: "reset_peer", attributes: { timeout: 0 } };
       case "blackhole":
         return { ...base, type: "timeout", attributes: { timeout: 0 } };

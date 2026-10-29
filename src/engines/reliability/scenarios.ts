@@ -102,11 +102,32 @@ const ALL: readonly (ScenarioDef & { build(p: P, c: BuildContext): BuildResult }
   {
     id: "dependency-reset",
     title: "Dependency resets connections",
-    description: "Connections are reset (RST) by the dependency.",
+    description:
+      "Connections are reset (RST) by the dependency. when=after-response (built-in proxy): the request is forwarded and applied, then the response is replaced by a reset (lost acknowledgement → retries may duplicate the operation).",
     injectors: ["builtin", "toxiproxy"],
-    params: { percent: "share of calls (default 100)" },
+    params: {
+      percent: "share of calls (default 100)",
+      when: "before-request (default) | after-response (built-in proxy only)",
+    },
     detectors: ["amplification", "jitter", "breaker", "recovery", "isolation"],
-    build: (p) => ({ ok: true, fault: { type: "reset", percent: num(p, "percent", 100) } }),
+    build: (p, c) => {
+      const when = p.when === undefined ? "before-request" : String(p.when);
+      if (when !== "before-request" && when !== "after-response")
+        throw new Error(`parameter when: expected before-request or after-response (got ${when})`);
+      if (when === "after-response" && c.injector !== "builtin")
+        return {
+          ok: false,
+          limitation: `dependency-reset when=after-response needs the built-in proxy (injector is ${c.injector})`,
+        };
+      return {
+        ok: true,
+        fault: {
+          type: "reset",
+          percent: num(p, "percent", 100),
+          ...(when === "after-response" ? { when: "after-response" as const } : {}),
+        },
+      };
+    },
   },
   {
     id: "restart-dependency",

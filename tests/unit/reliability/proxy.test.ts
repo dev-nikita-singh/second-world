@@ -3,7 +3,14 @@ import net from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type BuiltinFaultProxy, startFaultProxy } from "../../../src/adapters/faults/builtin-proxy.js";
 import { pendingGlobalCleanups } from "../../../src/adapters/faults/cleanup.js";
-import { flapActive, selectByCounter } from "../../../src/adapters/faults/types.js";
+import { ToxiproxyInjector } from "../../../src/adapters/faults/toxiproxy.js";
+import {
+  describeFault,
+  flapActive,
+  parseFault,
+  selectByCounter,
+} from "../../../src/adapters/faults/types.js";
+import { getScenario } from "../../../src/engines/reliability/scenarios.js";
 import { type Listening, listenOnRandomPort } from "../../helpers/servers.js";
 
 let upstream: Listening;
@@ -90,6 +97,27 @@ describe("builtin proxy (http mode)", () => {
     await expect(get(`${proxy.url}/a`)).rejects.toThrow();
     expect(upstreamHits).toBe(0);
     expect(proxy.stats().injected.reset).toBe(1);
+  });
+
+  it("reset after-response: the upstream processes the request, the client gets a reset", async () => {
+    proxy = await startFaultProxy({ upstream: upstream.url });
+    await proxy.apply({ type: "reset", when: "after-response" });
+    const err = await fetch(`${proxy.url}/a`, {
+      method: "POST",
+      body: "x",
+      signal: AbortSignal.timeout(3000),
+    }).then(
+      () => null,
+      (e: unknown) => e as Error & { cause?: { code?: string } },
+    );
+    expect(err).not.toBeNull();
+    expect(err?.name).not.toBe("TimeoutError"); // a reset, not a hang
+    expect(upstreamHits).toBe(1); // applied upstream
+    expect(proxy.stats().forwarded).toBe(1);
+    expect(proxy.stats().injected.reset).toBe(1);
+    expect(proxy.stats().responses["200"]).toBeUndefined(); // never relayed
+    await proxy.revert();
+    expect((await get(`${proxy.url}/b`)).status).toBe(200);
   });
 
   it("blackhole makes the client time out; revert forwards held requests", async () => {
@@ -203,5 +231,49 @@ describe("builtin proxy (tcp mode)", () => {
       }),
     ).rejects.toThrow();
     expect(proxy.stats().connections).toBeGreaterThanOrEqual(2);
+  });
+
+  it("reset after-response (tcp): forwarded, the upstream's answer is dropped and the client reset", async () => {
+    proxy = await startFaultProxy({ upstream: upstream.url, mode: "tcp" });
+    await proxy.apply({ type: "reset", when: "after-response" });
+    const got: Buffer[] = [];
+    const outcome = await new Promise<string>((resolve) => {
+      const s = net.connect(proxy?.port ?? 0, "127.0.0.1");
+      s.on("data", (c: Buffer) => got.push(c));
+      s.on("error", (e: NodeJS.ErrnoException) => resolve(e.code ?? "error"));
+      s.on("close", () => resolve("closed"));
+      s.write("GET /tcp HTTP/1.1\r\nhost: x\r\n\r\n");
+    });
+    expect(["ECONNRESET", "closed"]).toContain(outcome);
+    expect(Buffer.concat(got).length).toBe(0); // nothing of the response relayed
+    expect(upstreamHits).toBe(1);
+  });
+});
+
+describe("dependency-reset when=after-response", () => {
+  it("scenario: builtin only; invalid values rejected; default unchanged", () => {
+    const sc = getScenario("dependency-reset");
+    expect(sc?.build({ when: "after-response", percent: 50 }, { injector: "builtin" })).toEqual({
+      ok: true,
+      fault: { type: "reset", percent: 50, when: "after-response" },
+    });
+    expect(sc?.build({}, { injector: "builtin" })).toEqual({
+      ok: true,
+      fault: { type: "reset", percent: 100 },
+    });
+    const tp = sc?.build({ when: "after-response" }, { injector: "toxiproxy" });
+    expect(tp?.ok).toBe(false);
+    expect(() => sc?.build({ when: "later" }, { injector: "builtin" })).toThrow(/when/);
+    expect(describeFault(parseFault({ type: "reset", when: "after-response" }))).toBe(
+      "connection reset after the upstream responded",
+    );
+  });
+
+  it("toxiproxy refuses it instead of resetting before the request", () => {
+    const inj = new ToxiproxyInjector({ apiUrl: "http://127.0.0.1:1", proxy: "p", watchdog: false });
+    expect(() => inj.toxicFor(parseFault({ type: "reset", when: "after-response" }), "x")).toThrow(
+      /after the upstream/,
+    );
+    expect(inj.toxicFor(parseFault({ type: "reset" }), "x").type).toBe("reset_peer");
   });
 });

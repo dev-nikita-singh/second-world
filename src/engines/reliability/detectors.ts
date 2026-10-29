@@ -560,8 +560,22 @@ export interface TimeoutAssessment {
   /** Share of stuck requests released at the revert (|end − revert| < tolerance) or timed out client-side. */
   trackingFraction: number;
   medianLatencyMs: number | null;
+  /** Longest time a stuck request was observed waiting (client timeout / revert cap it). */
+  longestWaitMs: number | null;
+  /** Outbound timeout budget (timeout × attempts + backoff) that a "no timeout" verdict must exceed. */
+  budgetMs: number;
+  /**
+   * True when nothing was answered during the black-hole but no request could be observed for longer
+   * than `budgetMs` (client timeout or fault too short): a long timeout chain cannot be ruled out.
+   */
+  windowTooShort: boolean;
   reason: string;
 }
+
+/** Default `maxOutboundBudget`: longest plausible outbound timeout chain (timeout × attempts + backoff). */
+export const DEFAULT_OUTBOUND_BUDGET_MS = 30_000;
+/** Stuck requests that must have waited ≥ the budget for a "no timeout" verdict. */
+const MIN_LONG_WAITS = 3;
 
 /**
  * Timeout correctness while the dependency is black-holed: with an outbound timeout, requests are
@@ -572,9 +586,10 @@ export function assessTimeout(
   records: readonly ReqRecord[],
   faultFrom: number,
   faultTo: number,
-  opts: { minWaitMs?: number; toleranceMs?: number; routes?: ReadonlySet<string> } = {},
+  opts: { minWaitMs?: number; toleranceMs?: number; routes?: ReadonlySet<string>; budgetMs?: number } = {},
 ): TimeoutAssessment {
   const minWait = opts.minWaitMs ?? 1000;
+  const budget = opts.budgetMs ?? DEFAULT_OUTBOUND_BUDGET_MS;
   const tol = opts.toleranceMs ?? 750;
   const eligible = records.filter(
     (r) => r.start >= faultFrom && r.start < faultTo - minWait && (!opts.routes || opts.routes.has(r.route)),
@@ -586,21 +601,39 @@ export function assessTimeout(
     const v = rs.map((r) => r.end - r.start).sort((a, b) => a - b);
     return v.length ? (v[Math.floor(v.length / 2)] as number) : null;
   };
+  let longest: number | null = null;
+  let longWaits = 0;
+  for (const r of stuck) {
+    const w = r.end - r.start;
+    longest = longest === null ? w : Math.max(longest, w);
+    if (w >= budget) longWaits++;
+  }
   const base = {
     eligible: eligible.length,
     completedDuringFault: answered.length,
     effectiveTimeoutMs: lat(answered),
     trackingFraction: stuck.length ? tracking / stuck.length : 0,
     medianLatencyMs: lat(eligible),
+    longestWaitMs: longest,
+    budgetMs: budget,
+    windowTooShort: false,
   };
   if (eligible.length < 3)
     return { ...base, verdict: "inconclusive", reason: "too few requests during the black-hole" };
   if (answered.length === 0 && base.trackingFraction >= 0.8) {
+    // Nothing answered can mean "no timeout" OR "a timeout chain longer than we could watch":
+    // only requests that waited longer than the plausible budget tell them apart.
+    if (longWaits < MIN_LONG_WAITS)
+      return {
+        ...base,
+        verdict: "inconclusive",
+        windowTooShort: true,
+        reason: `no request was answered during the black-hole, but the longest observed wait was ${Math.round(longest ?? 0)} ms < the outbound timeout budget ${budget} ms (client timeout or fault too short): a timeout chain longer than the observable window cannot be ruled out`,
+      };
     return {
       ...base,
       verdict: "no-timeout",
-      reason:
-        "no request was answered while the dependency was black-holed; latency tracked the black-hole duration",
+      reason: `no request was answered while the dependency was black-holed; latency tracked the black-hole duration (${longWaits} request(s) waited ≥ the ${budget} ms budget)`,
     };
   }
   if (answered.length / eligible.length >= 0.1) {

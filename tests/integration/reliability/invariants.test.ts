@@ -213,6 +213,53 @@ describe("duplicate-operation invariants (in-test store behind the fault proxy)"
   }, 30_000);
 });
 
+describe("dependency-reset when=after-response (built-in proxy)", () => {
+  const resetInput = (target: string, when?: "after-response") => {
+    const base = input(target);
+    const { fault: _fault, ...rest } = base;
+    return {
+      ...rest,
+      scenario: "dependency-reset",
+      // 50 %: every other call is reset, so retries also succeed and confirmed operations exist
+      params: { percent: 50, ...(when ? { when } : {}) },
+    };
+  };
+
+  it("the store applied the POST, the client saw a reset and retried → duplicates", async () => {
+    const s = await setup("buggy");
+    const r = await runReliability(resetInput(s.proxy.url, "after-response"), approvedCtx(), {
+      injectors: { store: s.proxy },
+    });
+    const run = r.data?.runs[0];
+    expect(run?.fault.applied).toBe(true);
+    expect(r.data?.faults).toEqual(["connection reset after the upstream responded on 50%"]);
+    const inv = new Map((run?.invariants ?? []).map((x) => [x.name, x]));
+    expect(inv.get("orders-by-key")?.status).toBe("violated");
+    expect(inv.get("orders-count")?.status).toBe("violated");
+    expect(inv.get("orders-count")?.direction).toBe("excess");
+    expect(inv.get("stock")?.status).toBe("violated");
+    expect(run?.operations?.["create-order"]?.retriedDuringFault).toBeGreaterThan(0);
+    expect(r.findings.some((f) => f.ruleId === "reliability/duplicate-operation")).toBe(true);
+    await assertNothingLeft(s.proxy);
+  }, 30_000);
+
+  it("control: the default reset (before the request is forwarded) produces no duplicates", async () => {
+    const s = await setup("buggy");
+    const r = await runReliability(resetInput(s.proxy.url), approvedCtx(), { injectors: { store: s.proxy } });
+    const run = r.data?.runs[0];
+    expect(run?.fault.applied).toBe(true);
+    expect(run?.operations?.["create-order"]?.retriedDuringFault).toBeGreaterThan(0);
+    expect(run?.invariants?.map((x) => [x.name, x.status])).toEqual([
+      ["orders-by-key", "held"],
+      ["orders-count", "held"],
+      ["stock", "held"],
+    ]);
+    const keys = s.store.orders.map((o) => o.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    await assertNothingLeft(s.proxy);
+  }, 30_000);
+});
+
 describe("examples/shop-express (planted idempotency-ignored)", () => {
   let shop: ShopBehindProxy | undefined;
   afterEach(async () => {

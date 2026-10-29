@@ -19,13 +19,16 @@
  * Pure helpers (selectPath, itemsOf, evalNoDuplicates, evalCount, evalConserved) are deterministic;
  * no recursion on user-sized input; all collections are size-capped.
  */
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { HttpExecutor, HttpRequestSpec, HttpResult } from "../../adapters/http/undici-executor.js";
 import { parseDuration } from "../../core/config/units.js";
 
 export const OP_KEY_MARKER = "$SW_OP_KEY";
-/** Max items read from one collection response. */
+/** Max items read from one collection (all pages together). */
 export const MAX_COLLECTION_ITEMS = 100_000;
+/** Hard cap on pages read for one collection (`page.maxPages` defaults to 1000). */
+export const MAX_COLLECTION_PAGES = 10_000;
 /** Max operations whose per-key detail is kept (counters stay exact beyond it). */
 export const MAX_TRACKED_OPS = 20_000;
 /** Max statuses kept per operation. */
@@ -62,9 +65,68 @@ export const IdempotencySchema = z
   .strict();
 export type IdempotencySpec = z.output<typeof IdempotencySchema>;
 
+const MaxPages = z.number().int().min(1).max(MAX_COLLECTION_PAGES).default(1000);
+const Param = z.string().min(1).max(100);
+
+/**
+ * Opt-in pagination of a collection (docs/03-engines/reliability-lab.md, "Duplicate-operation
+ * invariants"). Every page URL passes the safety guard; a `next` link to another origin is refused.
+ * Pagination ends on an empty page (offset/page), a missing cursor (cursor) or a missing
+ * `rel="next"` link (link). Bounds hit (maxPages, MAX_COLLECTION_ITEMS, byte budget), loops
+ * (repeated cursor/URL/identical page) and refusals end it early and mark the collection partial.
+ */
+export const PageSchema = z.discriminatedUnion("style", [
+  z
+    .object({
+      style: z.literal("offset"),
+      offsetParam: Param.default("offset"),
+      limitParam: Param.default("limit"),
+      limit: z.number().int().min(1).max(10_000).default(100),
+      /** First offset. */
+      start: z.number().int().min(0).default(0),
+      maxPages: MaxPages,
+    })
+    .strict(),
+  z
+    .object({
+      style: z.literal("page"),
+      pageParam: Param.default("page"),
+      sizeParam: Param.default("size"),
+      size: z.number().int().min(1).max(10_000).default(100),
+      /** First page number. */
+      start: z.number().int().min(0).default(1),
+      maxPages: MaxPages,
+    })
+    .strict(),
+  z
+    .object({
+      style: z.literal("cursor"),
+      /** Path of the next cursor in the response JSON ("next_cursor", "meta.next"). Absent/null/"" = last page. */
+      cursor: z.string().min(1),
+      /** Query parameter carrying the cursor. */
+      param: Param.default("cursor"),
+      limitParam: Param.optional(),
+      limit: z.number().int().min(1).max(10_000).optional(),
+      maxPages: MaxPages,
+    })
+    .strict(),
+  z
+    .object({
+      /** RFC 8288 `Link: <url>; rel="next"` response header (same origin only). */
+      style: z.literal("link"),
+      limitParam: Param.optional(),
+      limit: z.number().int().min(1).max(10_000).optional(),
+      maxPages: MaxPages,
+    })
+    .strict(),
+]);
+export type PageSpec = z.output<typeof PageSchema>;
+
 const Collection = {
   /** "GET /orders", "/orders" (GET) or an absolute URL on an allowed host. Relative to the target origin. */
   collection: z.string().min(1),
+  /** Opt-in pagination (default: one request). */
+  page: PageSchema.optional(),
   /** Path to the item array in the response ("items", "data.orders"); default: root array or items/data/results. */
   items: z.string().optional(),
   /** Extra request headers (values are never copied into evidence). */
@@ -125,7 +187,7 @@ export type InvariantSpec = z.output<typeof InvariantSchema>;
 export type InvariantType = InvariantSpec["type"];
 export type CollectionSpec = Pick<
   z.output<typeof NoDuplicates>,
-  "collection" | "items" | "headers" | "headersFrom"
+  "collection" | "items" | "headers" | "headersFrom" | "page"
 >;
 
 export function invariantName(inv: InvariantSpec): string {
@@ -484,16 +546,29 @@ export interface DuplicateGroup {
   ids: string[];
 }
 
-/** Groups items by key; returns keys with > 1 resource (sorted by count desc, key). */
+/**
+ * Groups items by key; returns keys with > 1 resource (sorted by count desc, key). An item whose id
+ * was already seen under the same key is the same resource listed twice (e.g. a page boundary that
+ * shifted), not a duplicate: it is skipped and counted in `repeated`.
+ */
 export function evalNoDuplicates(
   items: readonly unknown[],
   keyPath: string,
   idPath: string,
   include: (key: string) => boolean,
-): { checked: number; distinct: number; unkeyed: number; duplicates: DuplicateGroup[]; extra: number } {
+): {
+  checked: number;
+  distinct: number;
+  unkeyed: number;
+  repeated: number;
+  duplicates: DuplicateGroup[];
+  extra: number;
+} {
   const groups = new Map<string, DuplicateGroup>();
+  const seenIds = new Set<string>();
   let unkeyed = 0;
   let checked = 0;
+  let repeated = 0;
   for (const it of items) {
     const key = scalarKey(selectPath(it, keyPath, 1)[0]);
     if (key === undefined) {
@@ -501,6 +576,15 @@ export function evalNoDuplicates(
       continue;
     }
     if (!include(key)) continue;
+    const id = scalarKey(selectPath(it, idPath, 1)[0]);
+    if (id !== undefined) {
+      const pair = JSON.stringify([key, id]);
+      if (seenIds.has(pair)) {
+        repeated++;
+        continue;
+      }
+      seenIds.add(pair);
+    }
     checked++;
     let g = groups.get(key);
     if (!g) {
@@ -508,13 +592,12 @@ export function evalNoDuplicates(
       groups.set(key, g);
     }
     g.count++;
-    const id = scalarKey(selectPath(it, idPath, 1)[0]);
     if (id !== undefined && g.ids.length < 5) g.ids.push(id);
   }
   const duplicates = [...groups.values()].filter((g) => g.count > 1);
   duplicates.sort((a, b) => b.count - a.count || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   const extra = duplicates.reduce((s, g) => s + g.count - 1, 0);
-  return { checked, distinct: groups.size, unkeyed, duplicates, extra };
+  return { checked, distinct: groups.size, unkeyed, repeated, duplicates, extra };
 }
 
 export interface RangeVerdict {
@@ -577,9 +660,15 @@ export function sumCounts(ledger: OpLedger, routes: readonly string[]): RouteOpC
 
 // ------------------------------------------------------------------------------------------ fetching
 
+/**
+ * Items of a collection. `partial` is set when pagination stopped early (a bound, a loop or a
+ * refused link): the items are only a prefix of the collection and invariants on them are not trusted.
+ */
+export type CollectionItems = unknown[] & { partial?: string; pages?: number };
+
 export interface CollectionFetcher {
   /** Item array of a collection (throws with a readable message on HTTP/parse errors). */
-  items(c: CollectionSpec): Promise<unknown[]>;
+  items(c: CollectionSpec): Promise<CollectionItems>;
 }
 
 /** Parses "GET /orders", "/orders", "https://h/x" → method + url. */
@@ -590,18 +679,177 @@ export function parseCollectionRef(ref: string, target: string): { method: strin
   return { method, url: new URL(rest, new URL(target).origin) };
 }
 
+/**
+ * The `rel="next"` target of an RFC 8288 Link header (relative URLs resolved against `base`), or
+ * null. Handles several links per header, multiple rel values and quoted/unquoted params.
+ */
+export function nextLink(header: string | string[] | undefined, base: URL): URL | null {
+  if (header === undefined) return null;
+  const text = Array.isArray(header) ? header.join(", ") : header;
+  const re = /<([^>]*)>([^<]*)/g;
+  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+    const params = m[2] as string;
+    const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^;,\s]+))/i.exec(params);
+    const rels = (rel?.[1] ?? rel?.[2] ?? "").toLowerCase().split(/\s+/);
+    if (!rels.includes("next")) continue;
+    try {
+      return new URL((m[1] as string).trim(), base);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function cursorValue(body: unknown, path: string): string | null {
+  const v = selectPath(body, path, 1)[0];
+  if (typeof v === "string") return v.length > 0 ? v : null;
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return null;
+}
+
 export function createCollectionFetcher(opts: {
   executor: HttpExecutor;
   target: string;
   routeHeaders: (route: string) => Record<string, string> | undefined;
   checkUrl: (u: URL) => void;
   signal?: AbortSignal;
+  /** Max bytes of one response. */
   maxBodyBytes: number;
+  /** Max bytes over all pages of one collection (default 4 × maxBodyBytes). */
+  maxTotalBytes?: number;
+  /** Max items over all pages (default MAX_COLLECTION_ITEMS). */
+  maxItems?: number;
 }): CollectionFetcher {
+  const maxItems = opts.maxItems ?? MAX_COLLECTION_ITEMS;
+  const maxTotalBytes = opts.maxTotalBytes ?? 4 * opts.maxBodyBytes;
+
+  async function fetchJson(
+    method: string,
+    url: URL,
+    headers: Record<string, string>,
+    label: string,
+  ): Promise<{ body: unknown; raw: Buffer; headers: HttpResult["headers"] }> {
+    opts.checkUrl(url);
+    const r = await opts.executor.execute(
+      { origin: url.origin, method, path: `${url.pathname}${url.search}`, headers, readBody: true },
+      opts.signal,
+    );
+    if (r.error) throw new Error(`${label}: ${r.error.kind}`);
+    if (r.status < 200 || r.status >= 300) throw new Error(`${label}: HTTP ${r.status}`);
+    if (r.bytesIn > opts.maxBodyBytes)
+      throw new Error(`${label}: response larger than ${opts.maxBodyBytes} bytes`);
+    const raw = r.body ?? Buffer.alloc(0);
+    try {
+      return { body: JSON.parse(raw.toString("utf8")), raw, headers: r.headers };
+    } catch {
+      throw new Error(`${label}: response is not JSON`);
+    }
+  }
+
+  async function fetchPages(
+    method: string,
+    first: URL,
+    headers: Record<string, string>,
+    label: string,
+    page: PageSpec,
+    itemsPath: string | undefined,
+  ): Promise<CollectionItems> {
+    const out: CollectionItems = [];
+    const seenUrls = new Set<string>();
+    const seenCursors = new Set<string>();
+    const seenBodies = new Set<string>();
+    let totalBytes = 0;
+    let pages = 0;
+    let partial: string | undefined;
+    let offset = page.style === "offset" ? page.start : 0;
+    let pageNo = page.style === "page" ? page.start : 0;
+    const setParam = (u: URL, param: string | undefined, value: number | undefined) => {
+      if (param !== undefined && value !== undefined) u.searchParams.set(param, String(value));
+    };
+    let url: URL | null = new URL(first.href);
+    if (page.style === "offset") {
+      setParam(url, page.offsetParam, offset);
+      setParam(url, page.limitParam, page.limit);
+    } else if (page.style === "page") {
+      setParam(url, page.pageParam, pageNo);
+      setParam(url, page.sizeParam, page.size);
+    } else setParam(url, page.limitParam, page.limit);
+
+    while (url !== null) {
+      if (opts.signal?.aborted) throw new Error(`${label}: aborted`);
+      if (pages >= page.maxPages) {
+        partial = `page limit reached (maxPages ${page.maxPages})`;
+        break;
+      }
+      if (seenUrls.has(url.href)) {
+        partial = "pagination loop: a page URL repeated";
+        break;
+      }
+      seenUrls.add(url.href);
+      const res = await fetchJson(method, url, headers, `${label} (page ${pages + 1})`);
+      pages++;
+      totalBytes += res.raw.length;
+      const items = itemsOf(res.body, itemsPath);
+      const digest = createHash("sha256").update(res.raw).digest("base64");
+      if (items.length > 0 && seenBodies.has(digest)) {
+        partial = `pagination loop: page ${pages} repeats an earlier page (pagination parameter ignored?)`;
+        break;
+      }
+      seenBodies.add(digest);
+      if (out.length + items.length > maxItems) {
+        for (let i = 0; out.length < maxItems; i++) out.push(items[i]);
+        partial = `item limit reached (${maxItems} items)`;
+        break;
+      }
+      for (const it of items) out.push(it);
+      if (totalBytes > maxTotalBytes) {
+        partial = `byte budget reached (${maxTotalBytes} bytes)`;
+        break;
+      }
+      let next: URL | null = null;
+      if (page.style === "offset" || page.style === "page") {
+        // Ends on an EMPTY page only: a short page may just be a server-side size clamp.
+        if (items.length > 0) {
+          next = new URL(url.href);
+          if (page.style === "offset") {
+            offset += items.length;
+            setParam(next, page.offsetParam, offset);
+          } else {
+            pageNo++;
+            setParam(next, page.pageParam, pageNo);
+          }
+        }
+      } else if (page.style === "cursor") {
+        const cur = cursorValue(res.body, page.cursor);
+        if (cur !== null) {
+          if (seenCursors.has(cur)) {
+            partial = `pagination loop: cursor repeated after page ${pages}`;
+            break;
+          }
+          seenCursors.add(cur);
+          next = new URL(url.href);
+          next.searchParams.set(page.param, cur);
+        }
+      } else {
+        const link = res.headers?.link;
+        next = nextLink(typeof link === "string" || Array.isArray(link) ? link : undefined, url);
+        if (next !== null && next.origin !== first.origin) {
+          partial = `next link to another origin (${next.protocol}//${next.host}) refused`;
+          break;
+        }
+      }
+      url = next;
+    }
+    out.pages = pages;
+    if (partial !== undefined)
+      out.partial = `${label}: ${partial}; read ${out.length} item(s) from ${pages} page(s)`;
+    return out;
+  }
+
   return {
     async items(c) {
       const { method, url } = parseCollectionRef(c.collection, opts.target);
-      opts.checkUrl(url);
       const headers: Record<string, string> = {};
       const from = c.headersFrom !== undefined ? opts.routeHeaders(c.headersFrom) : undefined;
       for (const [k, v] of Object.entries(from ?? {})) {
@@ -617,24 +865,12 @@ export function createCollectionFetcher(opts: {
       }
       for (const [k, v] of Object.entries(c.headers)) headers[k.toLowerCase()] = v;
       headers.accept ??= "application/json";
-      const r = await opts.executor.execute(
-        { origin: url.origin, method, path: `${url.pathname}${url.search}`, headers, readBody: true },
-        opts.signal,
-      );
       const label = `${method} ${url.pathname}`;
-      if (r.error) throw new Error(`${label}: ${r.error.kind}`);
-      if (r.status < 200 || r.status >= 300) throw new Error(`${label}: HTTP ${r.status}`);
-      if (r.bytesIn > opts.maxBodyBytes)
-        throw new Error(`${label}: response larger than ${opts.maxBodyBytes} bytes`);
-      let body: unknown;
-      try {
-        body = JSON.parse((r.body ?? Buffer.alloc(0)).toString("utf8"));
-      } catch {
-        throw new Error(`${label}: response is not JSON`);
-      }
+      if (c.page) return fetchPages(method, url, headers, label, c.page, c.items);
+      const { body } = await fetchJson(method, url, headers, label);
       const items = itemsOf(body, c.items);
-      if (items.length > MAX_COLLECTION_ITEMS)
-        throw new Error(`${label}: ${items.length} items > ${MAX_COLLECTION_ITEMS} (narrow the collection)`);
+      if (items.length > maxItems)
+        throw new Error(`${label}: ${items.length} items > ${maxItems} (narrow the collection)`);
       return items;
     },
   };
@@ -643,7 +879,10 @@ export function createCollectionFetcher(opts: {
 // ------------------------------------------------------------------------------------------ run-level
 
 /** Baseline taken before the workload starts (count-matches: item count; conserved: weighted sum). */
-export type InvariantBaseline = { value: number } | { error: string } | null;
+export type InvariantBaseline = { value: number; partial?: string[] } | { error: string } | null;
+
+const partialOf = (reasons: string[]): { partial?: string[] } =>
+  reasons.length > 0 ? { partial: reasons } : {};
 
 export async function takeBaselines(
   invariants: readonly InvariantSpec[],
@@ -653,8 +892,13 @@ export async function takeBaselines(
   for (const inv of invariants) {
     try {
       if (inv.type === "no-duplicates") out.push(null);
-      else if (inv.type === "count-matches") out.push({ value: (await fetcher.items(inv)).length });
-      else out.push({ value: await weightedSum(inv.terms, fetcher) });
+      else if (inv.type === "count-matches") {
+        const items = await fetcher.items(inv);
+        out.push({ value: items.length, ...partialOf(items.partial ? [items.partial] : []) });
+      } else {
+        const w = await weightedSum(inv.terms, fetcher);
+        out.push({ value: w.sum, ...partialOf(w.partial) });
+      }
     } catch (e) {
       out.push({ error: e instanceof Error ? e.message : String(e) });
     }
@@ -665,10 +909,15 @@ export async function takeBaselines(
 async function weightedSum(
   terms: z.output<typeof ConservedTerm>[],
   fetcher: CollectionFetcher,
-): Promise<number> {
-  let s = 0;
-  for (const t of terms) s += t.weight * sumField(await fetcher.items(t), t.field).sum;
-  return s;
+): Promise<{ sum: number; partial: string[] }> {
+  let sum = 0;
+  const partial: string[] = [];
+  for (const t of terms) {
+    const items = await fetcher.items(t);
+    if (items.partial) partial.push(items.partial);
+    sum += t.weight * sumField(items, t.field).sum;
+  }
+  return { sum, partial };
 }
 
 export interface DuplicateEvidence extends DuplicateGroup {
@@ -700,7 +949,15 @@ export interface InvariantResult {
   extraResources?: number;
   duplicates?: DuplicateEvidence[];
   error?: string;
+  /**
+   * Set when a collection was read only partially (pagination bound, loop or refused link). The
+   * result is then not trusted: status "error", except a no-duplicates violation (duplicates found in
+   * a prefix of the collection are real; the counts are lower bounds).
+   */
+  partial?: string[];
 }
+
+const UNTRUSTED = "not trusted: evaluated on a partial collection";
 
 export function defaultCountedRoutes(inv: InvariantSpec, idempotentRoutes: readonly string[]): string[] {
   if (inv.type === "no-duplicates") return [];
@@ -739,20 +996,30 @@ export async function evaluateInvariants(
         });
         const held = ev.duplicates.length === 0;
         const unattributable = inv.scope === "workload" && ev.checked === 0;
+        const partial = items.partial;
+        let detail = unattributable
+          ? `not evaluated: no resource carries a key sent by this run (key path "${inv.key}"; ${ev.unkeyed} item(s) without a key)`
+          : held
+            ? `${ev.checked} resource(s) with ${ev.distinct} distinct key(s): no duplicates`
+            : `${ev.duplicates.length} key(s) have more than one resource (${ev.extra} extra of ${ev.checked})`;
+        let error = unattributable ? "no resource carries a workload key" : undefined;
+        if (partial !== undefined) {
+          if (held || unattributable) {
+            error = `${UNTRUSTED} (${partial})`;
+            detail = `${UNTRUSTED} (${partial}): ${detail}`;
+          } else detail = `at least ${detail}; partial collection (${partial})`;
+        }
         out.push({
           name,
           type: inv.type,
-          status: unattributable ? "error" : held ? "held" : "violated",
-          detail: unattributable
-            ? `not evaluated: no resource carries a key sent by this run (key path "${inv.key}"; ${ev.unkeyed} item(s) without a key)`
-            : held
-              ? `${ev.checked} resource(s) with ${ev.distinct} distinct key(s): no duplicates`
-              : `${ev.duplicates.length} key(s) have more than one resource (${ev.extra} extra of ${ev.checked})`,
+          status: unattributable || (held && partial !== undefined) ? "error" : held ? "held" : "violated",
+          detail,
           checked: ev.checked,
           duplicateKeys: ev.duplicates.length,
           extraResources: ev.extra,
           duplicates,
-          ...(unattributable ? { error: "no resource carries a workload key" } : {}),
+          ...(error !== undefined ? { error } : {}),
+          ...partialOf(partial !== undefined ? [partial] : []),
         });
         continue;
       }
@@ -761,35 +1028,53 @@ export async function evaluateInvariants(
         throw new Error(`baseline: ${base && "error" in base ? base.error : "missing"}`);
       const routes = defaultCountedRoutes(inv, idempotentRoutes);
       const ops = sumCounts(ledger, routes);
+      const partial = [...(base.partial ?? [])];
+      const untrusted = (detail: string) =>
+        partial.length > 0
+          ? {
+              status: "error" as const,
+              detail: `${UNTRUSTED} (${partial.join("; ")}): ${detail}`,
+              error: `${UNTRUSTED} (${partial.join("; ")})`,
+              partial,
+            }
+          : null;
       if (inv.type === "count-matches") {
-        const after = (await fetcher.items(inv)).length;
+        const afterItems = await fetcher.items(inv);
+        if (afterItems.partial) partial.push(afterItems.partial);
+        const after = afterItems.length;
         const v = evalCount(base.value, after, ops, inv.perOperation);
+        const detail = `${v.observed} resource(s) created; ${ops.confirmed} confirmed + ${ops.ambiguous} ambiguous operation(s) allow ${fmtRange(v.expected)}${v.direction === "excess" ? " → duplicates" : v.direction === "deficit" ? " → lost writes" : ""}`;
         out.push({
           name,
           type: inv.type,
           status: v.held ? "held" : "violated",
-          detail: `${v.observed} resource(s) created; ${ops.confirmed} confirmed + ${ops.ambiguous} ambiguous operation(s) allow ${fmtRange(v.expected)}${v.direction === "excess" ? " → duplicates" : v.direction === "deficit" ? " → lost writes" : ""}`,
+          detail,
           before: base.value,
           after,
           expected: v.expected,
           observed: v.observed,
           direction: v.direction,
           ops,
+          ...untrusted(detail),
         });
       } else {
-        const after = await weightedSum(inv.terms, fetcher);
+        const w = await weightedSum(inv.terms, fetcher);
+        partial.push(...w.partial);
+        const after = w.sum;
         const v = evalConserved(base.value, after, ops, inv.perOperation, inv.tolerance);
+        const detail = `sum ${round(base.value)} → ${round(after)} (Δ ${round(v.observed)}), allowed Δ ${fmtRange(v.expected)}${inv.tolerance > 0 ? ` ± ${inv.tolerance}` : ""}`;
         out.push({
           name,
           type: inv.type,
           status: v.held ? "held" : "violated",
-          detail: `sum ${round(base.value)} → ${round(after)} (Δ ${round(v.observed)}), allowed Δ ${fmtRange(v.expected)}${inv.tolerance > 0 ? ` ± ${inv.tolerance}` : ""}`,
+          detail,
           before: base.value,
           after,
           expected: v.expected,
           observed: v.observed,
           direction: v.direction,
           ops,
+          ...untrusted(detail),
         });
       }
     } catch (e) {

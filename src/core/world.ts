@@ -329,6 +329,7 @@ const RELIABILITY_KEYS = [
   "repeat",
   "expectTimeout",
   "invariants",
+  "maxOutboundBudget",
   "seed",
 ];
 

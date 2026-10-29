@@ -56,6 +56,8 @@ describe("shop-express behind the fault proxy", () => {
         steady: "2s",
         duration: "4s",
         recovery: "3s",
+        // shop-express's real budget is unbounded; 2 s keeps the test short (waits are ~2-4 s)
+        maxOutboundBudget: "2s",
         seed: 6,
       },
       approvedCtx(),

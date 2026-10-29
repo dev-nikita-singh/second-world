@@ -7,15 +7,24 @@
  * restart, network-disconnect) the test checks the fault is really applied (docker state + HTTP) and
  * really reverted, and that the persistent ledger tracks it. Crash safety: a child process applies a
  * fault and is hard-killed; `sw reliability cleanup --ledger` (the real CLI) and the detached watchdog
- * must revert it. Skipped without Docker.
+ * must revert it; the watchdog also clears its own ledger entry after a successful revert (and only
+ * then). Skipped without Docker.
  */
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { execa } from "execa";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { cleanupAll, readLedger, spawnWatchdog } from "../../../src/adapters/faults/cleanup.js";
+import {
+  cleanupAll,
+  type LedgerEntry,
+  ledgerAdd,
+  ledgerRemove,
+  type RevertAction,
+  readLedger,
+  spawnWatchdog,
+} from "../../../src/adapters/faults/cleanup.js";
 import { DockerInjector } from "../../../src/adapters/faults/docker.js";
 import { REPO_ROOT, runCli } from "../../helpers/cli.js";
 import {
@@ -238,16 +247,62 @@ describe.skipIf(!dockerAvailable)("LIVE docker fault injector", () => {
     await crashChild({ type: "container", action: "pause", container: NAME, ttlMs: 2000 }, true);
     expect((await state()).paused).toBe(true);
     expect(await waitFor(async () => !(await state()).paused, 30_000, 250)).toBe(true);
-    // the ledger entry stays until a cleanup run sees it is already reverted
-    const res = await cleanupAll({ ledgerPath: ledger });
-    expect(res.errors).toEqual([]);
-    expect(readLedger(ledger)).toEqual([]);
+    // the watchdog clears its own ledger entry after the successful revert (no cleanup call)
+    expect(await waitFor(async () => readLedger(ledger).length === 0, 15_000, 100)).toBe(true);
+    expect(existsSync(`${ledger}.lock`)).toBe(false);
+    expect(await healthy()).toBe(true);
   }, 120_000);
 
-  it("spawnWatchdog runs a real docker revert action", async () => {
+  it("spawnWatchdog runs a real docker revert action and clears only its own ledger entry", async () => {
     await docker(["pause", NAME], { reject: true });
-    const disarm = spawnWatchdog(500, [{ kind: "exec", file: "docker", args: ["unpause", NAME] }]);
+    const unpause: RevertAction = { kind: "exec", file: "docker", args: ["unpause", NAME] };
+    const createdAt = new Date().toISOString();
+    const entry = (id: string): LedgerEntry => ({
+      id,
+      injector: "docker",
+      description: `test ${id}`,
+      createdAt,
+      expiresAt: 0,
+      pid: process.pid,
+      actions: [unpause],
+    });
+    ledgerAdd(entry("wd-live"), ledger);
+    ledgerAdd(entry("someone-else"), ledger);
+    const disarm = spawnWatchdog(500, [unpause], { path: ledger, id: "wd-live", createdAt });
     expect(await waitFor(async () => !(await state()).paused, 30_000, 250)).toBe(true);
+    expect(await waitFor(async () => !readLedger(ledger).some((e) => e.id === "wd-live"), 15_000, 100)).toBe(
+      true,
+    );
+    expect(readLedger(ledger).map((e) => e.id)).toEqual(["someone-else"]);
+    ledgerRemove("someone-else", ledger);
     disarm();
+  }, 60_000);
+
+  it("watchdog: 'is not paused' (already reverted) still clears the entry; a failing revert keeps it", async () => {
+    expect((await state()).paused).toBe(false);
+    const createdAt = new Date().toISOString();
+    const already: RevertAction = {
+      kind: "exec",
+      file: "docker",
+      args: ["unpause", NAME],
+      alreadyDone: "is not paused|no such container",
+    };
+    const failing: RevertAction = { kind: "exec", file: "docker", args: ["unpause", `${NAME}-missing`] };
+    for (const [id, a] of [
+      ["wd-already", already],
+      ["wd-failing", failing],
+    ] as const)
+      ledgerAdd(
+        { id, injector: "docker", description: id, createdAt, expiresAt: 0, pid: process.pid, actions: [a] },
+        ledger,
+      );
+    spawnWatchdog(200, [already], { path: ledger, id: "wd-already", createdAt });
+    spawnWatchdog(200, [failing], { path: ledger, id: "wd-failing", createdAt });
+    expect(
+      await waitFor(async () => !readLedger(ledger).some((e) => e.id === "wd-already"), 20_000, 100),
+    ).toBe(true);
+    await new Promise((r) => setTimeout(r, 3000)); // the failing watchdog has finished by now
+    expect(readLedger(ledger).map((e) => e.id)).toEqual(["wd-failing"]);
+    ledgerRemove("wd-failing", ledger);
   }, 60_000);
 });

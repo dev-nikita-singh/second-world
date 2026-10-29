@@ -5,10 +5,12 @@
  * to the real upstream and injects faults that can be hot-swapped at runtime.
  *
  * - http mode (default): one decision per HTTP request. Faults: latency (+jitter), bandwidth,
- *   reset (RST), black-hole (request held; forwarded when the fault is reverted, destroyed on close),
+ *   reset (RST; `when: "after-response"`: forwarded, upstream response consumed, then RST to the
+ *   client), black-hole (request held; forwarded when the fault is reverted, destroyed on close),
  *   status injection, slow body. Counts requests and records arrival times (retry amplification,
  *   jitter detection).
- * - tcp mode: one decision per connection for reset/black-hole; latency and bandwidth are applied
+ * - tcp mode: one decision per connection for reset/black-hole (reset after-response: the client is
+ *   reset when the upstream's first bytes arrive, which are dropped); latency and bandwidth are applied
  *   per chunk in both directions (order preserved). Counts connections.
  *
  * Partial faults use exact counter selection (`selectByCounter`), flapping uses `flapActive`.
@@ -81,6 +83,7 @@ interface Plan {
   slowBody?: { delayMs: number; chunkBytes: number };
   terminal?:
     | { kind: "reset" }
+    | { kind: "reset-after-response" }
     | { kind: "blackhole"; faultId: string }
     | { kind: "status"; status: number; body?: string };
 }
@@ -339,7 +342,7 @@ export class BuiltinFaultProxy implements FaultInjector {
           p.slowBody = { delayMs: f.delayMs, chunkBytes: f.chunkBytes };
           break;
         case "reset":
-          p.terminal ??= { kind: "reset" };
+          p.terminal ??= f.when === "after-response" ? { kind: "reset-after-response" } : { kind: "reset" };
           break;
         case "blackhole":
           p.terminal ??= { kind: "blackhole", faultId: af.id };
@@ -491,7 +494,7 @@ export class BuiltinFaultProxy implements FaultInjector {
           });
         });
       }
-      await this.forwardHttp(req, res, plan);
+      await this.forwardHttp(req, res, plan, term?.kind === "reset-after-response");
     } catch {
       if (!res.headersSent && !res.destroyed) {
         res.writeHead(502, { "content-type": "application/json", "x-sw-fault": "proxy-error" });
@@ -501,7 +504,18 @@ export class BuiltinFaultProxy implements FaultInjector {
     }
   }
 
-  private forwardHttp(req: http.IncomingMessage, res: http.ServerResponse, plan: Plan): Promise<void> {
+  /** RST (or destroy) the client connection of `res`. */
+  private resetClient(sock: net.Socket): void {
+    if (typeof sock.resetAndDestroy === "function") sock.resetAndDestroy();
+    else sock.destroy();
+  }
+
+  private forwardHttp(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    plan: Plan,
+    resetAfterResponse = false,
+  ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       if (this.closed || res.destroyed) {
         reject(new Error("closed"));
@@ -522,6 +536,23 @@ export class BuiltinFaultProxy implements FaultInjector {
           agent: this.agent,
         },
         (upRes) => {
+          if (resetAfterResponse) {
+            // The upstream processed the request and answered; read its whole response (so the
+            // operation is complete upstream), then reset the client instead of relaying it.
+            upRes.resume();
+            upRes.on("error", () => {});
+            upRes.once("end", () => {
+              this.resetClient(req.socket);
+              resolve();
+            });
+            upRes.once("close", () => {
+              if (!upRes.complete) {
+                this.resetClient(req.socket);
+                resolve();
+              }
+            });
+            return;
+          }
           const out: http.OutgoingHttpHeaders = {};
           for (const [k, v] of Object.entries(upRes.headers))
             if (!HOP_BY_HOP.has(k) && v !== undefined) out[k] = v;
@@ -613,6 +644,14 @@ export class BuiltinFaultProxy implements FaultInjector {
           () => up.end(),
           () => up.destroy(),
         );
+        if (term?.kind === "reset-after-response") {
+          // The upstream answered: drop its bytes and reset the client instead of relaying them.
+          up.once("data", () => {
+            this.resetClient(client);
+            up.destroy();
+          });
+          return;
+        }
         this.pump(up, client, shape, (n) => {
           this.s.bytesToClient += n;
         }).then(

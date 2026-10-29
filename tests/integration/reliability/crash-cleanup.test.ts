@@ -97,11 +97,17 @@ describe("crash safety", () => {
   }, 30_000);
 
   it("detached watchdog reverts the toxic after the TTL without any cleanup call", async () => {
-    await crashChild(true, 1500);
+    const { ledger } = await crashChild(true, 1500);
     const deadline = performance.now() + 10_000;
     while (toxics.has("sw-crash") && performance.now() < deadline)
       await new Promise((r) => setTimeout(r, 100));
     expect(toxics.has("sw-crash")).toBe(false);
+    // the watchdog also cleared the toxic's ledger entry; the created proxy's entry (no TTL: it is
+    // deleted by close() or `sw reliability cleanup`) stays
+    const deadline2 = performance.now() + 5_000;
+    while (readLedger(ledger).length > 1 && performance.now() < deadline2)
+      await new Promise((r) => setTimeout(r, 50));
+    expect(readLedger(ledger).map((e) => e.id)).toEqual([expect.stringMatching(/^sw-proxy-/)]);
   }, 30_000);
 });
 

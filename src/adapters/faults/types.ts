@@ -34,7 +34,18 @@ const Common = {
 export const FaultSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("latency"), latencyMs: Ms, jitterMs: Ms.default(0), ...Common }).strict(),
   z.object({ type: z.literal("bandwidth"), bytesPerSecond: z.number().positive(), ...Common }).strict(),
-  z.object({ type: z.literal("reset"), ...Common }).strict(),
+  z
+    .object({
+      type: z.literal("reset"),
+      /**
+       * before-request (default): RST instead of forwarding. after-response: forward the request, let
+       * the upstream answer (its work is done), then RST the client instead of relaying the response:
+       * the caller sees a reset for an operation that WAS applied (built-in proxy only).
+       */
+      when: z.enum(["before-request", "after-response"]).optional(),
+      ...Common,
+    })
+    .strict(),
   z.object({ type: z.literal("blackhole"), ...Common }).strict(),
   z
     .object({
@@ -143,7 +154,7 @@ export function describeFault(f: Fault): string {
       s = `bandwidth ${f.bytesPerSecond} B/s`;
       break;
     case "reset":
-      s = "connection reset";
+      s = f.when === "after-response" ? "connection reset after the upstream responded" : "connection reset";
       break;
     case "blackhole":
       s = "black-hole (no response)";

@@ -150,13 +150,38 @@ describe("timeout correctness", () => {
   });
   it("flags requests whose latency tracks the black-hole (no timeout)", () => {
     const rs = [rec(0, 10_010, 201), rec(1000, 10_005, 201), rec(2000, 10_020, 201), rec(3000, 10_003, 201)];
-    const r = assessTimeout(rs, 0, 10_000);
+    const r = assessTimeout(rs, 0, 10_000, { budgetMs: 5000 });
     expect(r.verdict).toBe("no-timeout");
     expect(r.completedDuringFault).toBe(0);
+    expect(r.windowTooShort).toBe(false);
   });
   it("client-side timeouts count as stuck", () => {
     const rs = [rec(0, 5000, 0, "timeout"), rec(1000, 6000, 0, "timeout"), rec(2000, 7000, 0, "timeout")];
-    expect(assessTimeout(rs, 0, 10_000).verdict).toBe("no-timeout");
+    expect(assessTimeout(rs, 0, 10_000, { budgetMs: 5000 }).verdict).toBe("no-timeout");
+  });
+  it("short window: client timeout below the budget → inconclusive, never no-timeout", () => {
+    // shop-fastify: 1 s client timeout, app budget 4 × 2 s; nothing answered within 1 s
+    const rs = Array.from({ length: 20 }, (_, i) => rec(i * 200, i * 200 + 1000, 0, "timeout"));
+    const r = assessTimeout(rs, 0, 5000);
+    expect(r.verdict).toBe("inconclusive");
+    expect(r.windowTooShort).toBe(true);
+    expect(r.longestWaitMs).toBe(1000);
+    expect(r.budgetMs).toBe(30_000);
+    expect(r.reason).toMatch(/longest observed wait was 1000 ms < the outbound timeout budget 30000 ms/);
+  });
+  it("short window: fault shorter than the budget → inconclusive", () => {
+    const rs = [rec(0, 5010, 201), rec(1000, 5005, 201), rec(2000, 5020, 201), rec(3000, 5003, 201)];
+    const r = assessTimeout(rs, 0, 5000, { budgetMs: 8000 });
+    expect(r.verdict).toBe("inconclusive");
+    expect(r.windowTooShort).toBe(true);
+  });
+  it("long window with true black-hole tracking (≥ 3 waits above the budget) → still no-timeout", () => {
+    const rs = Array.from({ length: 10 }, (_, i) => rec(i * 1000, 40_010 + i, 201));
+    const r = assessTimeout(rs, 0, 40_000);
+    expect(r.verdict).toBe("no-timeout");
+    expect(r.longestWaitMs).toBeGreaterThanOrEqual(40_000);
+    // only 2 requests waited ≥ 39 s: not enough
+    expect(assessTimeout(rs, 0, 40_000, { budgetMs: 39_000 }).verdict).toBe("inconclusive");
   });
   it("recognises an outbound timeout and estimates it", () => {
     const rs = [rec(0, 2050), rec(500, 2560), rec(1000, 3040), rec(8000, 10_010), rec(8500, 10_020)];

@@ -10,6 +10,7 @@
  */
 import {
   armTtl,
+  defaultLedgerPath,
   ledgerAdd,
   ledgerRemove,
   type RevertAction,
@@ -92,19 +93,21 @@ export abstract class ExternalInjectorBase implements FaultInjector {
     this.live.set(id, l);
 
     // Persist the revert before touching anything, so a crash mid-apply is still recoverable.
+    const ledgerPath = this.opts.ledgerPath ?? defaultLedgerPath();
+    const createdAt = new Date().toISOString();
     ledgerAdd(
       {
         id,
         injector: this.name,
         description: describeFault(fault),
-        createdAt: new Date().toISOString(),
+        createdAt,
         expiresAt: Date.now() + ttl,
         pid: process.pid,
         actions: revertActions,
       },
-      this.opts.ledgerPath,
+      ledgerPath,
     );
-    l.dispose.push(() => ledgerRemove(id, this.opts.ledgerPath));
+    l.dispose.push(() => ledgerRemove(id, ledgerPath, createdAt));
     l.dispose.push(
       registerGlobalCleanup(
         `${this.name}:${id}`,
@@ -114,7 +117,8 @@ export abstract class ExternalInjectorBase implements FaultInjector {
         },
       ),
     );
-    if (this.opts.watchdog !== false) l.dispose.push(spawnWatchdog(ttl, revertActions));
+    if (this.opts.watchdog !== false)
+      l.dispose.push(spawnWatchdog(ttl, revertActions, { path: ledgerPath, id, createdAt }));
     l.dispose.push(armTtl(ttl, () => this.revert(id)));
     if (signal) {
       const onAbort = (): void => void this.revert(id);

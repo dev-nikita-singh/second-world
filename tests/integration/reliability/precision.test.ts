@@ -108,9 +108,10 @@ describe("correct-by-design policies are not flagged", () => {
       approvedCtx(),
       { injectors: { payments: s.proxy } },
     );
-    expect(r.findings.map((f) => f.ruleId), JSON.stringify(r.data?.runs[0]?.jitter)).toContain(
-      "reliability/retry-without-jitter",
-    );
+    expect(
+      r.findings.map((f) => f.ruleId),
+      JSON.stringify(r.data?.runs[0]?.jitter),
+    ).toContain("reliability/retry-without-jitter");
     await assertNothingLeft(s.proxy);
   }, 30_000);
 });

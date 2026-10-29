@@ -315,6 +315,7 @@ function scrubResults(results: InvariantResult[], redact: (s: string) => string)
     name: redact(r.name),
     detail: redact(r.detail),
     ...(r.error !== undefined ? { error: redact(r.error) } : {}),
+    ...(r.partial ? { partial: r.partial.map(redact) } : {}),
     ...(r.duplicates
       ? { duplicates: r.duplicates.map((d) => ({ ...d, key: redact(d.key), ids: d.ids.map(redact) })) }
       : {}),
@@ -764,6 +765,7 @@ function analyse(
     const tol = Math.min(750, Math.max(250, (tF1 - tF0) / 8));
     base.timeout = assessTimeout(records, tF0, tF1, {
       toleranceMs: tol,
+      budgetMs: input.maxOutboundBudget,
       ...(plan.affected ? { routes: plan.affected } : {}),
     });
     const to = base.timeout;
@@ -1093,6 +1095,28 @@ export async function executeReliability(
       if (!r.steadyOk || r.cancelled) break;
     }
     const cancelled = runs.some((r) => r.cancelled) || ctx.signal.aborted;
+    // Partial collections (pagination bound / loop / refused link) → the invariant is not trusted.
+    const partialSeen = new Set<string>();
+    for (const r of runs)
+      for (const inv of r.invariants ?? []) {
+        if (!inv.partial || partialSeen.has(inv.name)) continue;
+        partialSeen.add(inv.name);
+        limitations.push({
+          code: "invariant-partial-collection",
+          message: `invariant "${inv.name}" was evaluated on a partial collection (${inv.partial.join("; ")}), so its result is not trusted${inv.status === "violated" ? " beyond the duplicates it lists" : ""}`,
+          impact: "reduces-confidence",
+        });
+      }
+    // Black-hole watched for too short a time to tell "no timeout" from "long timeout chain".
+    const shortRun = runs.find((r) => r.timeout?.windowTooShort);
+    if (shortRun?.timeout) {
+      const to = shortRun.timeout;
+      limitations.push({
+        code: "timeout-window-too-short",
+        message: `Outbound timeout to ${input.dependency} not assessed: nothing was answered during the black-hole, but the longest observed wait was ${Math.round(to.longestWaitMs ?? 0)} ms (client timeout ${input.workload.timeout} ms, fault ${input.duration} ms) < maxOutboundBudget ${to.budgetMs} ms, so an outbound timeout chain (timeout × attempts + backoff) longer than that cannot be ruled out. Raise workload.timeout and the fault duration above the suspected budget, or set maxOutboundBudget to the app's real budget.`,
+        impact: "reduces-confidence",
+      });
+    }
     const data: ReliabilityData = {
       schema: 1,
       scenario: input.scenario,
@@ -1124,11 +1148,11 @@ export async function executeReliability(
         breaker:
           "Second half of a sustained failure: calls per request ≤ 0.5× baseline → breaker; ≥ 0.8× with ≥ 50% client errors → no breaker",
         timeout:
-          "Black-holed dependency: requests answered during the fault → timeout present; none answered and latency tracking the revert/client timeout → no timeout",
+          "Black-holed dependency: requests answered during the fault → timeout present; none answered, latency tracking the revert/client timeout AND ≥ 3 requests observed waiting ≥ maxOutboundBudget → no timeout; none answered within a shorter observable window → inconclusive (limitation timeout-window-too-short)",
         ...(input.invariants.length > 0
           ? {
               invariants:
-                "One key per logical operation (reused on client retries). After the recovery phase: no-duplicates = at most 1 resource per workload key; count-matches = resources created (after - before) within [confirmed, confirmed + ambiguous] x perOperation; conserved = change of the weighted sum within perOperation x [confirmed, confirmed + ambiguous] +/- tolerance. Ambiguous = timeout/reset/5xx without success (may have been applied once).",
+                "One key per logical operation (reused on client retries). After the recovery phase: no-duplicates = at most 1 resource per workload key; count-matches = resources created (after - before) within [confirmed, confirmed + ambiguous] x perOperation; conserved = change of the weighted sum within perOperation x [confirmed, confirmed + ambiguous] +/- tolerance. Ambiguous = timeout/reset/5xx without success (may have been applied once). Paginated collections (offset/page/cursor/link) are read page by page within bounds; a collection read only partially makes its invariant untrusted (error), except duplicates actually found.",
             }
           : {}),
       },

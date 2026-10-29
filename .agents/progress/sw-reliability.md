@@ -92,3 +92,43 @@
 - docs/03-engines/reliability-lab.md does not yet document the `invariants` / `idempotency` config (docs owner).
 - shop-fastify has no collection endpoint (no GET /orders), so it is not covered. Concurrent same-key races are only caught if the workload sends the same key concurrently, which it does not.
 - Collections are read with a single request (no pagination).
+
+## Wave 5
+
+### Status: DONE. `npx vitest run tests/unit/reliability tests/integration/reliability tests/integration/docker` → 18 files,
+143 tests (Docker live). 142 passed in the combined run; the 1 failure was engine.test.ts "recovers" (recovery window under
+parallel Docker load), which passed 3/3 when run alone. Unit reliability 106/106. tsc: clean on my paths; errors exist only in
+tests/unit/core/guard.coverage.test.ts (not mine, in progress by another agent). biome --write applied to my paths
+(1 pre-existing useOptionalChain warning in runner.ts).
+- [x] Task 1 pagination: `page: {style: offset|page|cursor|link}` on every collection spec (invariants.ts PageSchema,
+  createCollectionFetcher fetchPages, nextLink RFC 8288 parser). Bounds: maxPages (default 1000, hard 10k),
+  MAX_COLLECTION_ITEMS over all pages, byte budget 4× per-page max. Loop guards: repeated URL / cursor / identical page body.
+  Cross-origin `next` link refused; every page URL goes through checkUrl (safety guard). Partial → `items.partial` reason →
+  InvariantResult.partial; status "error" ("not trusted: evaluated on a partial collection") except a no-duplicates
+  violation (found duplicates are real, "at least"); runner adds limitation `invariant-partial-collection` (reduces-confidence).
+  evalNoDuplicates skips the same (key,id) listed twice (`repeated`). Tests: unit/reliability/pagination.test.ts (18),
+  integration/reliability/pagination.test.ts (1, ~5 s: dup first on page 3 found by page+link; maxPages 2 → error + limitation).
+- [x] Task 2 watchdog clears its ledger entry: spawnWatchdog(ttl, actions, {path,id,createdAt}); the watchdog script checks
+  each action (HTTP ok/404, exec exit 0 or output matching alreadyDone) and only then removes its entry (matched by id AND
+  createdAt, so a re-applied fault with the same id is kept). Ledger writes: `<ledger>.lock` (O_EXCL, stale after 10 s) +
+  unique temp file + rename (retry on EPERM/EACCES/EBUSY ≤ 5 s); same protocol in the watchdog script. Lock-free
+  temp+rename alone LOST 58/80 entries with 4 concurrent writer processes (measured) → lock added. Corrupt ledger is moved
+  to `<ledger>.corrupt` instead of being overwritten. Tests: unit/reliability/ledger.test.ts (6, incl. 4-process hammer
+  → exact final set), crash-cleanup.test.ts asserts the watchdog cleared the toxic entry, docker live: faults-docker.test.ts
+  14 pass (crash+watchdog clears ledger, spawnWatchdog clears only its entry, already-reverted clears / failing keeps).
+- [x] Task 3 reset `when: "after-response"` (FaultSchema reset.when optional; builtin proxy http: forward, consume the whole
+  upstream response, RST the client; tcp: RST on the upstream's first bytes, dropped). Scenario `dependency-reset` param
+  `when` (builtin only; other injectors → limitation; toxiproxy toxicFor throws). Tests: proxy.test.ts +4 (http, tcp,
+  scenario, toxiproxy refusal); integration invariants.test.ts +2 (after-response + 50 % → all 3 invariants violated on the
+  buggy store; control with default reset → all held, no duplicate keys).
+- [x] EXTRA (main): outbound-no-timeout false positive. assessTimeout now needs ≥ 3 stuck requests observed waiting
+  ≥ `maxOutboundBudget` (new input key, default 30 s) for "no-timeout"; else verdict inconclusive + windowTooShort
+  (+ longestWaitMs, budgetMs) → limitation `timeout-window-too-short` (numbers + hint). Tests: detectors.test.ts +3,
+  shop-fastify-timeout.test.ts +1 (1 s client timeout, repeat 2 → inconclusive, no finding, limitation);
+  shop-express.test.ts sets maxOutboundBudget "2s" (still no-timeout, high).
+  REQUEST main: add "maxOutboundBudget" to RELIABILITY_KEYS in src/core/world.ts (otherwise sw.config cannot set it).
+  NOTE examples: shop-express's example config (workload.timeout 1s, duration 5s) can no longer show outbound-no-timeout
+  without maxOutboundBudget ≤ ~1s or longer timeout/duration (owner sw-examples).
+- [x] Task 4 docs: reliability-lab.md §1 (ledger + watchdog), §3 timeout rule, §4 dependency-reset `when`, invariants
+  section (pagination, partial = untrusted, which faults produce duplicates).
+- [ ] Task 4 docs
