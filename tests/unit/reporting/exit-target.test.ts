@@ -24,6 +24,11 @@ describe("exit code for target-side errors", () => {
     ).toBe(ExitCode.Internal);
   });
 
+  it("a run stopped by the Safety Guard (dns-rebind) → 3, not 70", () => {
+    const r = makeResult({ status: "error", limitations: [{ code: "dns-rebind", message: "rebind", impact: "invalidates" }] });
+    expect(computeVerdict([r]).exitCode).toBe(ExitCode.SafetyBlocked);
+  });
+
   it("bugs against a closed port: status error + target-unreachable, nothing counted as exercised", async () => {
     const res = await runBugs({
       target: "http://127.0.0.1:1",

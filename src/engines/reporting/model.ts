@@ -115,6 +115,8 @@ export function isFailingFinding(f: Finding, failOn: FailOn): boolean {
  * EVOLUTION-BASELINE-FAILED: the user's baseline commit could not be prepared (install/build) or benchmarked.
  */
 const TARGET_LIMITATIONS = new Set(["target-unreachable", "no-measurements", "EVOLUTION-BASELINE-FAILED"]);
+/** Limitation codes meaning the Safety Guard stopped the run (→ exit 3). */
+const SAFETY_LIMITATIONS = new Set(["dns-rebind"]);
 
 /** Compute verdict + exit code (§A.6). Precedence: 130 cancelled > 70 error (5 when caused by the target) > 1 failures > 0. */
 export function computeVerdict(results: readonly EngineResult[], failOn: FailOn = DEFAULT_FAIL_ON): Verdict {
@@ -126,6 +128,14 @@ export function computeVerdict(results: readonly EngineResult[], failOn: FailOn 
     return { passed: false, exitCode: ExitCode.Cancelled, reasons };
   }
   if (errored.length > 0) {
+    // The Safety Guard stopping a run (e.g. DNS rebinding mid-run) is the guard working: exit 3.
+    const safetySide = errored.filter((r) =>
+      r.limitations.some((l) => l.impact === "invalidates" && SAFETY_LIMITATIONS.has(l.code)),
+    );
+    if (safetySide.length > 0) {
+      reasons.push(`stopped by the Safety Guard: ${safetySide.map((r) => r.engine).join(", ")}`);
+      return { passed: false, exitCode: ExitCode.SafetyBlocked, reasons };
+    }
     // An error caused by the target (nothing answered / nothing measured) is exit 5, not a bug in SECOND WORLD.
     const targetSide = errored.filter((r) =>
       r.limitations.some((l) => l.impact === "invalidates" && TARGET_LIMITATIONS.has(l.code)),

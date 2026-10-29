@@ -125,9 +125,9 @@ Workflows are available via the API (`world.run(name)`).
 | 0 | Completed; no failing thresholds or findings at or above `--fail-on` (default `high`) |
 | 1 | Completed with failures: thresholds breached or findings ≥ `--fail-on`; `history diff` with a significant regression; `replay` still reproduces |
 | 2 | Invalid configuration or arguments |
-| 3 | Blocked by the safety guard (e.g. host not allowed, requested rate above `safety.maxRps`) |
+| 3 | Blocked or stopped by the safety guard (e.g. host not allowed, requested rate above `safety.maxRps`, DNS rebinding detected mid-run) |
 | 4 | Required capability missing |
-| 5 | Target unreachable / pre-flight failed |
+| 5 | Target unreachable / pre-flight failed / nothing could be measured (e.g. the app under test never started) |
 | 70 | Internal error (a bug in SECOND WORLD) |
 | 130 | Cancelled (Ctrl+C: first press stops gracefully and writes a partial report, the second aborts) |
 
