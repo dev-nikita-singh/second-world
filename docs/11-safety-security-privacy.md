@@ -55,7 +55,7 @@ Pipeline applied to logs, reports, artifacts and dry-run output:
 1. **Known locations**: configured headers (`authorization`, `cookie`, `set-cookie`, `x-api-key`, `proxy-authorization`) and JSON paths.
 2. **Config secrets**: every resolved `{ env }`/`{ file }` secret value is added to an exact-match deny-set.
 3. **Patterns**: JWT, AWS/GCP/Azure keys, common SaaS API key prefixes, private-key PEM blocks, connection strings with passwords, basic-auth URLs.
-4. **Entropy**: strings ≥ 20 chars with Shannon entropy > 4.0 near key-like names.
+4. **Entropy**: strings ≥ 20 chars with Shannon entropy > 4.0 near key-like names. A clearly sensitive name (`access_token`, `client_secret`, `password`, `api_key`, …, also in camelCase) is redacted whatever the entropy, because hex tokens stay below 4.0.
 5. **PII (opt-in)**: emails, phone numbers, IPs, card numbers (Luhn-checked).
 
 Replacement: `«redacted:sha256:abcd1234»` (short hash), so equal values stay correlatable without being revealed. Response bodies are stored only as samples (bounded size) and only when needed.

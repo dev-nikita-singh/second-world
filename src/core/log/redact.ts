@@ -159,7 +159,10 @@ export function createRedactor(opts: RedactorOptions = {}): Redactor {
       KEYLIKE_ASSIGN.lastIndex = 0;
       s = s.replace(KEYLIKE_ASSIGN, (m, name: string, sep: string, value: string) => {
         if (value.startsWith("«")) return m;
-        if (shannonEntropy(value) >= 4.0) return `${name}${sep}${redactionMarker(value)}`;
+        // A sensitive name (access_token, client_secret, password, …) is enough: hex tokens stay below
+        // the entropy threshold. Looser key-like names still need high entropy.
+        if (isSensitiveKey(name.split(/[.]/).pop() ?? name) || shannonEntropy(value) >= 4.0)
+          return `${name}${sep}${redactionMarker(value)}`;
         return m;
       });
     }

@@ -165,3 +165,13 @@ describe("camelCase sensitive keys (sw-coverage wave 5)", () => {
     expect(out).toMatchObject({ tokenCount: "5", maxTokens: "100", author: "bob", authorId: "a1" });
   });
 });
+
+describe("sensitive names in free text (sw-coverage wave 5)", () => {
+  it("access_token=<32 hex> is redacted despite low entropy; look-alikes are kept", () => {
+    const r = createRedactor({});
+    expect(r.redactString("GET /cb?access_token=8f14e45fceea167a5a36dedd4bea2543&x=1")).not.toContain("8f14e45f");
+    expect(r.redactString('api_key: "0123456789abcdef0123456789abcdef"')).not.toContain("0123456789abcdef");
+    expect(r.redactString("monkey=bananabananabananabanana")).toBe("monkey=bananabananabananabanana");
+    expect(r.redactString("token_count=123456789012345678901234")).toBe("token_count=123456789012345678901234");
+  });
+});
