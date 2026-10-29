@@ -27,6 +27,7 @@ interface ModelEdge { from: string; to: string; kind: "calls"|"reads"|"writes"|"
 ## 3. Algorithms
 
 - **Entity resolution** (merging "payments", `PAYMENT_URL` host `payments:8080`, the `PaymentClient` class, and the OTel `service.name=payments-svc`): **union-find** with merge rules (same host:port, same service.name, normalised-name similarity via Jaro-Winkler ≥ 0.92 + same kind). [DSA §5.8](../04-data-structures-and-algorithms.md#58-union-find-disjoint-set-union).
+- **Telemetry input**: `sw model build --traces <file>` reads OTLP traces and metrics as JSON, JSONL or protobuf (`.pb`/`.binpb`/`.protobuf`/`.bin`, or detected from the bytes). Gzip is detected by its magic bytes whatever the name, with a zip-bomb guard: output ≤ min(256 MiB, max(16 MiB, 200× compressed)). `--receive <seconds>` runs a local OTLP/HTTP receiver on /v1/traces and /v1/metrics that accepts `application/x-protobuf` (the SDK default) and `application/json`, gzip/deflate encoded. The protobuf decoder is hand-written and bounded (size, depth, span count); unknown fields are skipped.
 - **Trace → graph**: build a span tree per trace (parent map), aggregate edges by `(service, peer)`, and compute **critical path** per trace (longest path in span DAG, accounting for parallel children) to see which dependency dominates latency.
 - **Diffing snapshots**: models are versioned. A diff gives added/removed nodes/edges and changed observed metrics (used by History).
 - **Impact queries**: reverse reachability, same as in the Architecture Inspector.
