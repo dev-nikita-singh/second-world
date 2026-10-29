@@ -58,6 +58,8 @@ export interface StartAppOptions {
   clock: Clock;
   /** Optional rewrite of the launch (sandbox). */
   wrap?: (plan: LaunchPlan, port: number) => LaunchPlan | Promise<LaunchPlan>;
+  /** Appended to the health-timeout message (e.g. the sandbox's bind-address convention). */
+  healthHint?: string;
 }
 
 export interface RunningApp {
@@ -94,6 +96,7 @@ export async function waitHealthy(
   clock: Clock,
   signal?: AbortSignal,
   failed?: () => string | undefined,
+  hint?: string,
 ): Promise<void> {
   const deadline = clock.now() + rw.timeoutMs;
   for (;;) {
@@ -105,7 +108,7 @@ export async function waitHealthy(
     if (clock.now() >= deadline) {
       throw new EngineError(
         "SW_ENGINE_WHATIF_HEALTH_TIMEOUT",
-        `not healthy at ${url} within ${rw.timeoutMs} ms`,
+        `not healthy at ${url} within ${rw.timeoutMs} ms${hint ? `. ${hint}` : ""}`,
       );
     }
     await clock.sleep(rw.intervalMs, signal).catch(() => undefined);
@@ -172,6 +175,7 @@ export async function startApp(opts: StartAppOptions): Promise<RunningApp> {
       exited
         ? `app exited before becoming healthy (${exitInfo || "spawn failed"}): ${out.trim().split(/\r?\n/).slice(-5).join(" | ").slice(0, 600)}`
         : undefined,
+      opts.healthHint,
     );
   } catch (e) {
     await stop();

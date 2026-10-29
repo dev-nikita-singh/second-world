@@ -352,6 +352,11 @@ export async function executeEvolution(
   };
 
   const readyWhen = input.readyWhen ?? { path: input.health, timeout: 30_000, interval: 200 };
+  // Docker sandbox convention (docs/03-engines/experiments.md §B.3): published ports reach 0.0.0.0 only.
+  const healthHint =
+    (sandbox as Sandbox).kind === "docker"
+      ? "docker sandbox: the app must listen on $HOST (set to 0.0.0.0 in the container), not 127.0.0.1 — e.g. server.listen(port, process.env.HOST ?? \"127.0.0.1\")"
+      : undefined;
   const startArm = (arm: Arm): Promise<RunningApp> =>
     startApp({
       command: input.start,
@@ -368,6 +373,7 @@ export async function executeEvolution(
       signal: ctx.signal,
       clock: ctx.clock,
       wrap: (sandbox as Sandbox).wrapStart((arm.wt as Worktree).dir, arm.mounts),
+      ...(healthHint ? { healthHint } : {}),
     });
 
   let experiment: ExperimentData | undefined;
@@ -479,6 +485,7 @@ export async function executeEvolution(
           const a = armByName.get(name);
           return a?.wt ? (sandbox as Sandbox).wrapStart(a.wt.dir, a.mounts) : undefined;
         },
+        ...(healthHint ? { healthHint } : {}),
       });
       experiment = res.data;
       experimentLimitations = res.limitations;

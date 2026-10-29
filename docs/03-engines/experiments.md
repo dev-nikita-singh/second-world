@@ -77,6 +77,8 @@ select problem (finding) ─► locate code path (arch graph + trace) ─► can
 - Dependency install caching: hash the lockfile, reuse `node_modules` via a hard-link copy (pnpm store, or `cp -al` on POSIX / `robocopy` fallback on Windows).
 - Ports from `get-port` style allocation (bind :0). Database per candidate via a template DB clone or testcontainers.
 
+**App start contract.** The start command gets `PORT` (or `portEnv`) and, in the docker sandbox, `HOST=0.0.0.0`. The app must listen on `process.env.HOST ?? "127.0.0.1"`: an app bound to 127.0.0.1 inside a container cannot be reached through the published port, and the health-timeout message says so. An arm whose app fails to start twice without one successful run is skipped for its remaining repetitions instead of waiting out the health timeout each time. A baseline that never starts ends the run with `SW_TARGET_APP_UNHEALTHY` (exit 5), since nothing can be compared.
+
 ### B.4 Ranking
 
 Candidates that fail **any** correctness gate (build, tests, replays, invariants) are rejected with reasons. The remaining candidates are ranked by **Pareto dominance** on the success metrics: a candidate is kept if no other candidate is better on all metrics. Ties are broken by the weighted score the user configured, then by diff size (smaller is better), then by the observed change even when it is not significant (so statistically tied candidates are not ordered by name; their verdicts stay "inconclusive"). The output is a Pareto front, not a single "winner", when trade-offs exist.

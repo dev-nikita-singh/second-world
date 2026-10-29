@@ -13,7 +13,7 @@
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { EngineError } from "../../core/errors.js";
+import { EngineError, TargetError } from "../../core/errors.js";
 import type { EngineResult, Finding, Limitation } from "../../core/evidence/schemas.js";
 import { createEvidenceStore, createFinding } from "../../core/evidence/store.js";
 import { createRng } from "../../core/rng.js";
@@ -52,6 +52,8 @@ export interface WhatIfDeps {
   runWorkload?: WorkloadRunner;
   /** Sandbox launch wrapper per arm (Evolution uses it for Docker). */
   wrap?: (arm: string) => StartAppOptions["wrap"] | undefined;
+  /** Hint appended when an app never becomes healthy (the sandbox's bind-address convention). */
+  healthHint?: string;
   /** Sandbox description folded into the arm fingerprint (identical limits for all arms). */
   sandboxLabel?: string;
   /** Replace the app starter (tests). */
@@ -282,7 +284,14 @@ export async function executeExperiment(
       signal: ctx.signal,
       clock: ctx.clock,
       wrap: deps.wrap?.(a.name),
+      ...(deps.healthHint ? { healthHint: deps.healthHint } : {}),
     });
+
+  // An arm whose app failed to start twice without one good run is skipped from then on:
+  // retrying every repetition only multiplies the health timeout.
+  const START_FAILURES_BEFORE_SKIP = 2;
+  const startFailures = new Map<string, { count: number; first: string }>();
+  const armOk = new Set<string>();
 
   try {
     for (const slot of schedule) {
@@ -311,6 +320,14 @@ export async function executeExperiment(
       const t0 = ctx.clock.now();
       let app: RunningApp | undefined;
       let ownApp = false;
+      const sf = startFailures.get(a.name);
+      if (sf && sf.count >= START_FAILURES_BEFORE_SKIP && !armOk.has(a.name)) {
+        rec.status = "error";
+        rec.error = `skipped: the app never became healthy (${sf.count} attempts; first: ${sf.first})`;
+        runs.push(rec);
+        ctx.events.emit(`${engine}.run.end`, { runId, index: slot.index, arm: a.name, rep: slot.rep, status: rec.status, metrics: rec.metrics });
+        continue;
+      }
       try {
         if (a.setup !== undefined) {
           const key = fingerprint([JSON.stringify(a.setup), a.cwd, JSON.stringify(sortObj(a.env))]);
@@ -372,6 +389,7 @@ export async function executeExperiment(
           rec.error = res.limitations.map((l) => l.message).join("; ") || "workload error";
         } else {
           perfData.set(slot.index, res.data);
+          armOk.add(a.name);
           rec.generatorSaturated = res.data.generator.saturated;
           for (const m of metrics) {
             const v = extractMetric(res.data, m);
@@ -386,6 +404,11 @@ export async function executeExperiment(
           rec.status = "error";
           rec.error = e instanceof Error ? e.message : String(e);
           log.warn("run failed", { arm: a.name, rep: slot.rep, error: rec.error });
+          const code = (e as { code?: string }).code;
+          if (app === undefined && (code === "SW_ENGINE_WHATIF_HEALTH_TIMEOUT" || code === "SW_ENGINE_WHATIF_APP_EXITED")) {
+            const prev = startFailures.get(a.name);
+            startFailures.set(a.name, { count: (prev?.count ?? 0) + 1, first: prev?.first ?? rec.error });
+          }
         }
       } finally {
         if (ownApp && app) await app.stop();
@@ -445,6 +468,14 @@ export async function executeExperiment(
   }
 
   const baseline = arms[0] as ResolvedArm;
+  // Nothing can be compared without a baseline: a baseline app that never started is a target problem
+  // (the user's app or its config), not an engine error.
+  const bsf = startFailures.get(baseline.name);
+  if (bsf && !armOk.has(baseline.name) && !cancelled) {
+    throw new TargetError("SW_TARGET_APP_UNHEALTHY", `${baseline.name}: the app never became healthy: ${bsf.first}`, {
+      hint: deps.healthHint ?? "Check the start command, the health path and that the app listens on $PORT",
+    });
+  }
   const success = input.success as Record<string, SuccessCriterion>;
   const cmpInputs: ComparisonInput[] = [];
   for (const v of arms.slice(1)) {

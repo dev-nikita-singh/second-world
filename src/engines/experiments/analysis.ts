@@ -151,6 +151,20 @@ export function requiredRepetitions(relSd: number, effect: number, alpha: number
   return Math.min(1000, Math.max(2, Number.isFinite(n) ? n : 1000));
 }
 
+/**
+ * Smallest runs per arm at which significance is reachable at all: the exact two-sided Mann–Whitney
+ * p-value is at least 2/C(2n, n) (complete separation), and Holm multiplies the smallest p by the
+ * number of comparisons `m`. E.g. m = 4, α = 0.05: n = 4 gives 0.114 (never significant), n = 5 gives 0.032.
+ */
+export function minFeasibleRepetitions(alpha: number, m: number): number {
+  let central = 2; // C(2n, n) for n = 1
+  for (let n = 1; n <= 1000; n++) {
+    if (n > 1) central = (central * (2 * n) * (2 * n - 1)) / (n * n);
+    if ((2 / central) * Math.max(1, m) < alpha) return Math.max(2, n);
+  }
+  return 1000;
+}
+
 // ------------------------------------------------------------------------------------------------
 // Comparisons
 
@@ -297,7 +311,11 @@ export function compareArms(inputs: readonly ComparisonInput[], opts: CompareOpt
       const target =
         inp.success?.improvement ??
         Math.max(opts.equivalenceMargin, Math.abs(Number.isFinite(r.relativeChange) ? r.relativeChange : 0));
-      recommendedRepetitions = Math.max(n + 1, requiredRepetitions(relSd, target, opts.alpha));
+      recommendedRepetitions = Math.max(
+        n + 1,
+        requiredRepetitions(relSd, target, opts.alpha),
+        minFeasibleRepetitions(opts.alpha, inputs.length),
+      );
       reasons.push(
         `≈ ${recommendedRepetitions} runs per arm needed to resolve a ${(target * 100).toFixed(1)}% effect at the observed variance`,
       );
