@@ -180,3 +180,7 @@ BUG (sw-examples → main → sw-reliability): reliability/outbound-no-timeout f
 FIXED by main (wave 5, sw-qa/sw-coverage reports): fed5901 evolve app-never-healthy (hint, skip, exit 5, runs-needed floor) · e31ec60 history id = report runId; unwritable -o fails fast (exit 2) · de680b9 redact camelCase keys · b8d8242 hex IPv4-mapped IPv6 · b038b02 down target: bugs/agent no PASS, perf/stress/bugs/agent exit 5.
 | sw-reliability | DONE (49dc1ca) | pagination, ledger lock + watchdog clear, reset after-response, timeout-window rule |
 | sw-fixes2 | running | evolve working-tree checksum ignores .second-world; inspect missing path exit 2; sweep user-caused exit 70s |
+| sw-examples | DONE (01c06c8) | every planted defect found from its own sw.config.ts; recall/precision 1.0; discovered shop-express no-circuit-breaker |
+| sw-coverage | DONE (d0bc131) | 206 tests; unit lines 81.4→84.1%, branches 67.4→70.9%; 4 bugs found + 2 "non-bugs" fixed as bugs (5ef45e6 redirect custom credential headers, 9d809d9 hex tokens after sensitive names) |
+| sw-qa | DONE (c60ac18) | 32 e2e/system tests; 12 bugs (9 behavioural, all fixed) |
+FIXED by main: 5649666 agent export U+2028/U+2029 code injection + analyze unknown severity · c1a566a docs/UX batch.
