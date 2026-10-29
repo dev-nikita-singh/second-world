@@ -92,7 +92,10 @@ describe("patterns", () => {
     const hi = "Zx9Qw3Er7Ty1Ui5Op2As8Df";
     expect(r.redactString(`api_token=${hi}`)).not.toContain(hi);
     expect(r.redactString(`description=${hi}`)).toContain(hi);
-    expect(r.redactString(`token=${"a".repeat(30)}`)).toContain("a".repeat(30));
+    // A clearly sensitive name is redacted whatever the entropy (hex tokens stay below 4.0, 9d809d9);
+    // a looser key-like name still needs high entropy.
+    expect(r.redactString(`token=${"a".repeat(30)}`)).not.toContain("a".repeat(30));
+    expect(r.redactString(`monkey=${"a".repeat(30)}`)).toContain("a".repeat(30));
     const off = createRedactor({ entropy: false });
     expect(off.redactString(`api_token=${hi}`)).toContain(hi);
   });
