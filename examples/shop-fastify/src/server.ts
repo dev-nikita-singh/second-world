@@ -42,7 +42,9 @@ function authUser(req: FastifyRequest, reply: FastifyReply): User | undefined {
   return user;
 }
 
-export function createApp(opts: ShopOptions = {}): FastifyInstance & { shop: { db: Db; stop: AbortController; fixed: boolean } } {
+export function createApp(
+  opts: ShopOptions = {},
+): FastifyInstance & { shop: { db: Db; stop: AbortController; fixed: boolean } } {
   const paymentsUrl = opts.paymentsUrl ?? process.env.PAYMENTS_URL ?? "http://127.0.0.1:4010";
   const fixed = opts.fixed ?? process.env.FIXED === "1";
   const db = new Db(opts.queryDelayMs ?? 1);
@@ -95,11 +97,26 @@ export function createApp(opts: ShopOptions = {}): FastifyInstance & { shop: { d
     return reply.type("text/plain").send(text);
   });
 
+  // The caller's own orders (admins too: only their own), with the Idempotency-Key each was created with.
+  // Correct by design: ownership-scoped, createdAt as an ISO string. Lets duplicate-operation
+  // invariants (sw reliability) count orders per key.
+  app.get("/orders", async (req, reply) => {
+    const user = authUser(req, reply);
+    if (!user) return reply;
+    return { items: await db.ordersForUser(user.id) };
+  });
+
   app.post<{ Body: { productId?: unknown; qty?: unknown } }>("/orders", async (req, reply) => {
     const user = authUser(req, reply);
     if (!user) return reply;
     const { productId, qty } = req.body ?? {};
-    if (typeof productId !== "number" || typeof qty !== "number" || !Number.isInteger(qty) || qty < 1 || qty > 100) {
+    if (
+      typeof productId !== "number" ||
+      typeof qty !== "number" ||
+      !Number.isInteger(qty) ||
+      qty < 1 ||
+      qty > 100
+    ) {
       return reply.code(400).send({ error: "invalid_body" });
     }
     const key = req.headers["idempotency-key"];
@@ -125,7 +142,8 @@ export function createApp(opts: ShopOptions = {}): FastifyInstance & { shop: { d
     const user = authUser(req, reply);
     if (!user) return reply;
     const o = await db.getOrder(req.params.id);
-    if (!o || (o.userId !== user.id && user.role !== "admin")) return reply.code(404).send({ error: "not_found" });
+    if (!o || (o.userId !== user.id && user.role !== "admin"))
+      return reply.code(404).send({ error: "not_found" });
     // SEEDED-DEFECT:schema-drift-created-at — createdAt is sent as epoch millis (number); contract says date-time string.
     return { ...o, createdAt: Date.parse(o.createdAt) };
   });
@@ -175,6 +193,8 @@ export async function start(port = 0, opts: ShopOptions = {}): Promise<RunningSh
 /* c8 ignore start */
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const shop = await start(Number(process.env.PORT ?? 3001));
-  process.stdout.write(`shop-fastify (${shop.app.shop.fixed ? "fixed" : "seeded"}) listening on ${shop.url}\n`);
+  process.stdout.write(
+    `shop-fastify (${shop.app.shop.fixed ? "fixed" : "seeded"}) listening on ${shop.url}\n`,
+  );
 }
 /* c8 ignore stop */

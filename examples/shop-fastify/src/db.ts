@@ -40,6 +40,8 @@ export class Db {
   private index = new Map<string, Set<number>>();
   private orders = new Map<string, Order>();
   private idempotency = new Map<string, Order>();
+  /** Order id → the Idempotency-Key it was created with (only orders sent with a key). */
+  private orderKeys = new Map<string, string>();
   private nextOrder = 1;
 
   constructor(private readonly queryDelayMs = 1) {
@@ -69,6 +71,7 @@ export class Db {
     this.reindex();
     this.orders.clear();
     this.idempotency.clear();
+    this.orderKeys.clear();
     this.nextOrder = 1;
   }
 
@@ -112,12 +115,27 @@ export class Db {
     return this.query(() => {
       const order: Order = { ...o, id: `ord_${this.nextOrder++}`, createdAt: new Date().toISOString() };
       this.orders.set(order.id, order);
-      if (idempotencyKey) this.idempotency.set(`${o.userId}:${idempotencyKey}`, order);
+      if (idempotencyKey) {
+        this.idempotency.set(`${o.userId}:${idempotencyKey}`, order);
+        this.orderKeys.set(order.id, idempotencyKey);
+      }
       return order;
     });
   }
   byIdempotencyKey(userId: string, key: string): Promise<Order | undefined> {
     return this.query(() => this.idempotency.get(`${userId}:${key}`));
+  }
+  /** The user's own orders in creation order, each with the Idempotency-Key it was created with (if any). */
+  ordersForUser(userId: string): Promise<(Order & { idempotencyKey?: string })[]> {
+    return this.query(() => {
+      const out: (Order & { idempotencyKey?: string })[] = [];
+      for (const o of this.orders.values()) {
+        if (o.userId !== userId) continue;
+        const key = this.orderKeys.get(o.id);
+        out.push(key === undefined ? o : { ...o, idempotencyKey: key });
+      }
+      return out;
+    });
   }
   getOrder(id: string): Promise<Order | undefined> {
     return this.query(() => this.orders.get(id));

@@ -94,6 +94,26 @@ paths:
       responses:
         "200": { description: Terms, content: { text/plain: { schema: { type: string } } } }
   /orders:
+    get:
+      description: The caller's own orders (also only their own for admins), in creation order.
+      responses:
+        "200":
+          description: Own orders, each with the Idempotency-Key it was created with (absent if none was sent)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Order"
+                        - type: object
+                          properties:
+                            idempotencyKey: { type: string }
+        "401": { description: Unauthenticated }
     post:
       parameters:
         - { name: Idempotency-Key, in: header, schema: { type: string } }

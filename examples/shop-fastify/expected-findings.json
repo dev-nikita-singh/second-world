@@ -1,5 +1,5 @@
 {
-  "$comment": "Ground truth for SECOND WORLD recall/precision (docs/12-testing-and-quality.md §3). location.line = the line after the SEEDED-DEFECT marker; refresh with `node examples/_tools/sync-expected-findings.mjs examples/shop-fastify`. Reproduced by tests/integration/examples/shop-fastify.test.ts. `correctByDesign` lists behaviours that are implemented correctly here and must NOT be reported (precision). location.symbol = enclosing exported function; location.handler = route whose handler contains the defect; location.callee = the offending call.",
+  "$comment": "Ground truth for SECOND WORLD recall/precision (docs/12-testing-and-quality.md §3). location.line = the line after the SEEDED-DEFECT marker; refresh with `node examples/_tools/sync-expected-findings.mjs examples/shop-fastify`. Reproduced by tests/integration/examples/shop-fastify.test.ts. `correctByDesign` lists behaviours that are implemented correctly here and must NOT be reported (precision). location.symbol = enclosing exported function; location.handler = route whose handler contains the defect; location.callee = the offending call. detectedBy = the CLI commands that find the defect with exactly this folder's sw.config.ts (finding ruleId + operation, title fragment or location); detectableFromConfig: false (+ detectableFromConfigReason) marks defects no engine can find from the config. `observations` = documented findings that are not defects (observation / suspected-risk level). Checked by tests/integration/examples/from-config.test.ts.",
   "schemaVersion": 1,
   "app": "shop-fastify",
   "framework": "fastify@5",
@@ -21,10 +21,18 @@
       "fixedBy": "FIXED=1",
       "location": {
         "file": "src/server.ts",
-        "line": 69,
+        "line": 71,
         "symbol": "createApp",
         "handler": "GET /products/search"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw inspect",
+          "ruleId": "ARCH005",
+          "location": true
+        }
+      ]
     },
     {
       "id": "retry-no-jitter",
@@ -41,9 +49,21 @@
       "fix": "Exponential backoff with full jitter",
       "location": {
         "file": "src/payments-client.ts",
-        "line": 33,
+        "line": 38,
         "symbol": "charge"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw inspect",
+          "ruleId": "ARCH002",
+          "location": true
+        },
+        {
+          "command": "sw reliability run dependency-5xx",
+          "ruleId": "reliability/retry-without-jitter"
+        }
+      ]
     },
     {
       "id": "no-circuit-breaker",
@@ -58,9 +78,16 @@
       "fix": "Open a breaker after N consecutive failures; fail fast with 503 while open",
       "location": {
         "file": "src/payments-client.ts",
-        "line": 13,
+        "line": 18,
         "symbol": "charge"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw reliability run dependency-5xx",
+          "ruleId": "reliability/no-circuit-breaker"
+        }
+      ]
     },
     {
       "id": "boundary-500-limit",
@@ -77,10 +104,18 @@
       "fix": "Validate 1 <= limit <= 100 with a Fastify querystring schema",
       "location": {
         "file": "src/server.ts",
-        "line": 59,
+        "line": 61,
         "symbol": "createApp",
         "handler": "GET /products"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/server-error-on-boundary",
+          "operation": "GET /products"
+        }
+      ]
     },
     {
       "id": "bfla-delete-product",
@@ -97,10 +132,18 @@
       "fix": "Require role admin",
       "location": {
         "file": "src/server.ts",
-        "line": 88,
+        "line": 90,
         "symbol": "createApp",
         "handler": "DELETE /products/:id"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/bfla",
+          "operation": "DELETE /products/{id}"
+        }
+      ]
     },
     {
       "id": "sync-fs-in-handler",
@@ -117,11 +160,19 @@
       "fix": "Read once at startup or use fs.promises",
       "location": {
         "file": "src/server.ts",
-        "line": 94,
+        "line": 96,
         "symbol": "createApp",
         "handler": "GET /terms",
         "callee": "readFileSync"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw inspect",
+          "ruleId": "ARCH004",
+          "location": true
+        }
+      ]
     },
     {
       "id": "schema-drift-created-at",
@@ -137,10 +188,18 @@
       "fix": "Return the ISO string",
       "location": {
         "file": "src/server.ts",
-        "line": 130,
+        "line": 148,
         "symbol": "createApp",
         "handler": "GET /orders/:id"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/schema-mismatch",
+          "operation": "GET /orders/{id}"
+        }
+      ]
     },
     {
       "id": "idempotency-key-race",
@@ -159,10 +218,48 @@
       "fix": "Make key reservation atomic: insert the key (unique) before doing the work, or a per-key lock; concurrent duplicates wait for and replay the first response",
       "location": {
         "file": "src/server.ts",
-        "line": 107,
+        "line": 124,
         "symbol": "createApp",
         "handler": "POST /orders"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/race-lost-update",
+          "operation": "POST /orders",
+          "titleIncludes": "same Idempotency-Key, concurrent"
+        },
+        {
+          "command": "sw reliability run dependency-latency",
+          "ruleId": "reliability/duplicate-operation",
+          "titleIncludes": "one-order-per-key"
+        },
+        {
+          "command": "sw reliability run dependency-latency",
+          "ruleId": "reliability/duplicate-operation",
+          "titleIncludes": "orders-per-operation"
+        }
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "command": "sw bugs",
+      "ruleId": "bugs/accepts-invalid-input",
+      "operation": "GET /products",
+      "reason": "page/limit outside the documented range are clamped or accepted (200) instead of 400; the same missing validation as boundary-500-limit, reported as an observation."
+    },
+    {
+      "command": "sw bugs",
+      "ruleId": "bugs/undocumented-status",
+      "operation": "GET /orders/{id}",
+      "reason": "A very long generated id gets 414 URI Too Long from Node's HTTP parser; 414 is not in the contract. Server limit, not an app defect."
+    },
+    {
+      "command": "sw reliability run",
+      "ruleId": "reliability/experiment",
+      "reason": "Per-run experiment summary (info): hypothesis verdict, error rate during the fault, recovery time. Not a defect."
     }
   ],
   "correctByDesign": [

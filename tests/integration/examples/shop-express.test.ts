@@ -191,6 +191,20 @@ describe("shop-express seeded defects are reproducible", () => {
     reproduced.add("unbounded-retry");
   });
 
+  it("no-circuit-breaker (discovered): a payments provider failing on every call is still called by every order", async () => {
+    shop.payments.setBehavior({ failPct: 100 });
+    const pending = [1, 2, 3].map((productId) => order("alice-token", [{ productId, qty: 1 }]));
+    await new Promise((r) => setTimeout(r, 300));
+    const st = shop.payments.stats();
+    const perOrder = Object.values(st.attemptsByOrder);
+    // all three orders keep calling the failing provider (a breaker would fail fast after a few failures)
+    expect(perOrder).toHaveLength(3);
+    for (const n of perOrder) expect(n).toBeGreaterThan(10);
+    shop.payments.setBehavior({ failPct: 0 });
+    for (const r of await Promise.all(pending)) expect(r.status).toBe(201);
+    reproduced.add("no-circuit-breaker");
+  });
+
   it("every defect in expected-findings.json was reproduced", () => {
     expect([...reproduced].sort()).toEqual(expected.defects.map((d) => d.id).sort());
   });

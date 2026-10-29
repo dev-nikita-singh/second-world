@@ -13,7 +13,7 @@ export interface Charge {
  */
 export async function charge(baseUrl: string, orderId: string, amount: number, stop?: AbortSignal): Promise<Charge> {
   let attempts = 0;
-  // SEEDED-DEFECT:unbounded-retry — retries forever, immediately, with no backoff/jitter and no attempt cap.
+  // SEEDED-DEFECT:unbounded-retry — retries forever, immediately, with no backoff/jitter and no attempt cap. SEEDED-DEFECT:no-circuit-breaker — DISCOVERED (not planted) by sw reliability: no breaker either.
   while (true) {
     if (stop?.aborted) throw new Error("shutting down");
     attempts++;

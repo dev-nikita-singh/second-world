@@ -1,5 +1,5 @@
 {
-  "$comment": "Ground truth for SECOND WORLD recall/precision (docs/12-testing-and-quality.md §3). location.line = the line after the SEEDED-DEFECT marker; refresh with `node examples/_tools/sync-expected-findings.mjs examples/shop-express`. Every defect is reproduced by tests/integration/examples/shop-express.test.ts. location.symbol = enclosing exported function; location.handler = route whose handler contains the defect; location.callee = the offending call.",
+  "$comment": "Ground truth for SECOND WORLD recall/precision (docs/12-testing-and-quality.md §3). location.line = the line after the SEEDED-DEFECT marker; refresh with `node examples/_tools/sync-expected-findings.mjs examples/shop-express`. Every defect is reproduced by tests/integration/examples/shop-express.test.ts. location.symbol = enclosing exported function; location.handler = route whose handler contains the defect; location.callee = the offending call. detectedBy = the CLI commands that find the defect with exactly this folder's sw.config.ts (finding ruleId + operation, title fragment or location); detectableFromConfig: false (+ detectableFromConfigReason) marks defects no engine can find from the config. `observations` = documented findings that are not defects (observation / suspected-risk level). Checked by tests/integration/examples/from-config.test.ts.",
   "schemaVersion": 1,
   "app": "shop-express",
   "framework": "express@5",
@@ -22,7 +22,15 @@
         "line": 18,
         "symbol": "productsRouter",
         "handler": "GET /products"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw inspect",
+          "ruleId": "ARCH005",
+          "location": true
+        }
+      ]
     },
     {
       "id": "no-timeout-outbound",
@@ -41,7 +49,19 @@
         "file": "src/payments-client.ts",
         "line": 22,
         "symbol": "charge"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw inspect",
+          "ruleId": "ARCH001",
+          "location": true
+        },
+        {
+          "command": "sw reliability run dependency-timeout",
+          "ruleId": "reliability/outbound-no-timeout"
+        }
+      ]
     },
     {
       "id": "sync-crypto-login",
@@ -61,7 +81,15 @@
         "line": 47,
         "symbol": "login",
         "callee": "pbkdf2Sync"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw inspect",
+          "ruleId": "ARCH004",
+          "location": true
+        }
+      ]
     },
     {
       "id": "module-cycle",
@@ -82,7 +110,15 @@
         "line": 4,
         "kind": "import",
         "imports": "./orders.js"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw inspect",
+          "ruleId": "ARCH003",
+          "location": true
+        }
+      ]
     },
     {
       "id": "stock-race",
@@ -101,7 +137,16 @@
         "file": "src/services/inventory.ts",
         "line": 14,
         "symbol": "reserve"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/race-lost-update",
+          "operation": "POST /orders",
+          "titleIncludes": "last item: orders vs stock reads"
+        }
+      ]
     },
     {
       "id": "idempotency-ignored",
@@ -121,7 +166,25 @@
         "line": 16,
         "symbol": "ordersRouter",
         "handler": "POST /orders"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/idempotency-key-ignored",
+          "operation": "POST /orders"
+        },
+        {
+          "command": "sw reliability run dependency-5xx",
+          "ruleId": "reliability/duplicate-operation",
+          "titleIncludes": "orders-per-operation"
+        },
+        {
+          "command": "sw reliability run dependency-timeout",
+          "ruleId": "reliability/duplicate-operation",
+          "titleIncludes": "orders-per-operation"
+        }
+      ]
     },
     {
       "id": "bola-orders",
@@ -141,7 +204,15 @@
         "line": 46,
         "symbol": "ordersRouter",
         "handler": "GET /orders/:id"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/bola",
+          "operation": "GET /orders/{id}"
+        }
+      ]
     },
     {
       "id": "schema-drift-price",
@@ -160,7 +231,15 @@
         "line": 36,
         "symbol": "productsRouter",
         "handler": "GET /products/:id"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/schema-mismatch",
+          "operation": "GET /products/{id}"
+        }
+      ]
     },
     {
       "id": "boundary-500",
@@ -182,7 +261,20 @@
         "file": "src/pricing.ts",
         "line": 10,
         "symbol": "unitPrice"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/server-error-on-boundary",
+          "operation": "POST /cart/items"
+        },
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/server-error-on-boundary",
+          "operation": "POST /orders"
+        }
+      ]
     },
     {
       "id": "unbounded-retry",
@@ -201,7 +293,19 @@
         "file": "src/payments-client.ts",
         "line": 17,
         "symbol": "charge"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw inspect",
+          "ruleId": "ARCH002",
+          "location": true
+        },
+        {
+          "command": "sw reliability run dependency-5xx",
+          "ruleId": "reliability/retry-without-backoff"
+        }
+      ]
     },
     {
       "id": "idempotency-key-race",
@@ -223,7 +327,65 @@
         "line": 32,
         "symbol": "ordersRouter",
         "handler": "POST /orders"
-      }
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/race-lost-update",
+          "operation": "POST /orders",
+          "titleIncludes": "same Idempotency-Key, concurrent"
+        }
+      ]
+    },
+    {
+      "id": "no-circuit-breaker",
+      "engine": "reliability",
+      "alsoDetectableBy": [],
+      "category": "reliability",
+      "ruleId": "reliability/no-circuit-breaker",
+      "severity": "medium",
+      "title": "No circuit breaker: a failing or hanging payments provider is still called on every order",
+      "description": "DISCOVERED, not planted: found by `sw reliability run dependency-5xx|dependency-timeout` from sw.config.ts once the fault lasts long enough (5 s). Part of the same charge() loop as unbounded-retry, whose fix already includes a breaker.",
+      "discovered": true,
+      "endpoint": "POST /orders",
+      "reproduction": "payments returns 503 (or never answers) for 5 s: every POST /orders keeps calling payments, no fast failure",
+      "fix": "Open a breaker after N consecutive failures; fail fast with 503 while open",
+      "location": {
+        "file": "src/payments-client.ts",
+        "line": 17,
+        "symbol": "charge"
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw reliability run dependency-5xx",
+          "ruleId": "reliability/no-circuit-breaker"
+        },
+        {
+          "command": "sw reliability run dependency-timeout",
+          "ruleId": "reliability/no-circuit-breaker"
+        }
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "command": "sw inspect",
+      "ruleId": "ARCH005",
+      "file": "src/services/orders.ts",
+      "reason": "placeOrder reads each order line's product in a loop (one query per line). Real, but bounded by the order size; not a planted defect."
+    },
+    {
+      "command": "sw bugs",
+      "ruleId": "bugs/accepts-invalid-input",
+      "operation": "GET /products",
+      "reason": "Unknown `include` values are ignored (200) instead of 400. Lenient input handling, reported as an observation."
+    },
+    {
+      "command": "sw reliability run",
+      "ruleId": "reliability/experiment",
+      "reason": "Per-run experiment summary (info): hypothesis verdict, error rate during the fault, recovery time. Not a defect."
     }
   ]
 }

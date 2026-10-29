@@ -56,6 +56,25 @@ describe("shop-fastify happy paths", () => {
     expect((await api(shop.url, "GET", `/orders/${o.body.id}`, { token: "admin-token" })).status).toBe(200);
     expect((await api(shop.url, "DELETE", "/products/2", { token: "admin-token" })).status).toBe(204);
   });
+
+  it("GET /orders: own orders only, each with the Idempotency-Key it was created with", async () => {
+    expect((await api(shop.url, "GET", "/orders")).status).toBe(401);
+    const a = await order("alice-token", { productId: 1, qty: 1 }, { "idempotency-key": "k-list-1" });
+    const replay = await order("alice-token", { productId: 1, qty: 1 }, { "idempotency-key": "k-list-1" });
+    expect(replay.body.id).toBe(a.body.id);
+    const b = await order("alice-token", { productId: 2, qty: 1 });
+    await order("bob-token", { productId: 3, qty: 1 }, { "idempotency-key": "k-bob" });
+    const mine = await api(shop.url, "GET", "/orders", { token: "alice-token" });
+    expect(mine.status).toBe(200);
+    expect(mine.body.items.map((o: { id: string }) => o.id)).toEqual([a.body.id, b.body.id]);
+    expect(mine.body.items[0]).toMatchObject({ userId: "u_alice", idempotencyKey: "k-list-1" });
+    expect(mine.body.items[1]).not.toHaveProperty("idempotencyKey");
+    expect(typeof mine.body.items[0].createdAt).toBe("string");
+    // admins list their own orders too (no cross-user listing)
+    expect((await api(shop.url, "GET", "/orders", { token: "admin-token" })).body.items).toEqual([]);
+    const bob = await api(shop.url, "GET", "/orders", { token: "bob-token" });
+    expect(bob.body.items.map((o: { idempotencyKey?: string }) => o.idempotencyKey)).toEqual(["k-bob"]);
+  });
 });
 
 describe("shop-fastify seeded defects are reproducible", () => {

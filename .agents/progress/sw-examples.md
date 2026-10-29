@@ -55,3 +55,16 @@
 
 ## Blockers / requests
 - (resolved) sw-core fixed `config validate` for engine sections; e2e test enabled.
+
+## Wave 5
+- DONE shop-fastify `GET /orders` (own orders, `idempotencyKey` per order, absent if none) + openapi entry; Db.ordersForUser/orderKeys; repro test in shop-fastify.test.ts. Lines re-synced.
+- DONE configs: both sw.config.ts got bugs concurrency (express: + same-key burst; fastify: linearizable last-item precision check + same-key burst, propertyRuns 8) and a `reliability` section (dependency payments via builtin proxy on 4011, params latency 1500ms, rate 8, client timeout 1s, idempotency retries on transport/timeout only, steady 2s/duration 5s/recovery 3s, repeat 2, invariants count-matches (+ no-duplicates on fastify)).
+- DONE expected-findings.json: every defect has `detectableFromConfig` + `detectedBy` [{command, ruleId, operation|location|titleIncludes}]; `observations` (documented non-defect findings). New discovered express defect `no-circuit-breaker` (marker on the unbounded-retry line; plain-HTTP repro in shop-express.test.ts).
+- DONE tests: from-config.ts (copy example to temp, SW_* port overrides, scoring), from-config.suite.ts, from-config-express.test.ts / from-config-fastify.test.ts (4 commands each, recall 1 / precision 1, examples/ hash unchanged). 10 tests, ~2 min.
+- Decision: retryOn ["transport","timeout"] — retrying 5xx makes fastify replay the stored order, which hides no-circuit-breaker.
+- Decision: fastify duplicates via dependency-latency (1.5 s), not dependency-timeout: with client timeout 1 s the engine flags outbound-no-timeout on fastify (FP; its 4x2 s budget exceeds the fault). Reported to main.
+- DONE after main's 49dc1ca: express config `reliability.maxOutboundBudget: "800ms"` (otherwise outbound-no-timeout is inconclusive with 1 s client timeout). Fastify README: dependency-timeout is now inconclusive, not listed.
+- DONE READMEs: "Finding them with sw.config.ts" (commands + defect→command→finding table) in both.
+- Biome reformatted fastify src (signature wraps) → lines re-synced.
+- FINAL: tests/integration/examples + bugs + reliability: 25 files, 137 passed; tsc clean.
+- Next: none.

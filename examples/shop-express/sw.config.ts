@@ -91,11 +91,86 @@ export default {
         role: "user",
         body: { items: [{ productId: 20, qty: 1 }] },
         mix: [
-          { operation: "GET /products/{id}", pathParams: { id: 20 }, as: "read", pointer: "/stock", phase: "before" },
-          { operation: "GET /products/{id}", pathParams: { id: 20 }, as: "read", pointer: "/stock", count: 2 },
-          { operation: "GET /products/{id}", pathParams: { id: 20 }, as: "read", pointer: "/stock", phase: "after" },
+          {
+            operation: "GET /products/{id}",
+            pathParams: { id: 20 },
+            as: "read",
+            pointer: "/stock",
+            phase: "before",
+          },
+          {
+            operation: "GET /products/{id}",
+            pathParams: { id: 20 },
+            as: "read",
+            pointer: "/stock",
+            count: 2,
+          },
+          {
+            operation: "GET /products/{id}",
+            pathParams: { id: 20 },
+            as: "read",
+            pointer: "/stock",
+            phase: "after",
+          },
         ],
         invariant: { kind: "linearizable", model: "stock" },
+      },
+      {
+        // One logical order retried concurrently: every request carries the same Idempotency-Key,
+        // so all successful responses must be the same order.
+        name: "same Idempotency-Key, concurrent",
+        operation: "POST /orders",
+        burst: 5,
+        role: "user",
+        body: { items: [{ productId: 1, qty: 1 }] },
+        sameIdempotencyKey: true,
+        invariant: { kind: "same-response", pointer: "/id" },
+      },
+    ],
+  },
+  reliability: {
+    // The shop must call payments through the fault proxy: start it with
+    // PAYMENTS_URL=http://127.0.0.1:4011 (the proxy forwards to targets.payments).
+    dependency: "payments",
+    dependencies: { payments: { injector: "builtin", upstream: "payments", proxyListen: 4011 } },
+    // dependency-latency: payments answers after 1.5 s (below the 2 s per-attempt timeout of shop-fastify).
+    params: { latency: "1500ms" },
+    workload: {
+      rate: 8,
+      // Clients give up after 1 s and retry the same logical order with the same Idempotency-Key.
+      timeout: "1s",
+      routes: [
+        {
+          name: "orders",
+          method: "POST",
+          path: "/orders",
+          auth: "user",
+          body: '{"items":[{"productId":{{rand 1 19}},"qty":1}]}',
+          dependsOn: ["payments"],
+          idempotency: {
+            header: "Idempotency-Key",
+            retries: 2,
+            backoff: "50ms",
+            retryOn: ["transport", "timeout"],
+          },
+        },
+      ],
+    },
+    steady: "2s",
+    duration: "5s",
+    recovery: "3s",
+    // A detector hit in both repetitions is a reproduced defect.
+    repeat: 2,
+    // The shop should give up on a hung payments call well within the clients' 1 s timeout:
+    // dependency-timeout reports outbound-no-timeout when requests wait longer than this budget.
+    maxOutboundBudget: "800ms",
+    invariants: [
+      // Orders created must match the logical orders that succeeded (retries must not add orders).
+      {
+        type: "count-matches",
+        name: "orders-per-operation",
+        collection: "GET /orders",
+        headersFrom: "orders",
       },
     ],
   },

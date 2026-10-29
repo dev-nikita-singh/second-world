@@ -8,7 +8,12 @@ export interface ChargeResult {
 export const RETRY_DELAY_MS = 50;
 export const MAX_ATTEMPTS = 4;
 
-export async function charge(baseUrl: string, orderId: string, amount: number, stop?: AbortSignal): Promise<ChargeResult> {
+export async function charge(
+  baseUrl: string,
+  orderId: string,
+  amount: number,
+  stop?: AbortSignal,
+): Promise<ChargeResult> {
   // SEEDED-DEFECT:no-circuit-breaker — every request keeps calling a provider that has been failing for minutes.
   let attempts = 0;
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
