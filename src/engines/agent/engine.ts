@@ -829,10 +829,20 @@ export async function executeAgent(
     suggestedTests: suggested,
     mutationsAllowed: s.mutationsAllowed,
   };
+  const st = s.http.stats;
   await s.close();
   const cancelled = stopReason === "cancelled";
+  // Every request failed at transport level: nothing was tested, so this is not a pass.
+  const targetUnreachable = st.sent > 0 && st.transportErrors === st.sent;
+  if (targetUnreachable) {
+    limitations.push({
+      code: "target-unreachable",
+      message: `All ${st.sent} requests failed at transport level (connection refused / timeout). Is ${input.target} running?`,
+      impact: "invalidates",
+    });
+  }
   const hasDefect = findings.some((f) => f.classification === "reproduced-defect");
-  const status = cancelled ? "cancelled" : hasDefect ? "failed" : budgetHit ? "partial" : "passed";
+  const status = cancelled ? "cancelled" : targetUnreachable ? "error" : hasDefect ? "failed" : budgetHit ? "partial" : "passed";
   ctx.events.emit("agent.done", {
     runId,
     iterations: iteration,

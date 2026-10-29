@@ -801,6 +801,12 @@ export async function finalizePerformance(f: FinalizeArgs): Promise<EngineResult
       message: `Every request failed to connect (${[...metrics.errors.keys()].join(", ")}). Is the target running?`,
       impact: "invalidates",
     });
+    // Instant connection refusals make VUs spin: the CPU is real but "generator saturated" would mislead.
+    const i = limitations.findIndex((l) => l.code === "generator-saturated");
+    if (i >= 0) limitations.splice(i, 1);
+    health.health.saturated = false;
+    health.health.reasons = [];
+    health.health.remedies = [];
   }
 
   // ---- findings

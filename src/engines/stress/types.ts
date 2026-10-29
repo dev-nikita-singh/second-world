@@ -37,6 +37,8 @@ export interface StageResult {
   holdMs: number;
   settleMs: number;
   status: StageStatus;
+  /** The stage's perf run could not reach the target at all (perf limitation `target-unreachable`). */
+  targetUnreachable?: boolean;
   /** Why the stage counts as breached (threshold expressions, "error-rate", "consecutive-windows: …"). */
   breachReasons: string[];
   perfRunId: string;

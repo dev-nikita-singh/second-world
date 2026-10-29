@@ -145,6 +145,7 @@ function toStageResult(
     holdMs: p.holdMs,
     settleMs: p.settleMs,
     status,
+    ...(res.limitations.some((l) => l.code === "target-unreachable") ? { targetUnreachable: true } : {}),
     breachReasons,
     perfRunId: res.runId,
     perfStatus: res.status,
@@ -418,7 +419,16 @@ export async function executeStress(
   }
 
   // ---- analysis
-  const invalidFrom = applySaturationInvalidation(stages);
+  // A target that refuses every connection is not a saturated generator: say what happened.
+  const unreachable = stages.length > 0 && stages.every((s) => s.status === "error" && s.targetUnreachable === true);
+  if (unreachable) {
+    limitations.push({
+      code: "target-unreachable",
+      message: `Every stage failed to connect to ${String(input.base.target ?? "the target")}. Is it running?`,
+      impact: "invalidates",
+    });
+  }
+  const invalidFrom = unreachable ? null : applySaturationInvalidation(stages);
   if (invalidFrom !== null) {
     const s = stages[invalidFrom] as StageResult;
     limitations.push({

@@ -110,7 +110,10 @@ export function isFailingFinding(f: Finding, failOn: FailOn): boolean {
   return sevRank(f.severity) <= sevRank(failOn);
 }
 
-/** Compute verdict + exit code (§A.6). Precedence: 130 cancelled > 70 error > 1 failures > 0. */
+/** Limitation codes meaning the run failed because of the target, not the engine (→ exit 5). */
+const TARGET_LIMITATIONS = new Set(["target-unreachable", "no-measurements"]);
+
+/** Compute verdict + exit code (§A.6). Precedence: 130 cancelled > 70 error (5 when caused by the target) > 1 failures > 0. */
 export function computeVerdict(results: readonly EngineResult[], failOn: FailOn = DEFAULT_FAIL_ON): Verdict {
   const reasons: string[] = [];
   const cancelled = results.filter((r) => r.status === "cancelled");
@@ -120,6 +123,14 @@ export function computeVerdict(results: readonly EngineResult[], failOn: FailOn 
     return { passed: false, exitCode: ExitCode.Cancelled, reasons };
   }
   if (errored.length > 0) {
+    // An error caused by the target (nothing answered / nothing measured) is exit 5, not a bug in SECOND WORLD.
+    const targetSide = errored.filter((r) =>
+      r.limitations.some((l) => l.impact === "invalidates" && TARGET_LIMITATIONS.has(l.code)),
+    );
+    if (targetSide.length === errored.length) {
+      reasons.push(`target unreachable / nothing measured: ${errored.map((r) => r.engine).join(", ")}`);
+      return { passed: false, exitCode: ExitCode.TargetUnreachable, reasons };
+    }
     reasons.push(`engine error: ${errored.map((r) => r.engine).join(", ")}`);
     return { passed: false, exitCode: ExitCode.Internal, reasons };
   }

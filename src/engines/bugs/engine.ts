@@ -535,7 +535,17 @@ export async function executeBugs(input: BugsInput, ctx: EngineContext): Promise
     observed += docStatuses.filter((x) => (row.statuses[x] ?? 0) > 0).length;
   }
   const transportErrors = s.http.stats.transportErrors;
-  if (transportErrors > 0) {
+  // Every request failed at transport level: nothing was tested. Not a pass (exit 5 via target-unreachable).
+  const targetUnreachable = s.http.stats.sent > 0 && transportErrors === s.http.stats.sent;
+  if (targetUnreachable) {
+    for (const row of matrix.values()) if (row.findings.length === 0) row.verdict = "untested";
+    exercised = 0;
+    limitations.push({
+      code: "target-unreachable",
+      message: `All ${s.http.stats.sent} requests failed at transport level (connection refused / timeout). Is ${input.target} running?`,
+      impact: "invalidates",
+    });
+  } else if (transportErrors > 0) {
     limitations.push({
       code: "BUGS_TRANSPORT_ERRORS",
       message: `${transportErrors} requests failed at transport level (timeouts/aborts); classified as inconclusive, not as bugs`,
@@ -582,7 +592,7 @@ export async function executeBugs(input: BugsInput, ctx: EngineContext): Promise
   await s.close();
   const cancelled = ctx.signal.aborted;
   const hasDefect = findings.some((f) => f.classification === "reproduced-defect");
-  const status = cancelled ? "cancelled" : hasDefect ? "failed" : budgetHit ? "partial" : "passed";
+  const status = cancelled ? "cancelled" : targetUnreachable ? "error" : hasDefect ? "failed" : budgetHit ? "partial" : "passed";
   ctx.events.emit("bugs.done", {
     runId,
     findings: findings.length,
