@@ -75,12 +75,15 @@ describe("experiments flag / config mapping", () => {
       userConfig: false,
       inline: { performance: { target: "api", vus: 2, duration: "1s" }, evolution: { health: "/healthz" } },
     });
-    expect(buildEvolutionInput(cfg, { candidates: ["branch:x"] })).toEqual({
+    const built = buildEvolutionInput(cfg, { candidates: ["branch:x"] });
+    expect(built).toMatchObject({
       health: "/healthz",
       candidates: ["branch:x"],
       repo: cfg.cwd,
       workload: { vus: 2, duration: "1s" },
     });
+    // SECOND WORLD's own state dirs are never counted as working-tree changes (db5ef7d).
+    expect(built.ignorePaths).toContain(resolve(cfg.cwd, ".second-world"));
   });
 });
 

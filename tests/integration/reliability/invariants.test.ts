@@ -159,10 +159,13 @@ describe("duplicate-operation invariants (in-test store behind the fault proxy)"
       const ops = run.operations?.["create-order"];
       expect(ops?.retried).toBeGreaterThan(0);
       expect(ops?.retriedDuringFault).toBeGreaterThan(0);
-      const dup = inv.get("orders-by-key")?.duplicates?.[0];
-      expect(dup?.count).toBeGreaterThan(1);
-      expect(dup?.phase).toBe("fault");
-      expect(dup?.route).toBe("create-order");
+      const dupList = inv.get("orders-by-key")?.duplicates ?? [];
+      expect(dupList[0]?.count).toBeGreaterThan(1);
+      expect(dupList[0]?.route).toBe("create-order");
+      // An op first sent at the very end of the steady phase can lose its response once the fault starts,
+      // so its phase is "steady" (seen under full-suite load). At least one duplicate starts in the fault.
+      expect(dupList.some((d) => d.phase === "fault")).toBe(true);
+      for (const d of dupList) expect(["steady", "fault"]).toContain(d.phase);
     }
     const dups = r.findings.filter((f) => f.ruleId === "reliability/duplicate-operation");
     expect(dups.length).toBe(2); // no-duplicates + count-matches (grouped per invariant)
