@@ -3,7 +3,7 @@
  * docs/12-testing-and-quality.md §1 (E2E / integration), docs/01-vision-and-principles.md §5 (trust ladder),
  * docs/11-safety-security-privacy.md (no secrets in artifacts).
  */
-import { mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { cpSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { expect } from "vitest";
@@ -149,3 +149,26 @@ export function expectTrustLadder(results: ResultLike[]): void {
   }
   expect(bad, bad.join("\n")).toEqual([]);
 }
+
+/**
+ * Copy an example app (sources, contract, sw.config.ts) into `dest` and point its shipped config at
+ * running instances: every `from → to` host:port pair is replaced, and `proxyListen: 4011` becomes `proxyPort`.
+ * The user workflow from docs/quickstart.md: work in a copy, never inside examples/.
+ */
+export function copyExample(
+  name: "shop-express" | "shop-fastify",
+  dest: string,
+  hosts: Record<string, string>,
+  proxyPort?: number,
+): string {
+  cpSync(path.join(EXAMPLES_DIR, name), dest, { recursive: true });
+  const cfgPath = path.join(dest, "sw.config.ts");
+  let cfg = readFileSync(cfgPath, "utf8");
+  for (const [from, to] of Object.entries(hosts)) cfg = cfg.split(from).join(to);
+  if (proxyPort !== undefined) cfg = cfg.replace(/proxyListen:\s*4011/g, `proxyListen: ${proxyPort}`);
+  writeFileSync(cfgPath, cfg);
+  return cfgPath;
+}
+
+/** The example apps' demo bearer tokens: canaries that must never appear in output or artifacts. */
+export const DEMO_TOKENS = ["alice-token", "bob-token", "admin-token"] as const;

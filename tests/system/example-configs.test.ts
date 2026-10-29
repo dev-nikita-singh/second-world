@@ -1,7 +1,7 @@
 /**
  * System test: the configs shipped with the example apps must validate (`sw config validate`,
  * docs/08-configuration.md), since README/quickstart users start from them.
- * KNOWN BUG (reported to main by sw-qa): examples/shop-express/sw.config.ts uses scenario-level
+ * Regression (reported by sw-qa, fixed): examples/shop-express/sw.config.ts uses scenario-level
  * `auth: "user"` (specified in docs/08 §example) which the performance schema rejects
  * (scenarios.2: Unrecognized key "auth", exit 2). Fixed (scenario-level auth supported); kept as a regression test.
  * Owner: sw-qa.

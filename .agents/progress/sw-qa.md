@@ -28,3 +28,17 @@ Status: DONE (2026-10-29).
 
 ## Blockers / requests
 - none
+
+## Wave 5
+Status: DONE (2026-10-29)
+- [x] packaging test: done; bugs: ESM inspect crash (FIXED 50986b7)
+- [x] every command on both apps (manual, packaged bin): done
+- [x] edge cases: subfolder, --config elsewhere, down target, bad URL, invalid config, hard kill (Windows: no graceful SIGINT), zero/neg/huge rate, unwritable -o, spaces
+- [x] system/e2e tests
+- Servers (manual runs): payments :4610, express :4600, express2 :4602 (PAYMENTS_URL :4611), fastify :4601; PIDs in scratchpad/logs/*.pid. Work copies: %TEMP%/"sw qa work"/{express,fastify,evo}; pkg install %TEMP%/sw-qa-pkg
+- Done manual: doctor, config, perf (all models, workers, formats), stress, inspect, bugs, agent, replay, reliability(+invariants), model (json/pb/pb.gz), whatif, evolve process+docker
+- Bugs reported: doctor --quick (FIXED), iterations warmup (FIXED a658f11), packaged inspect (FIXED 50986b7), evolve docker HOST/exit70 (open)
+- Tests to write: e2e doctor-quick (it), perf iterations warmup (it), packaged-cli (it + typescript peer)
+- Tests written: tests/e2e/qa-regressions.test.ts (9: 4 it, 5 it.fails), tests/e2e/packaged-cli.test.ts (7), tests/e2e/evolve-cli.test.ts (5: 1 it.fails, 1 docker skipIf), tests/system/shop-express-cli.test.ts (7), tests/system/shop-fastify-cli.test.ts (4); helpers.ts + copyExample/DEMO_TOKENS
+- All reported bugs fixed by main; every it.fails flipped to it. Open (docs/UX, reported, no tests): README mutations and/or --yes, -o relativity, breakpoint passed+exit1, model diff arg names, whatif run N/?
+- Final: tests/system + tests/e2e 13 files, 68 tests (62 pass + 6 it.fails that then passed → flipped; re-verified 14/14), 1 skipped (Windows SIGINT). tsc clean. Servers stopped, temp dirs removed, no docker containers left.

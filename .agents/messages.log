@@ -75,3 +75,21 @@
 2026-10-29T13:40Z sw-docker -> main: DONE live Docker tests (19 live: evolution 2, docker faults 13, toxiproxy 4) + 9 bug fixes in sandbox/worktree/evolution/faults; 135 tests green, tsc clean
 2026-10-29T14:05Z sw-reliability -> main: request: add "invariants" to RELIABILITY_KEYS in src/core/world.ts (after "expectTimeout") so config.reliability.invariants reaches the engine
 2026-10-29T14:08Z sw-reliability -> main: config-flow test added (tests/unit/reliability/invariants-config.test.ts); 241 tests pass; done
+2026-10-29T21:05Z sw-qa -> main: BUG sw doctor --quick warns 'git/docker not found' though never probed (src/core/probe/probe.ts:347-357)
+2026-10-29T21:12Z sw-qa -> main: BUG perf iterations model: all iterations consumed by warmup → 0 measured, 2 high threshold-breach on n/a, exit 1 (performance/engine.ts:367,736)
+2026-10-29T21:20Z sw-qa -> main: CRITICAL packaged ESM bin: sw inspect exit 70 '__filename is not defined' (typescript bundled by tsdown; tsdown.config.ts); tarball 10MB; no LICENSE; files lists missing schemas
+2026-10-29T21:20Z sw-fixes -> main: 3 fixes done (bugs artifact relocate, gzip OTLP, exact perf.tick merge); 1173 tests pass, tsc clean
+2026-10-29T21:15Z sw-examples -> main: reliability outbound-no-timeout false positive on shop-fastify with workload.timeout 1s < app timeout budget (dependency-timeout); should be inconclusive. Worked around with dependency-latency.
+2026-10-29T21:45Z sw-qa -> main: BUG evolve docker sandbox: app on 127.0.0.1 never healthy; HOST=0.0.0.0 convention undocumented, no hint, 5 min retries, exit 70 (experiments/app.ts:108, sandbox.ts:252); minor whatif runs-needed 4/arm under Holm
+2026-10-29T21:52Z sw-qa -> main: BUG report runId (header/report.json) != history id; sw history show <runId> exit 2 (cli/run-common.ts:113 save without id)
+2026-10-29T22:00Z sw-qa -> main: HIGH sw bugs/agent PASS exit 0 on down target (bugs/cases.ts:561, engine.ts:537); perf/stress unreachable exit 70 not 5 (reporting/model.ts:122); inspect nonexistent path exit 0
+2026-10-29T22:08Z sw-qa -> main: BUG unwritable -o outDir → exit 70 internal error + run not saved to history (cli/run-common.ts:105-111)
+2026-10-29T21:25Z sw-coverage -> main: BUG(low) classifyHost: hex IPv4-mapped IPv6 ([::ffff:7f00:1], URL-normalised) classified public (src/core/safety/guard.ts:177); it.fails in tests/unit/core/guard.coverage.test.ts
+2026-10-29T21:27Z sw-coverage -> main: BUG(med) redactor misses camelCase sensitive keys accessToken/refreshToken/userPassword (src/core/log/redact.ts:24); it.fails in tests/unit/core/redact.coverage.test.ts
+2026-10-29T21:55Z sw-coverage -> main: BUG(med) agent export: U+2028/2029 in operation/ruleId escapes the // header comment → code injection in exported .test.ts (src/engines/agent/export.ts:248); it.fails in tests/unit/agent/export.coverage.test.ts
+2026-10-29T22:20Z sw-qa -> main: BUG evolve: own .second-world output (no .gitignore) → working tree CHANGED, exit 70 (experiments/git.ts:80)
+2026-10-29T22:25Z sw-qa -> main: minor batch: docs/09 r.data.global wrong; README mutations 'and --yes' vs code OR; -o relative to config dir undocumented; breakpoint stress passed+exit1; model diff arg names; whatif run N/?
+2026-10-29T22:00Z sw-coverage -> main: BUG(low) sw analyze summary ranks unknown severity above critical (src/engines/summary/deterministic.ts:34); it.fails in tests/unit/summary/summary.coverage.test.ts
+2026-10-29T21:45Z sw-examples -> main: DONE wave 5 (from-config recall/precision 1.0 both apps; 137 tests pass; tsc clean)
+2026-10-29T22:20Z sw-coverage -> main: DONE 15 coverage files/206 tests; unit L 81.4→84.11 B 67.38→70.91; 4 bugs reported all fixed; unit green, tsc clean
+2026-10-29T22:45Z sw-qa -> main: DONE wave 5: 12 bugs reported (all functional ones fixed), 5 new test files (32 tests), all it.fails flipped; tsc clean
