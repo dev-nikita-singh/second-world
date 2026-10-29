@@ -135,6 +135,21 @@ describe("redirects", () => {
     }
   });
 
+  it("cross-origin hops also strip custom credential headers (x-api-key, x-auth-token, x-session-id, …)", async () => {
+    const ex = createUndiciExecutor();
+    const creds = { "x-api-key": "k", "x-auth-token": "t", "x-session-id": "s", "x-signature": "g", "x-trace": "keep", accept: "application/json" };
+    try {
+      b.seen.length = 0;
+      await ex.execute({ origin: a.origin, method: "GET", path: `/r302/${enc(`${b.origin}/x`)}`, headers: creds, followRedirects: true });
+      const h = b.seen[0]?.headers ?? {};
+      for (const k of ["x-api-key", "x-auth-token", "x-session-id", "x-signature"]) expect(h[k], k).toBeUndefined();
+      expect(h["x-trace"]).toBe("keep");
+      expect(h.accept).toBe("application/json");
+    } finally {
+      await ex.close();
+    }
+  });
+
   it("the Safety Guard vets every hop: metadata IPs, public hosts and private names are not followed", async () => {
     const guard = createSafetyGuard({}, { interactive: false });
     const ex = createUndiciExecutor({ safety: guard });

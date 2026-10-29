@@ -12,6 +12,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import { isIP, type LookupFunction } from "node:net";
 import { performance } from "node:perf_hooks";
 import { type Dispatcher, Pool } from "undici";
+import { DEFAULT_REDACT_HEADERS } from "../../core/log/redact.js";
 import type { SafetyDecision } from "../../core/types.js";
 import { classifyError, errorMessage, type TransportErrorKind } from "./errors.js";
 import {
@@ -72,21 +73,28 @@ export interface ExecutorSafety {
 export const MAX_REDIRECTS = 5;
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
 const BODY_HEADERS = new Set(["content-type", "content-length", "transfer-encoding"]);
-const CREDENTIAL_HEADERS = new Set(["authorization", "cookie", "proxy-authorization"]);
+/**
+ * Never forwarded to another origin on a redirect: the known credential headers plus anything whose
+ * name looks like one (x-api-key, x-auth-token, x-session-id, x-signature, ...).
+ */
+const CREDENTIAL_HEADERS = new Set([...DEFAULT_REDACT_HEADERS, "authorization", "cookie", "proxy-authorization"]);
+const CREDENTIAL_NAME = /auth|token|api[-_]?key|secret|session|cookie|signature|credential|password/i;
 
 function stripHeaders(
   h: string[] | Record<string, string> | undefined,
   drop: Set<string>,
+  dropPattern?: RegExp,
 ): string[] | undefined {
   if (h === undefined) return undefined;
   const out: string[] = [];
+  const dropped = (k: string): boolean => drop.has(k.toLowerCase()) || (dropPattern?.test(k) ?? false);
   if (Array.isArray(h)) {
     for (let i = 0; i + 1 < h.length; i += 2) {
       const k = h[i] as string;
-      if (!drop.has(k.toLowerCase())) out.push(k, h[i + 1] as string);
+      if (!dropped(k)) out.push(k, h[i + 1] as string);
     }
   } else {
-    for (const [k, v] of Object.entries(h)) if (!drop.has(k.toLowerCase())) out.push(k, v);
+    for (const [k, v] of Object.entries(h)) if (!dropped(k)) out.push(k, v);
   }
   return out;
 }
@@ -367,7 +375,7 @@ class UndiciExecutor implements HttpExecutor {
             reqBody = undefined;
             headers = stripHeaders(headers, BODY_HEADERS);
           }
-          if (next.origin !== origin) headers = stripHeaders(headers, CREDENTIAL_HEADERS);
+          if (next.origin !== origin) headers = stripHeaders(headers, CREDENTIAL_HEADERS, CREDENTIAL_NAME);
           origin = next.origin;
           path = `${next.pathname}${next.search}`;
           if (tracker) {
