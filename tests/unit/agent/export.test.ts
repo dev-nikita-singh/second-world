@@ -150,4 +150,35 @@ describe("suggested-test export", () => {
     expect(calls).toBe(0);
     expect(t.vitest).not.toContain('"t1"');
   });
+
+  it("U+2028/U+2029 in an untrusted operation name or rule id cannot end the header comment (sw-coverage wave 5)", () => {
+    const p = parseScenario({
+      title: "t",
+      hypothesis: "h\u2029process.exit(3)//",
+      steps: [{ operation: "GET /items" }],
+      assertions: [{ kind: "json", step: 0, pointer: "/a", equals: 1 }],
+      expectedClassification: "defect",
+    });
+    expect(p.ok, JSON.stringify(p)).toBe(true);
+    const t = suggestedTest((p as { scenario: Scenario }).scenario, {
+      fingerprint: "f",
+      ruleId: "agent/x\u2029process.exit(2)//",
+      operation: "GET /x\u2028process.exit(1)//",
+      target: "http://127.0.0.1:1",
+      roles: [null],
+      requests: [{ method: "GET", path: "/items" }],
+      credentials: ROLES,
+    });
+    for (const src of [t.vitest, t.config ?? ""]) {
+      expect(src).not.toMatch(/[\u2028\u2029]/);
+      const sf = ts.createSourceFile("t.ts", src, ts.ScriptTarget.ES2022, true);
+      let calls = 0;
+      const visit = (n: ts.Node): void => {
+        if (ts.isCallExpression(n) && n.expression.getText(sf).includes("exit")) calls++;
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+      expect(calls).toBe(0);
+    }
+  });
 });

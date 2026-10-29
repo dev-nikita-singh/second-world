@@ -30,15 +30,23 @@ const CLASS_RANK: Record<Classification, number> = {
   hypothesis: 0,
 };
 
+/** Report files are not schema-validated: an unknown severity/classification counts as the weakest. */
+function sevOf(f: Finding): Severity {
+  return SEV_ORDER.includes(f.severity) ? f.severity : "info";
+}
+function classOf(f: Finding): Classification {
+  return f.classification in CLASS_RANK ? f.classification : "hypothesis";
+}
+
 function rank(f: Finding): number {
-  return (5 - SEV_ORDER.indexOf(f.severity)) * 10 + CLASS_RANK[f.classification];
+  return (5 - SEV_ORDER.indexOf(sevOf(f))) * 10 + CLASS_RANK[classOf(f)];
 }
 
 export function deterministicSummary(
   results: readonly EngineResult[],
   opts: { top?: number } = {},
 ): DeterministicSummary {
-  const all = results.flatMap((r) => r.findings);
+  const all = results.flatMap((r) => r.findings).map((f) => ({ ...f, severity: sevOf(f), classification: classOf(f) }));
   const bySeverity = { critical: 0, high: 0, medium: 0, low: 0, info: 0 } as Record<Severity, number>;
   const byClassification: Partial<Record<Classification, number>> = {};
   for (const f of all) {

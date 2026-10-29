@@ -40,7 +40,13 @@ export interface ExportMeta {
   shapes?: Record<number, { required: string[]; types: Record<string, string> }>;
 }
 
-const J = (v: unknown): string => JSON.stringify(v);
+/**
+ * JSON is not quite JS source: U+2028/U+2029 survive JSON.stringify but are line terminators in JS,
+ * so inside a `//` comment they would end it and turn the rest of an untrusted value (e.g. an OpenAPI
+ * operation name) into code. Escape them everywhere a value is embedded in generated source.
+ */
+const jsSafe = (json: string): string => json.replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+const J = (v: unknown): string => jsSafe(JSON.stringify(v));
 
 export function envNameFor(role: string): string {
   return `SW_AUTH_${role.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
@@ -259,11 +265,7 @@ export function suggestedTest(s: Scenario, meta: ExportMeta): SuggestedTest {
     assertions: s.assertions,
     expectedClassification: s.expectedClassification,
   };
-  const config = `// sw.config.ts → agent.regression (re-run on every \`sw agent\`)\nagent: {\n  regression: [\n${JSON.stringify(
-    pinned,
-    null,
-    2,
-  )
+  const config = `// sw.config.ts → agent.regression (re-run on every \`sw agent\`)\nagent: {\n  regression: [\n${jsSafe(JSON.stringify(pinned, null, 2))
     .split("\n")
     .map((l) => `    ${l}`)
     .join("\n")},\n  ],\n},\n`;
