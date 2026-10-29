@@ -193,6 +193,13 @@ export function prepareRun(input: PerformanceInput, ctx: EngineContext): RunPrea
   const plan = compilePlan(input);
   checkSafety(ctx, input, plan.origins);
   const thresholdEntries: ThresholdEntry[] = parseInputThresholds(input.thresholds);
+  if (input.warmupIgnoredMs !== undefined) {
+    limitations.push({
+      code: "warmup-ignored-iterations",
+      message: `warmup (${input.warmupIgnoredMs} ms) is ignored by the iterations model: all ${input.iterations} iterations are measured.`,
+      impact: "informational",
+    });
+  }
   if (input.http.version === "2" && target.protocol !== "https:") {
     limitations.push({
       code: "h2-requires-tls",
@@ -776,7 +783,8 @@ export async function finalizePerformance(f: FinalizeArgs): Promise<EngineResult
       impact: "informational",
     });
   }
-  if (metrics.requests === 0 && stopReason !== "cancelled") {
+  const noMeasurements = metrics.requests === 0 && stopReason !== "cancelled";
+  if (noMeasurements) {
     limitations.push({
       code: "no-measurements",
       message: "No request completed inside the measured window.",
@@ -798,7 +806,8 @@ export async function finalizePerformance(f: FinalizeArgs): Promise<EngineResult
   // ---- findings
   const window = { start: startedAt, end: clock.isoNow() };
   const confidence = health.health.saturated ? 0.6 : 0.9;
-  const findings: Finding[] = thresholdFindings(thresholdResults, {
+  // Nothing measured: thresholds have no data, which is an invalid run, not a breach.
+  const findings: Finding[] = thresholdFindings(noMeasurements ? [] : thresholdResults, {
     newId: () => ctx.newId(),
     isoNow: () => clock.isoNow(),
     runId,
@@ -970,7 +979,7 @@ export async function finalizePerformance(f: FinalizeArgs): Promise<EngineResult
   let status: EngineResult["status"];
   if (stopReason === "safety-abort") status = "error";
   else if (stopReason === "cancelled") status = "cancelled";
-  else if (targetUnreachable) status = "error";
+  else if (targetUnreachable || noMeasurements) status = "error";
   else if (thresholdResults.some((r) => !r.passed)) status = "failed";
   else status = "passed";
 

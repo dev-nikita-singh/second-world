@@ -119,6 +119,8 @@ export const PerformanceInputSchema = z
     duration: Duration.optional(),
     rampUp: Duration.default(0),
     warmup: Duration.default(0),
+    /** Internal: warm-up requested for the iterations model, which does not use it (set by the transform). */
+    warmupIgnoredMs: z.number().nonnegative().optional(),
     gracefulStop: Duration.default(5_000),
     timeout: Duration.default(10_000),
     connectTimeout: Duration.default(5_000),
@@ -200,6 +202,10 @@ export const PerformanceInputSchema = z
     }
     const vus = v.vus ?? (model === "open" ? undefined : 10);
     const duration = v.duration ?? (model === "iterations" ? 600_000 : 10_000);
+    // Iterations are the workload: a time-based warm-up would consume them unmeasured.
+    if (model === "iterations" && v.warmup > 0) {
+      return { ...v, model, vus, scenarios, duration, warmup: 0, warmupIgnoredMs: v.warmup };
+    }
     return { ...v, model, vus, scenarios, duration };
   });
 
