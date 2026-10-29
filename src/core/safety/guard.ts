@@ -176,6 +176,12 @@ export function classifyHost(hostRaw: string): TargetClass {
     if (h === "::1" || h === "::") return "loopback";
     const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(h);
     if (mapped) return classifyV4(ipv4ToInt(mapped[1] as string) as number);
+    // Hex form of an IPv4-mapped address: WHATWG URL serialises [::ffff:127.0.0.1] as [::ffff:7f00:1].
+    const mappedHex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(h);
+    if (mappedHex) {
+      const n = Number.parseInt(mappedHex[1] as string, 16) * 0x10000 + Number.parseInt(mappedHex[2] as string, 16);
+      return classifyV4(n >>> 0);
+    }
     const first = Number.parseInt(h.split(":")[0] || "0", 16);
     if ((first & 0xfe00) === 0xfc00) return "private"; // fc00::/7
     if ((first & 0xffc0) === 0xfe80) return "private"; // fe80::/10

@@ -277,3 +277,13 @@ describe("createEngineContext", () => {
     expect(ctx.config).toEqual({ a: 1 });
   });
 });
+
+describe("IPv4-mapped IPv6 in hex form (sw-coverage wave 5)", () => {
+  it("classifies [::ffff:7f00:1] like 127.0.0.1 and ::ffff:a00:1 like 10.0.0.1", async () => {
+    const { classifyHost: c } = await import("../../../src/core/safety/guard.js");
+    expect(c(new URL("http://[::ffff:127.0.0.1]/").hostname)).toBe("loopback");
+    expect(c("::ffff:a00:1")).toBe("private");
+    expect(c("::ffff:a9fe:a9fe")).toBe("private"); // 169.254.169.254
+    expect(c("::ffff:808:808")).toBe("public");
+  });
+});
