@@ -98,6 +98,19 @@ describe("world.history.compare", () => {
     await w.close();
   });
 
+  it("a single result is saved under its own runId (one id per run; sw-qa wave 5)", async () => {
+    const { w } = await world();
+    const r = makeResult({ runId: "01TESTRUNIDSAMEASREPORT0001" });
+    expect((await w.history.save([r]))?.id).toBe("01TESTRUNIDSAMEASREPORT0001");
+    // Same runId again: not overwritten, a fresh id instead.
+    const again = await w.history.save([r]);
+    expect(again?.id).toBeTruthy();
+    expect(again?.id).not.toBe("01TESTRUNIDSAMEASREPORT0001");
+    const store = (await w.history.store()) as unknown as { get(id: string): Promise<{ id: string } | null> };
+    expect((await store.get("01TESTRUNIDSAMEASREPORT0001"))?.id).toBe("01TESTRUNIDSAMEASREPORT0001");
+    await w.close();
+  });
+
   it("history.save accepts a combined report", async () => {
     const { w } = await world();
     const saved = await w.history.save(w.report.combine([makeResult()]) as never, { label: "rep" });

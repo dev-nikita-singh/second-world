@@ -644,7 +644,16 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
       const results = Array.isArray(input) ? input : [...(input as { results: readonly EngineResult[] }).results];
       if (!cfg.config.history.enabled || results.length === 0) return null;
       const store = await history.store();
-      const e = await store.append({ results, ...(so.label ? { label: so.label } : {}), ...(so.tags ? { tags: so.tags } : {}) });
+      // One id per run: a single result is stored under its own runId (the id printed in the header and
+      // written to report.json), unless that id is already taken.
+      const only = results.length === 1 ? (results[0] as EngineResult).runId : undefined;
+      const reuse = only !== undefined && !(await (store as unknown as { get(id: string): Promise<unknown> }).get(only).catch(() => null));
+      const e = await store.append({
+        results,
+        ...(reuse ? { id: only } : {}),
+        ...(so.label ? { label: so.label } : {}),
+        ...(so.tags ? { tags: so.tags } : {}),
+      });
       events.emit("history.saved", { id: e.id });
       return { id: e.id };
     },

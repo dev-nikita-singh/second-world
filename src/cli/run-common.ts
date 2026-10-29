@@ -3,7 +3,9 @@
  * Ctrl+C handling, report rendering/writing, history auto-save and the exit code.
  * See docs/09-cli-and-api.md §1 and docs/02-architecture.md §4.4.
  */
-import { resolve } from "node:path";
+import { accessSync, constants, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { ConfigError } from "../core/errors.js";
 import type { EngineResult } from "../core/evidence/schemas.js";
 import { createWorld, type World } from "../core/world.js";
 import { loadOptionsFromGlobals, parseSeed } from "./commands/config.js";
@@ -27,8 +29,58 @@ export async function worldFromGlobals(g: GlobalOptions): Promise<World> {
   });
 }
 
-/** First signal → graceful world.cancel(); second → exit 130. Returns the uninstaller. */
-export function installSignals(world: World, g: GlobalOptions): () => void {
+/** Report formats written as files (everything except the terminal table). */
+function fileFormatsOf(world: World): string[] {
+  return world.config.config.report.formats.filter((f) => f !== "tty");
+}
+
+/**
+ * Fails fast (exit 2) when report files cannot be written, so a long run is not wasted.
+ * No side effect: the nearest existing ancestor of report.outDir must be a writable directory.
+ */
+export function assertReportDirWritable(world: World): void {
+  if (fileFormatsOf(world).length === 0) return;
+  const outDir = resolve(world.config.cwd, world.config.config.report.outDir);
+  let p = outDir;
+  for (;;) {
+    let st: ReturnType<typeof statSync> | undefined;
+    try {
+      st = statSync(p);
+    } catch {
+      st = undefined;
+    }
+    if (st) {
+      const why = !st.isDirectory() ? `${p} is not a directory` : canWrite(p) ? undefined : `${p} is not writable`;
+      if (why)
+        throw new ConfigError("SW_CONFIG_OUTDIR", `Cannot write reports to ${outDir}: ${why}`, {
+          hint: "Pass a writable -o/--out-dir (or report.outDir in sw.config)",
+        });
+      return;
+    }
+    const up = dirname(p);
+    if (up === p)
+      throw new ConfigError("SW_CONFIG_OUTDIR", `Cannot write reports to ${outDir}: no such drive or root`, {
+        hint: "Pass a writable -o/--out-dir (or report.outDir in sw.config)",
+      });
+    p = up;
+  }
+}
+
+function canWrite(p: string): boolean {
+  try {
+    accessSync(p, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Run start for engine commands: checks the report directory (exit 2 before any load is sent), then
+ * installs Ctrl+C handling. First signal → graceful world.cancel(); second → exit 130. Returns the uninstaller.
+ */
+export function installSignals(world: World, g: GlobalOptions, o: { reports?: boolean } = {}): () => void {
+  if (o.reports !== false) assertReportDirWritable(world);
   const s = style(colorEnabled(g));
   let count = 0;
   const handler = (): void => {
@@ -103,10 +155,17 @@ export async function finishRun(world: World, result: EngineResult, g: GlobalOpt
     }
   }
   const fileFormats = formats.filter((f) => f !== "tty");
+  let reportError: string | undefined;
   if (fileFormats.length > 0) {
     const outDir = resolve(world.config.cwd, cfg.report.outDir);
-    const written = await reporting.writeReports(result, { formats: fileFormats, outDir, failOn, meta });
-    if (!g.quiet) for (const f of written.files) err(s.dim(`report: ${f.path}`));
+    try {
+      const written = await reporting.writeReports(result, { formats: fileFormats, outDir, failOn, meta });
+      if (!g.quiet) for (const f of written.files) err(s.dim(`report: ${f.path}`));
+    } catch (e) {
+      // The run itself is valid: report the write failure, still save history, exit 2.
+      reportError = `Cannot write reports to ${outDir}: ${(e as Error).message}`;
+      err(`${s.fail} ${reportError}`);
+    }
   }
   if (o.history !== false && result.status !== "cancelled") {
     try {
@@ -116,5 +175,5 @@ export async function finishRun(world: World, result: EngineResult, g: GlobalOpt
       err(`${s.warn} history not saved: ${(e as Error).message}`);
     }
   }
-  process.exitCode = reporting.computeExitCode([result], failOn);
+  process.exitCode = reportError !== undefined ? 2 : reporting.computeExitCode([result], failOn);
 }

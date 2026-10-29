@@ -129,7 +129,7 @@ function printModel(d: ModelDataLike, g: GlobalOptions): void {
 export async function modelBuild(path: string | undefined, o: Obj, g: GlobalOptions): Promise<void> {
   const s = style(colorEnabled(g));
   const world = await worldFromGlobals(g);
-  const removeSignals = installSignals(world, g);
+  const removeSignals = installSignals(world, g, { reports: false });
   try {
     const m = await import("../../engines/model/index.js");
     const input = modelInputFromFlags(path, o, world.config.invocationCwd ?? world.config.cwd);
