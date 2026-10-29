@@ -32,6 +32,8 @@ git clone <this repo> second-world && cd second-world
 npm install
 ```
 
+Installing it as a package (`npm pack` → `npm i -D ./second-world-*.tgz`) gives `npx sw`. `typescript` is an optional peer dependency: install `typescript@6` (5.x also works) next to it to use `sw inspect` and the static part of `sw model build`. Without it, those commands exit 4 with an install hint, and everything else works.
+
 SECOND WORLD is not published yet, so run the CLI from source with a `sw` shortcut:
 
 ```bash
