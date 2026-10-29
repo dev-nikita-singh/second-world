@@ -100,7 +100,7 @@ export async function executeEvolution(
   const limitations: Limitation[] = [];
   const warnings: string[] = [];
   const repo = await repoRoot(path.resolve(input.repo ?? process.cwd()));
-  const before = await workingTreeChecksum(repo);
+  const before = await workingTreeChecksum(repo, input.ignorePaths);
   const baseCommit = await resolveCommit(repo, input.baseline);
   const isCancelled = () => ctx.signal.aborted || ctx.safety.killSwitch.aborted;
 
@@ -519,7 +519,7 @@ export async function executeEvolution(
     if (leaked) warnings.push(`removed ${leaked} leftover sandbox container(s)`);
     if (!input.keepWorktrees) worktreesCleaned = await mgr.cleanupAll();
     else warnings.push(`worktrees kept: ${mgr.active.map((w) => w.dir).join(", ")}`);
-    after = await workingTreeChecksum(repo).catch(() => "unavailable");
+    after = await workingTreeChecksum(repo, input.ignorePaths).catch(() => "unavailable");
   }
   if (isCancelled()) cancelled = true;
 
@@ -610,7 +610,7 @@ export async function executeEvolution(
     limitations.push({
       code: "EVOLUTION-WORKING-TREE-CHANGED",
       message:
-        "The repository working tree checksum changed during the run (another process may have modified it)",
+        "The repository working tree changed during the run (another process modified, staged or added files outside SECOND WORLD's own state); the candidates were benchmarked from commits, but the result cannot be trusted. Re-run with an untouched working tree",
       impact: "invalidates",
     });
   }
@@ -708,8 +708,9 @@ export async function executeEvolution(
 
   let status: EngineResult["status"];
   if (cancelled) status = "cancelled";
-  else if (baselineError || !unchanged) status = "error";
-  else if (paretoFront.length === 0) status = "failed";
+  else if (baselineError) status = "error";
+  // A working tree changed under us is a user-side problem (exit 1, invalidating limitation), not a bug (70).
+  else if (!unchanged || paretoFront.length === 0) status = "failed";
   else status = "passed";
   if (baselineError)
     limitations.push({ code: "EVOLUTION-BASELINE-FAILED", message: baselineError, impact: "invalidates" });

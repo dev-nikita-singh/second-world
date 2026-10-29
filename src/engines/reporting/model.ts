@@ -110,8 +110,11 @@ export function isFailingFinding(f: Finding, failOn: FailOn): boolean {
   return sevRank(f.severity) <= sevRank(failOn);
 }
 
-/** Limitation codes meaning the run failed because of the target, not the engine (→ exit 5). */
-const TARGET_LIMITATIONS = new Set(["target-unreachable", "no-measurements"]);
+/**
+ * Limitation codes meaning the run failed because of the target, not the engine (→ exit 5).
+ * EVOLUTION-BASELINE-FAILED: the user's baseline commit could not be prepared (install/build) or benchmarked.
+ */
+const TARGET_LIMITATIONS = new Set(["target-unreachable", "no-measurements", "EVOLUTION-BASELINE-FAILED"]);
 
 /** Compute verdict + exit code (§A.6). Precedence: 130 cancelled > 70 error (5 when caused by the target) > 1 failures > 0. */
 export function computeVerdict(results: readonly EngineResult[], failOn: FailOn = DEFAULT_FAIL_ON): Verdict {

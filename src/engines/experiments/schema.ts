@@ -295,6 +295,11 @@ export const EvolutionSchema = z
     /** Temp root for worktrees (default os.tmpdir()). Keep short on Windows. */
     tmpDir: z.string().optional(),
     keepWorktrees: z.boolean().default(false),
+    /**
+     * Paths (absolute, or relative to `repo`) of SECOND WORLD's own state left out of the working-tree
+     * checksum: history dir, report outDir, caches, audit log. Every `.second-world/` dir is always excluded.
+     */
+    ignorePaths: z.array(z.string().min(1)).default([]),
   })
   .strict();
 

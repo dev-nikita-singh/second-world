@@ -3,7 +3,7 @@
  * §4 (rules, levels, suppression), §5 (limitations always reported).
  * discover → hash → cache lookup → analyze misses (SourceAnalyzer) → graph → analyses → rules → findings.
  */
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { createEngineContext } from "../../core/context.js";
 import { ConfigError } from "../../core/errors.js";
@@ -135,6 +135,17 @@ export async function runArchitecture(
   });
 
   const root = path.resolve(input.project);
+  // A wrong path is a usage error (exit 2), not a run that "passes" with ARCH_NO_FILES.
+  const rootStat = await stat(root).catch(() => undefined);
+  if (!rootStat?.isDirectory()) {
+    throw new ConfigError(
+      "SW_CONFIG_PROJECT",
+      rootStat ? `Project path ${root} is not a directory` : `Project path ${root} does not exist`,
+      {
+        hint: "Pass the project's root directory: `sw inspect <dir>` or architecture.project / project.root in sw.config",
+      },
+    );
+  }
   const disc = await discover({
     root,
     ...(input.tsconfig ? { tsconfig: input.tsconfig } : {}),

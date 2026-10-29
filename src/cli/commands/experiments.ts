@@ -31,6 +31,24 @@ export function applyWhatIfFlags(def: Obj, o: Obj, seed?: number): Obj {
   return out;
 }
 
+/**
+ * Absolute paths where SECOND WORLD itself writes during a run, for evolution's working-tree checksum:
+ * `<config dir>/.second-world`, report.outDir, history.dir, the architecture/model caches and the
+ * config's evolution.ignorePaths (all relative to the config dir).
+ * Paths outside the repository are ignored by the engine. docs/03-engines/experiments.md §B.3.
+ */
+export function ownStatePaths(cfg: { cwd: string; config: { report: { outDir: string }; history: { dir: string } } & Obj }): string[] {
+  const paths = [resolve(cfg.cwd, ".second-world"), resolve(cfg.cwd, cfg.config.report.outDir), resolve(cfg.cwd, cfg.config.history.dir)];
+  for (const sec of ["architecture", "model"]) {
+    const c = (cfg.config[sec] as Obj | undefined)?.cacheDir;
+    if (typeof c === "string") paths.push(resolve(cfg.cwd, c));
+  }
+  // The call input replaces (not merges) config arrays: keep evolution.ignorePaths from the config too.
+  const extra = (cfg.config.evolution as Obj | undefined)?.ignorePaths;
+  if (Array.isArray(extra)) for (const p of extra) if (typeof p === "string") paths.push(resolve(cfg.cwd, p));
+  return [...new Set(paths)];
+}
+
 /** Maps `sw evolve` flags to a loose Evolution input. `split` = sw-experiments' splitCommand. */
 /** `cwd`: directory the command was run from (flag paths are relative to it). */
 export function evolveInputFromFlags(o: Obj, split: (cmd: string) => string[], cwd = process.cwd()): Obj {
@@ -105,6 +123,8 @@ export async function evolveCommand(o: Obj, g: GlobalOptions): Promise<void> {
   try {
     const exp = await import("../../engines/experiments/index.js");
     const input = evolveInputFromFlags(o, exp.splitCommand, world.config.invocationCwd ?? world.config.cwd);
+    // SECOND WORLD's own files (audit log, reports, history, caches) are not a change of the user's tree.
+    input.ignorePaths = [...ownStatePaths(world.config), ...((input.ignorePaths as string[] | undefined) ?? [])];
     if (g.seed !== undefined) input.design = { ...((input.design as Obj | undefined) ?? {}), seed: Number(g.seed) };
     if (g.dryRun) {
       out(JSON.stringify(world.redactor.redactObject({ dryRun: true, input: exp.parseEvolutionInput(world.buildInput("evolution", input)) }), null, 2));

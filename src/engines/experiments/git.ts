@@ -4,8 +4,10 @@
  * (without -w) and `worktree add/remove/prune` (which write to .git/worktrees, never to the working tree).
  */
 import { createHash } from "node:crypto";
+import { realpathSync, statSync } from "node:fs";
+import path from "node:path";
 import { execa } from "execa";
-import { CapabilityError, EngineError } from "../../core/errors.js";
+import { CapabilityError, ConfigError, EngineError } from "../../core/errors.js";
 
 export interface GitResult {
   stdout: string;
@@ -58,27 +60,78 @@ export async function gitOk(
   return r.stdout.trim();
 }
 
+/** The repository root containing `cwd`. A wrong `--repo` / evolution.repo is a usage error (exit 2). */
 export async function repoRoot(cwd: string): Promise<string> {
+  let isDir = false;
+  try {
+    isDir = statSync(cwd).isDirectory();
+  } catch {
+    // missing
+  }
+  // Checked first: git spawned in a missing cwd fails with ENOENT, which would read as "git is not installed".
+  if (!isDir)
+    throw new ConfigError(
+      "SW_CONFIG_EVOLUTION_REPO",
+      `Repository path ${cwd} does not exist or is not a directory`,
+      {
+        hint: "Pass --repo <dir> (or evolution.repo in sw.config) pointing at a git checkout",
+      },
+    );
   const r = await git(cwd, ["rev-parse", "--show-toplevel"]);
   if (r.exitCode !== 0)
-    throw new EngineError("SW_ENGINE_EVOLUTION_NOT_A_REPO", `${cwd} is not inside a git repository`);
+    throw new ConfigError("SW_CONFIG_EVOLUTION_REPO", `${cwd} is not inside a git repository`, {
+      hint: "Pass --repo <dir> (or evolution.repo in sw.config) pointing at a git checkout",
+    });
   return r.stdout.trim();
 }
 
 export async function resolveCommit(repo: string, ref: string): Promise<string> {
   const r = await git(repo, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
   if (r.exitCode !== 0 || !r.stdout.trim())
-    throw new EngineError("SW_ENGINE_EVOLUTION_REF", `cannot resolve "${ref}" to a commit`);
+    throw new ConfigError("SW_CONFIG_EVOLUTION_REF", `cannot resolve "${ref}" to a commit`, {
+      hint: "Use a branch, tag or commit that exists in the repository (git rev-parse --verify <ref>)",
+    });
   return r.stdout.trim();
+}
+
+/** SECOND WORLD's own state directory name; excluded from the working-tree checksum at any depth. */
+export const SW_STATE_DIR = ".second-world";
+
+/**
+ * Git pathspecs (`-- . :(exclude)…`) that leave SECOND WORLD's own files out of the working-tree checksum:
+ * every `.second-world/` directory plus each of `ignore` (absolute, or relative to `repo`) that lies inside
+ * the repository. Paths outside the repo, and the repo root itself, are skipped.
+ */
+export function stateExcludePathspecs(repo: string, ignore: readonly string[] = []): string[] {
+  const real = (p: string) => {
+    try {
+      return realpathSync.native(p);
+    } catch {
+      return p;
+    }
+  };
+  const outside = (rel: string) => rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel);
+  const root = real(path.resolve(repo));
+  const specs = new Set<string>([`:(exclude,glob)**/${SW_STATE_DIR}/**`]);
+  for (const p of ignore) {
+    const abs = path.resolve(root, p);
+    let rel = path.relative(root, real(abs));
+    if (outside(rel)) rel = path.relative(root, abs);
+    if (!rel || outside(rel)) continue;
+    specs.add(`:(exclude,literal)${rel.split(path.sep).join("/")}`);
+  }
+  return ["--", ".", ...specs];
 }
 
 /**
  * Checksum of the user's working tree state: HEAD, current branch, `status --porcelain` (incl. untracked),
  * the full `diff HEAD`, and the content hashes of untracked files. Any change to the working tree,
- * index or checked-out branch changes it.
+ * index or checked-out branch changes it — except SECOND WORLD's own state (see stateExcludePathspecs):
+ * the audit log, reports, history and caches it writes itself while running must not count as a change.
  */
-export async function workingTreeChecksum(repo: string): Promise<string> {
+export async function workingTreeChecksum(repo: string, ignore: readonly string[] = []): Promise<string> {
   const h = createHash("sha256");
+  const specs = stateExcludePathspecs(repo, ignore);
   const head = await git(repo, ["rev-parse", "--verify", "--quiet", "HEAD"]);
   h.update(`head:${head.stdout.trim()}\n`);
   const branch = await git(repo, ["symbolic-ref", "--quiet", "HEAD"]);
@@ -88,13 +141,14 @@ export async function workingTreeChecksum(repo: string): Promise<string> {
     "--porcelain=v1",
     "--untracked-files=all",
     "--ignore-submodules=none",
+    ...specs,
   ]);
   h.update(`status:${status}\n`);
-  const diff = await git(repo, ["diff", "HEAD", "--binary", "--no-ext-diff"]);
+  const diff = await git(repo, ["diff", "HEAD", "--binary", "--no-ext-diff", ...specs]);
   h.update(`diff:${diff.stdout}\n`);
-  const staged = await git(repo, ["diff", "--cached", "--binary", "--no-ext-diff"]);
+  const staged = await git(repo, ["diff", "--cached", "--binary", "--no-ext-diff", ...specs]);
   h.update(`staged:${staged.stdout}\n`);
-  const untracked = (await git(repo, ["ls-files", "--others", "--exclude-standard", "-z"])).stdout
+  const untracked = (await git(repo, ["ls-files", "--others", "--exclude-standard", "-z", ...specs])).stdout
     .split("\0")
     .filter(Boolean);
   if (untracked.length > 0) {
