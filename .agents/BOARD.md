@@ -173,3 +173,10 @@ LF line endings enforced by .gitattributes.
 | `sw-examples` | `examples/**`, `tests/integration/examples/**`, `tests/helpers/examples.ts` | shop-fastify: add GET /orders + concurrency/invariants config so every planted defect is detectable from the example configs; expected-findings kept exact |
 | `sw-reliability` | `src/engines/reliability/**`, `src/adapters/faults/**`, their tests | Paginated invariant collections; watchdog clears its ledger entry; review the slow-body/black-hole-only duplicate production |
 | `sw-fixes` | listed per item in its brief | Small known defects: reproduction.artifacts path rename, gzipped .pb detection, exact live perf.tick percentiles |
+FIXED by main (sw-qa reports): 3614750 doctor --quick false "not found" warnings · a658f11 perf iterations ignores warmup + zero-measurement run = error, no breach findings · 50986b7 typescript optional peer (packaged `sw inspect` crashed with __filename; tarball 10.2 MB → 2.4 MB). Open: LICENSE file needs owner's copyright name (asked user).
+| sw-fixes | DONE | artifact paths relocated, gzip OTLP (+bomb guard), exact merged tick percentiles; 1173 tests |
+| sw-coverage | running | wave 5: measure coverage, test top risky gaps (safety first), report bugs as it.fails |
+BUG (sw-examples → main → sw-reliability): reliability/outbound-no-timeout false positive when client timeout / fault shorter than app's timeout budget (shop-fastify 2s×4). Assigned to sw-reliability: must be inconclusive, not a defect.
+FIXED by main (wave 5, sw-qa/sw-coverage reports): fed5901 evolve app-never-healthy (hint, skip, exit 5, runs-needed floor) · e31ec60 history id = report runId; unwritable -o fails fast (exit 2) · de680b9 redact camelCase keys · b8d8242 hex IPv4-mapped IPv6 · b038b02 down target: bugs/agent no PASS, perf/stress/bugs/agent exit 5.
+| sw-reliability | DONE (49dc1ca) | pagination, ledger lock + watchdog clear, reset after-response, timeout-window rule |
+| sw-fixes2 | running | evolve working-tree checksum ignores .second-world; inspect missing path exit 2; sweep user-caused exit 70s |
