@@ -84,4 +84,12 @@ describe("probeEnvironment", () => {
     const old = doctorChecks({ ...r, runtime: { ...r.runtime, version: "20.1.0" } });
     expect(old.find((c) => c.id === "runtime")).toMatchObject({ status: "fail" });
   });
+  it("quick mode reports tools as not probed, not as missing (sw-qa wave 5)", async () => {
+    const quick = doctorChecks(await probeEnvironment({ env: {} }));
+    for (const t of ["git", "docker", "toxiproxy", "k6"]) {
+      expect(quick.find((c) => c.id === `tool.${t}`)).toMatchObject({ status: "info", label: expect.stringMatching(/not probed/) });
+    }
+    const full = doctorChecks(await probeEnvironment({ full: true, env: {}, runTool: async () => null }));
+    expect(full.find((c) => c.id === "tool.git")).toMatchObject({ status: "warn", label: "git not found" });
+  });
 });

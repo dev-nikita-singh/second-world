@@ -344,9 +344,12 @@ export function doctorChecks(r: EnvironmentReport): DoctorCheck[] {
   }
   if (r.container.inside) out.push({ id: "container", status: "info", label: `inside container (${r.container.runtime ?? "unknown"})` });
   if (r.ci.inside) out.push({ id: "ci", status: "info", label: `CI: ${r.ci.provider ?? "detected"}` });
+  // Quick mode skips `<tool> --version`: a missing version then means "not probed", not "not found".
+  const probed = !(r.capabilities.git?.reason ?? "").startsWith("not probed");
   for (const t of ["git", "docker", "toxiproxy", "k6"] as const) {
     const v = r.tools[t];
     if (v) out.push({ id: `tool.${t}`, status: "ok", label: `${t} ${v}` });
+    else if (!probed) out.push({ id: `tool.${t}`, status: "info", label: `${t} not probed (run \`sw doctor\`)` });
     else {
       const cap = t === "git" || t === "docker" ? r.capabilities[t] : undefined;
       out.push({
