@@ -146,3 +146,22 @@ describe("logger", () => {
     expect(() => log.error("x")).not.toThrow();
   });
 });
+
+describe("camelCase sensitive keys (sw-coverage wave 5)", () => {
+  it("accessToken / refreshToken / idToken / userPassword / sessionId are redacted; look-alikes are not", () => {
+    const r = createRedactor({});
+    const out = r.redactObject({
+      accessToken: "8f14e45fceea167a5a36dedd4bea2543",
+      refreshToken: "rt-1234",
+      idToken: "x",
+      userPassword: "letmein1",
+      sessionId: "s1",
+      tokenCount: "5",
+      maxTokens: "100",
+      author: "bob",
+      authorId: "a1",
+    }) as Record<string, string>;
+    for (const k of ["accessToken", "refreshToken", "idToken", "userPassword", "sessionId"]) expect(out[k], k).toMatch(/^«redacted:/);
+    expect(out).toMatchObject({ tokenCount: "5", maxTokens: "100", author: "bob", authorId: "a1" });
+  });
+});

@@ -22,6 +22,10 @@ export const DEFAULT_REDACT_HEADERS = [
 
 /** Object keys whose (string) values are always redacted. */
 const SENSITIVE_KEY = /^(?:.*[_-])?(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|client[_-]?secret|authorization|auth|credentials?|cookie|session[_-]?id)$/i;
+/** camelCase → snake for key matching: accessToken → access_Token, so the keyword is its own word. */
+function isSensitiveKey(key: string): boolean {
+  return SENSITIVE_KEY.test(key.replace(/([a-z0-9])([A-Z])/g, "$1_$2"));
+}
 /** Key-like names used for the entropy rule in free text. */
 const KEYLIKE_ASSIGN =
   /\b([A-Za-z0-9_.-]*(?:key|token|secret|password|passwd|pwd|auth|credential|signature|sig)[A-Za-z0-9_.-]*)(["']?\s*[:=]\s*["']?)([^\s"',;&]{20,})/gi;
@@ -163,7 +167,7 @@ export function createRedactor(opts: RedactorOptions = {}): Redactor {
   }
 
   function redactValueForKey(key: string, v: unknown): unknown {
-    if (typeof v === "string" && (SENSITIVE_KEY.test(key) || headerSet.has(key.toLowerCase()))) {
+    if (typeof v === "string" && (isSensitiveKey(key) || headerSet.has(key.toLowerCase()))) {
       return v.startsWith("«redacted:") ? v : redactionMarker(v);
     }
     return undefined;
