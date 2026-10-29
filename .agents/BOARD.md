@@ -184,3 +184,5 @@ FIXED by main (wave 5, sw-qa/sw-coverage reports): fed5901 evolve app-never-heal
 | sw-coverage | DONE (d0bc131) | 206 tests; unit lines 81.4→84.1%, branches 67.4→70.9%; 4 bugs found + 2 "non-bugs" fixed as bugs (5ef45e6 redirect custom credential headers, 9d809d9 hex tokens after sensitive names) |
 | sw-qa | DONE (c60ac18) | 32 e2e/system tests; 12 bugs (9 behavioural, all fixed) |
 FIXED by main: 5649666 agent export U+2028/U+2029 code injection + analyze unknown severity · c1a566a docs/UX batch.
+| sw-fixes2 | DONE (54069e9) | evolve own-state checksum; inspect missing path exit 2; user-side 70s → 2/5 |
+FINAL wave 5 (main): full suite 185 files, 1649 passed / 1 skipped / 0 failed; tsc clean. Extra fixes: db5ef7d world evolution ignorePaths · a7fdf83 safety stop → exit 3 · ad860c4 test fixes (db5ef7d expectation; two load-sensitive assertions). Branch wave-5 not merged to master (awaiting user). Open: LICENSE copyright name (user).
