@@ -337,8 +337,8 @@ export function buildProgram(): Command {
   model
     .command("diff")
     .description("compare two model snapshots (informational, exit 0)")
-    .argument("<a>", "snapshot path or 'latest'")
-    .argument("<b>", "snapshot path or 'latest'")
+    .argument("<before>", "snapshot path or 'latest'")
+    .argument("<after>", "snapshot path or 'latest'")
     .option("--json", "JSON output")
     .action(async (a: string, b: string, o: Record<string, unknown>, cmd: Command) => (await mod()).modelDiff(a, b, o, cmd.optsWithGlobals<GlobalOptions>()));
 

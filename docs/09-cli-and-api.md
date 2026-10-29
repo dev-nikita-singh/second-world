@@ -127,7 +127,7 @@ test("products endpoint meets SLO", async () => {
     target: "http://127.0.0.1:3000", model: "iterations", iterations: 500, vus: 20,
     scenarios: [{ name: "list", steps: [{ method: "GET", path: "/api/products" }] }],
   });
-  expect(r.data.global.latency.p95).toBeLessThan(200);   // ms
+  expect(r.data.latency.corrected.p95).toBeLessThan(200); // ms (coordinated-omission corrected)
   await world.close();
 }, 60_000);
 ```

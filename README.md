@@ -146,7 +146,7 @@ finding carries its trust-ladder classification: `hypothesis` < `suspected-risk`
   `safety.allowPublic: true` and confirmation. DNS is pinned at pre-flight, and rebinding aborts the run.
 - Budgets: `safety.maxRps`, `maxConcurrency`, `maxRequests`, `maxDuration`. A requested rate above `maxRps` is
   refused (exit 3), and closed/VU load is throttled to it.
-- Mutating requests (Bug Hunter, Agent) need `--allow-mutations`/`safety.allowMutations` **and** `--yes`.
+- Mutating requests (Bug Hunter, Agent) are off unless you opt in once: `--allow-mutations` / `bugs.allowMutations` / `safety.allowMutations`, `environment: isolated|staging`, or an approval (`--yes`, or confirming interactively). Every opt-in is recorded in the audit log.
   Fault injection needs `--approve-disruptive`. Approvals are written to `.second-world/audit.log`.
 - Faults are always reverted (cleanup stack, TTL, ledger). `sw reliability cleanup` reverts leftovers.
 - Secrets: write `{ env: "NAME" }` / `{ file: "path" }` in configs. Resolved values are redacted from logs,

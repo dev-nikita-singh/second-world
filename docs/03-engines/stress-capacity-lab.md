@@ -17,6 +17,8 @@ Stages run back to back and share connections unless `isolateStages: true`. An o
 
 ## 2. Stop conditions (safety + efficiency)
 
+**Exit code of a breakpoint search:** finding the breakpoint means a threshold was breached on purpose, and a `threshold-breach` finding always fails the run (exit 1, whatever `--fail-on` says; see docs/09 §1). The engine status is still `passed` when the search completed. In CI, gate on the reported capacity (`stress.capacity` in history / `report.json`) rather than on the exit code, or use `--fail-on never`.
+
 The breakpoint search stops early when any of these trip: a threshold has been breached for `k` consecutive windows, error rate > `maxErrorRate`, the generator is saturated, the budget is exhausted, or the user cancels. There is no point hammering a dead server.
 
 ## 3. Capacity analysis algorithms

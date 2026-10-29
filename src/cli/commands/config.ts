@@ -1,6 +1,7 @@
 /**
  * `sw config print|validate|schema`. See docs/08-configuration.md §1.
  */
+import { resolve } from "node:path";
 import { loadConfig, type LoadConfigOptions, maskConfig, type ResolvedConfig } from "../../core/config/loader.js";
 import { configJsonSchema } from "../../core/config/schema.js";
 import { ConfigError } from "../../core/errors.js";
@@ -11,7 +12,8 @@ import { colorEnabled, err, out, style } from "../output.js";
 export function globalOverrides(g: GlobalOptions): Record<string, unknown> {
   const report: Record<string, unknown> = {};
   if (g.format) report.formats = g.format.split(",").map((s) => s.trim()).filter(Boolean);
-  if (g.out) report.outDir = g.out;
+  // Typed on the command line → relative to the shell cwd (docs/08 §1), not the config folder.
+  if (g.out) report.outDir = resolve(process.cwd(), g.out);
   if (g.failOn) report.failOn = g.failOn;
   const o: Record<string, unknown> = {};
   if (Object.keys(report).length) o.report = report;

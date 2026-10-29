@@ -242,8 +242,9 @@ above `--fail-on` (default `high`). Use `sw inspect --graph mermaid` to print th
 
 ## 7. `sw bugs`: API Bug Hunter
 
-State-changing requests need two opt-ins: `--allow-mutations` (or `safety.allowMutations`) and an
-approval (`--yes`). The concurrency test checks that the last item in stock (product 20, stock 1)
+State-changing requests are off unless you opt in once: `--allow-mutations` (or `safety.allowMutations`,
+which the example config sets), `environment: isolated|staging`, or an approval (`--yes`). The
+opt-in is written to the audit log. The concurrency test checks that the last item in stock (product 20, stock 1)
 is sold only once:
 
 ```text

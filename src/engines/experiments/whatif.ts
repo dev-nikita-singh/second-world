@@ -13,7 +13,7 @@
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { EngineError, TargetError } from "../../core/errors.js";
+import { ConfigError, EngineError, TargetError } from "../../core/errors.js";
 import type { EngineResult, Finding, Limitation } from "../../core/evidence/schemas.js";
 import { createEvidenceStore, createFinding } from "../../core/evidence/store.js";
 import { createRng } from "../../core/rng.js";
@@ -216,9 +216,10 @@ export async function executeExperiment(
   }
   for (const a of arms) {
     if (a.kind === "endpoint" && typeof a.workload.target !== "string") {
-      throw new EngineError(
-        "SW_ENGINE_WHATIF_NO_TARGET",
+      throw new ConfigError(
+        "SW_CONFIG_WHATIF_NO_TARGET",
         `Arm "${a.name}" has no start command, no target and the workload has no target`,
+        { hint: "Give the arm a start command or a target, or set workload.target" },
       );
     }
   }
@@ -325,7 +326,7 @@ export async function executeExperiment(
         rec.status = "error";
         rec.error = `skipped: the app never became healthy (${sf.count} attempts; first: ${sf.first})`;
         runs.push(rec);
-        ctx.events.emit(`${engine}.run.end`, { runId, index: slot.index, arm: a.name, rep: slot.rep, status: rec.status, metrics: rec.metrics });
+        ctx.events.emit(`${engine}.run.end`, { runId, index: slot.index, total: schedule.length, arm: a.name, rep: slot.rep, status: rec.status, metrics: rec.metrics });
         continue;
       }
       try {
@@ -418,6 +419,7 @@ export async function executeExperiment(
       ctx.events.emit(`${engine}.run.end`, {
         runId,
         index: slot.index,
+        total: schedule.length,
         arm: a.name,
         rep: slot.rep,
         status: rec.status,
@@ -688,8 +690,16 @@ export async function executeExperiment(
 
   let status: EngineResult["status"];
   if (cancelled || isCancelled()) status = "cancelled";
-  else if (runs.length > 0 && runs.every((r) => r.status !== "ok")) status = "error";
-  else if (aaDifference || verdicts.some((v) => v.hypothesis === "rejected")) status = "failed";
+  else if (runs.length > 0 && runs.every((r) => r.status !== "ok")) {
+    // Nothing was measured: every run failed (app, setup command or workload against the target).
+    // A target-side condition (exit 5), not a bug in SECOND WORLD (exit 70).
+    status = "error";
+    limitations.push({
+      code: "no-measurements",
+      message: `Every run failed; nothing was measured (${runs[0]?.arm}#${runs[0]?.rep}: ${runs[0]?.error ?? "error"})`,
+      impact: "invalidates",
+    });
+  } else if (aaDifference || verdicts.some((v) => v.hypothesis === "rejected")) status = "failed";
   else status = "passed";
 
   return {

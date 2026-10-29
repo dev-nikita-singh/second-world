@@ -23,7 +23,7 @@ The merged result is validated by **one Zod schema** (`ResolvedConfigSchema`). E
 ### Relative paths
 
 - Paths **inside the config file** (`bugs.contract`, `report.outDir`, `history.dir`, hooks, caches, …) and everything SECOND WORLD writes (`.second-world/`) are relative to the **config file's folder**, wherever you run `sw` from (a subfolder, or `--config path/to/sw.config.ts`). Without a config file, the current directory is used.
-- Paths **typed on the command line** (`--openapi`, `sw analyze <report…>`, `--context`, `--export-tests`, `--traces`, `--repo`, `--replay`, `sw whatif <file>`, `sw model show <snapshot>`) are relative to the directory you run the command from.
+- Paths **typed on the command line** (`-o/--out`, `--openapi`, `sw analyze <report…>`, `--context`, `--export-tests`, `--traces`, `--repo`, `--replay`, `sw whatif <file>`, `sw model show <snapshot>`) are relative to the directory you run the command from.
 
 ## 2. Units
 
