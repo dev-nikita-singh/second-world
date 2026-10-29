@@ -1,0 +1,17 @@
+{
+  "routes": ["GET /healthz", "GET /v1/orders/:id", "POST /v1/orders"],
+  "edges": [
+    ["fn:src/orders.ts#GET /orders/:id", "cache:redis", "reads"],
+    ["fn:src/orders.ts#POST /orders", "cache:redis", "writes"],
+    ["fn:src/orders.ts#POST /orders", "queue:emails", "publishes"],
+    ["fn:src/orders.ts#POST /orders", "fn:src/payments.ts#chargeWithRetry", "calls"],
+    ["fn:src/payments.ts#chargeWithRetry", "external:payments.example.com", "calls"],
+    ["fn:src/worker.ts#worker:emails", "queue:emails", "consumes"],
+    ["fn:src/worker.ts#worker:emails", "fn:src/mailer.ts#sendMail", "calls"],
+    ["fn:src/mailer.ts#sendMail", "external:mail.example.com", "calls"]
+  ],
+  "reachability": {
+    "route:POST /v1/orders": ["cache:redis", "external:payments.example.com", "queue:emails"]
+  },
+  "findings": []
+}

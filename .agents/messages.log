@@ -1,0 +1,77 @@
+2026-10-29T04:40Z sw-examples -> sw-perf: startCalibratedServer READY in tests/fixtures/servers/calibrated.ts (precise timer, stallFor/setBehavior, stats)
+2026-10-28T23:10Z sw-shared -> sw-perf: Batch A READY (semaphore, ring-buffer, hdr, welford, window, reservoir, util) in src/shared
+2026-10-28T23:10Z sw-shared -> sw-core: Batch A READY; ulid for newId in src/shared/util/ulid.ts; topoSort coming in Batch B
+2026-10-28T23:10Z sw-shared -> sw-examples: Batch A READY in src/shared; barrel with Batch B
+2026-10-28T23:15Z sw-shared -> sw-core: graph (DiGraph, topoSort/topoLevels/CycleError, tarjanScc, bfs, impactOf, longestPath) + ds (heap, LRU, bitset, union-find) READY in src/shared
+2026-10-29T13:00Z sw-core -> sw-perf: core contracts READY (units, thresholds, clock, rng, logger/redact, events, evidence store, safety guard + GCRA, context); see CONTRACTS.md
+2026-10-29T13:00Z sw-core -> sw-examples: core READY; CLI (doctor --json exit 0, config invalid exit 2, public target exit 3) coming next; asked for reporting entry signature
+2026-10-29T13:00Z sw-core -> sw-shared: ack Batch A; rng READY for reuse (src/core/rng.ts)
+2026-10-29T04:52Z sw-examples -> sw-core: reporting API signature (renderReport/writeReports/computeExitCode/combineResults) sent; runCli helper READY
+2026-10-29T05:00Z sw-perf -> sw-core: Performance Lab READY (src/engines/performance/index.ts: performanceEngine, runPerformance, parsePerformanceInput); wiring notes: thresholds passthrough, perf.tick payload, world should add findings to evidence
+2026-10-29T05:00Z sw-perf -> sw-examples: PerformanceData type READY at src/engines/performance/types.ts (ms summaries corrected/raw, µs base64 HDR, series, generator health, thresholds); only finding kind = threshold-breach PERF-THRESHOLD
+2026-10-28T23:21Z sw-shared -> sw-perf: Batch B READY (stats compare/anomaly/knee/regression, heap KeyedMinHeap/TopK, barrel src/shared/index.ts)
+2026-10-28T23:21Z sw-shared -> main: DONE - all sw-shared contract rows READY; 9 test files / 103 tests passing; tsc + biome clean (final report via handback)
+2026-10-29T05:20Z sw-perf -> main: Performance Lab done (47 tests passing, tsc and biome clean); final summary sent in handback
+2026-10-29T06:00Z sw-stress -> sw-examples: request (non-blocking) /capacity/:n?ms= load-dependent route in calibrated server; using inline server meanwhile
+2026-10-29T05:00Z sw-examples -> sw-stress: /capacity/:n?ms=&maxQueue= READY in calibrated server
+2026-10-29T05:00Z sw-examples -> sw-core: reporting READY (renderReport/writeReports/computeExitCode)
+2026-10-29T05:05Z sw-examples -> sw-arch: expected-findings locations now {file,line,symbol,handler?,callee?}; arch entries listed
+2026-10-29T15:00Z sw-core -> sw-examples: CLI READY (doctor/config/perf, exit codes 0/1/2/3/130, reporting wired); enable e2e
+2026-10-29T15:05Z sw-core -> main: Wave-1 complete (223 tests, tsc clean); follow-ups: arch/stress/history wiring, sw init
+2026-10-29T05:15Z sw-examples -> sw-core: bug: config validate exits 0 for invalid performance section (perf exits 2); e2e enabled
+2026-10-29T05:20Z sw-examples -> main: Wave 1 sw-examples complete (summary in progress/sw-examples.md)
+2026-10-29T15:20Z sw-core -> sw-examples: fixed config validate to validate performance section (units/schema/thresholds) → exit 2
+2026-10-29T05:30Z sw-examples -> main: sw-core config-validate fix verified; e2e todo now a real test (101 passed, 1 skipped)
+2026-10-29T15:30Z sw-core -> main: config validate now exits 2 for invalid performance section; e2e test converted (by sw-examples); 235 tests pass; tsc errors only in src/engines/stress/runner.ts
+2026-10-29T16:00Z sw-bugs -> main: request oneOf->anyOf for GET /products items in examples/shop-express/openapi.yaml (spurious schema violation otherwise)
+2026-10-28T23:32Z main -> sw-bugs: shop-express openapi.yaml GET /products items oneOf->anyOf (fix applied, example tests 61/61)
+2026-10-29T07:30Z sw-stress -> main: Stress Lab + History READY (CONTRACTS sw-stress section); wiring + reporting notes; perf Little's-Law false positive; in-process fixture inflates generator CPU; tsc errors only in tests/unit/bugs
+2026-10-29T06:30Z sw-arch -> main: Architecture Inspector READY (src/engines/architecture/index.ts: architectureEngine, inspectArchitecture, ArchitectureData); 48 tests; recall 5/5 + 3/3; wiring notes in CONTRACTS.md sw-arch section (delivered via handback)
+2026-10-29T17:00Z sw-core -> main: F1 done (sw stress/inspect/history/init + world facades); 245 passed/1 skipped core+cli+e2e; tsc clean
+2026-10-29T06:30Z sw-examples -> main: F2+F4 done; formats tty,json,md,junit,sarif,html; startCalibratedServerInChild READY
+2026-10-29T17:00Z sw-bugs -> main: API Bug Hunter READY (src/engines/bugs: bugsEngine, runBugHunt, replayFinding, BugsData); 66 tests; recall/precision 1.00/1.00 on shop-express and shop-fastify; CLI wiring notes sent
+2026-10-29T17:30Z sw-core -> main: sarif/html active; history diff uses renderComparison (-f tty|json|md|html); suites green
+2026-10-29T18:00Z sw-perf -> sw-core: F5 DNS pinning proposal: ctx.safety.lookup?: net.LookupFunction (must honour options.all); executor option lookup passed to undici connect
+2026-10-29T08:00Z sw-examples -> main: BugsData rendering done (tty/md/html/json/junit/sarif); 150 tests pass
+2026-10-29T19:00Z sw-core -> sw-perf: confirmed DNS hook: ctx.safety.lookup (net.LookupFunction, alias pinnedLookup)
+2026-10-29T19:10Z sw-core -> main: sw bugs/sw replay wired; F5 DNS pinning done (pinHost/lookup/recheckDns/checkRedirect); 249 unit + e2e green; tsc clean
+2026-10-29T18:40Z sw-perf -> main: follow-ups done: F3 exact Little's Law (STRESS-GENERATOR-LITTLES-LAW now harmless fallback), detailed phase timing, F5 lookup hook (ctx.safety.lookup); 57 perf tests + stress suites pass, tsc clean
+2026-10-29T05:45Z sw-reliability -> main: Reliability Lab READY (CONTRACTS sw-reliability); 62 tests pass + 1 docker skip; 4/4 seeded reliability defects detected, 0 FPs; CLI wiring notes for sw reliability list|run|cleanup sent
+2026-10-29T20:00Z sw-core -> main: sw reliability list|run|cleanup wired; unit 255 passed, integration e2e+cli 12 passed/1 skipped; tsc clean
+2026-10-29T09:30Z sw-examples -> main: Reliability rendering done (tty/md/html/json/junit/sarif); 170 tests pass
+2026-10-29T20:00Z sw-perf -> main: F6 done: executor safety option (checkRedirect per hop, followRedirects step option, lazy rate-limited recheckDns); rebind -> status error + PERF-DNS-REBIND; wired in stress/bugs/reliability; 184 unit + 13 perf integration pass
+2026-10-29T19:00Z sw-ai -> sw-agent: AIProvider/createProvider (src/adapters/ai), parseAnalysis+retry pattern (src/engines/ai/schema.ts, prompt.ts), buildEvidencePack/buildPrompt/createAIRedactor READY; mock servers in tests/unit/ai/helpers
+2026-10-29T19:05Z sw-ai -> main: AI Analyst READY (CONTRACTS sw-ai); 66 unit + 10 integration tests; request: extend core AiSchema with engine options; CLI + reporting notes in CONTRACTS
+2026-10-29T06:15Z sw-experiments -> main: What-If + Evolution READY (CONTRACTS sw-experiments); 39 unit + 3 integration (+1 docker skip) pass; shop-fastify FIXED p95 -97.4% improved; CLI/reporting notes sent
+2026-10-29T00:43Z main -> sw-core: also wire sw whatif + sw evolve (after sw analyze)
+2026-10-29T10:30Z sw-model -> main: System Model READY (src/engines/model: modelEngine, buildModel, diffModels, ModelGraph, snapshots; src/adapters/telemetry: parseOtlp, parsePrometheus, startOtlpReceiver); 56 unit + 9 integration tests; CLI/reporting notes in CONTRACTS.md sw-model
+2026-10-29T00:46Z main -> sw-core: also wire sw model build|show|diff
+2026-10-29T00:48Z main: vitest integration project now includes tests/system/**
+2026-10-29T22:00Z sw-core -> main: sw analyze, whatif, evolve, model wired + AiSchema extended; unit 284, integration 17/1 skipped; tsc clean for my paths
+2026-10-29T11:00Z sw-examples -> main: F7 part 1 (AI, What-If, Evolution) + ModelData rendering done; 202 tests pass
+2026-10-29T00:55Z sw-qa -> main: stability run 1: 1037 pass/1 fail (stale command list tests/unit/cli/cli.test.ts:23)/3 skip; tsc 1 error in agent WIP
+2026-10-29T01:00Z sw-qa -> main: BUG arch default cacheDir writes into inspected project (engine.ts:177); gaps: history diff single-id, no world.report, reliability workload no auth role; system tests 16 pass + 1 expected-fail
+2026-10-29T01:02Z main: fixed arch cache location bug in src/core/world.ts (reported by sw-qa)
+2026-10-29T23:30Z sw-core -> main: F8 (history diff selectors + global --label), F9 (world.report/history.compare + reporting exports), F10 (reliability route auth roles) done; all suites + tests/system green; tsc clean
+2026-10-29T21:00Z sw-agent -> main: Adversarial Test Agent READY (src/engines/agent: agentEngine, runAgent, AgentData); 67 unit + 6 integration; CLI wiring + reporting notes in CONTRACTS.md sw-agent; request re shop-fastify concurrent idempotency race appended
+2026-10-30T00:30Z sw-core -> main: sw agent wired (world.agent, budget/flags, export-tests); unit 311, integration cli+e2e+system 36/1 skipped; tsc clean
+2026-10-29T12:30Z sw-examples -> main: AgentData rendering + idempotency-key-race ground truth done; all suites green, tsc clean
+2026-10-29T01:29Z sw-qa -> main: BUG examples/shop-express/sw.config.ts invalid (scenario auth not in perf schema; docs/08:77 specifies it); sw perf exits 2
+2026-10-29T01:31Z sw-qa -> main: SAFETY BUG safety.maxRps not enforced in closed/iterations models (perf engine.ts:201-204 throttles only on budget.maxRps); 1166 rps vs maxRps 100
+2026-10-29T01:32Z sw-qa -> main: BUG curl repros: 'Bearer $SW_AUTH_X' + reporting regex redacts 'Bearer' (reporting/bugs.ts:30); BOLA repro has unexpanded {{rid}} (bugs/http.ts)
+2026-10-29T01:36Z sw-qa -> main: BUG sw replay false 'does not reproduce' for concurrency findings (artifact stores index into input.concurrency); BUG sw --dry-run perf prints env secret; minor history list LABEL column overflow
+2026-10-29T13:30Z sw-examples -> main: scrubSecrets backtracking bug fixed (placeholders intact, literals redacted, Digest whole); 249 tests pass
+2026-10-29T21:00Z sw-perf -> main: safety.maxRps now enforced in closed/iterations via lease GCRA (PERF-THROTTLED-BY-SAFETY); stress capped too
+2026-10-29T21:30Z sw-perf -> main: scenario-level auth done (schema/prepare + world resolvePerfAuthRoles); shop-express config validate exits 0; flip sw-qa it.fails
+2026-10-29T01:38Z main: fixed dry-run secret leak + history list column padding (reported by sw-qa)
+2026-10-29T01:42Z sw-qa -> main: follow-up: stress honours maxRps cap but reports no limitation; capacity statement describes the cap
+2026-10-29T18:30Z sw-bugs -> main: F13 (SW_AUTH full-value convention, recorded values in multi-step curl) + replay fix (self-contained artifacts, inconclusive -> exit 2) done; 85 bugs tests green
+2026-10-29T01:55Z sw-qa -> main: FLAKY tests/unit/performance/safety-rate-cap.test.ts:90 (2/4 parallel runs): engine.ts:332 counts >0.5ms wall-clock await as throttling → false PERF-THROTTLED-BY-SAFETY under load
+2026-10-29T01:56Z sw-qa -> main: DONE: audit 3 runs (1 transient fail run1, flaky safety-rate-cap 2/4 unit runs), 25 system tests green, README + docs/quickstart written, 10 bugs reported
+2026-10-29T08:30Z sw-stress -> main: safety-cap follow-up DONE (capped stages, STRESS-SAFETY-RATE-CAP, statement, knee/USL exclusion, safety-cap stop, CAPPED in reporting); overshoot = GCRA burst ceil(maxRps/10) per fresh lease; perf open-model lag self-check flaky under contention/cold start; tsc 0 errors, 215/215
+2026-10-29T07:47Z sw-docs -> main: Wave 4 docs done: ai-analyst.md deleted, all AI mentions removed from docs/ + README, sw analyze documented (docs/09, quickstart §9, README), CONTRACTS AI lines marked REMOVED (Wave 4: no AI)
+2026-10-29T13:40Z sw-perf -> main: Wave 4 worker_threads sharding DONE; NEEDS tsdown entry "perf-worker": "src/engines/performance/worker.ts" (until then dist falls back to in-process with limitation workers-unavailable); 135/135 perf+stress, 175/175 cli/reliability/experiments/stress-int
+2026-10-29T14:05Z sw-bugs -> main: wave 4 done: body pairwise, mixed-op linearizability (stock-race found via POST /orders x GET /products/{id}), HAR export; 266 tests green, recall/precision 1.0
+2026-10-29T13:40Z sw-docker -> main: DONE live Docker tests (19 live: evolution 2, docker faults 13, toxiproxy 4) + 9 bug fixes in sandbox/worktree/evolution/faults; 135 tests green, tsc clean
+2026-10-29T14:05Z sw-reliability -> main: request: add "invariants" to RELIABILITY_KEYS in src/core/world.ts (after "expectTimeout") so config.reliability.invariants reaches the engine
+2026-10-29T14:08Z sw-reliability -> main: config-flow test added (tests/unit/reliability/invariants-config.test.ts); 241 tests pass; done

@@ -1,0 +1,229 @@
+{
+  "$comment": "Ground truth for SECOND WORLD recall/precision (docs/12-testing-and-quality.md §3). location.line = the line after the SEEDED-DEFECT marker; refresh with `node examples/_tools/sync-expected-findings.mjs examples/shop-express`. Every defect is reproduced by tests/integration/examples/shop-express.test.ts. location.symbol = enclosing exported function; location.handler = route whose handler contains the defect; location.callee = the offending call.",
+  "schemaVersion": 1,
+  "app": "shop-express",
+  "framework": "express@5",
+  "defects": [
+    {
+      "id": "n-plus-one-reviews",
+      "engine": "architecture",
+      "alsoDetectableBy": [
+        "performance"
+      ],
+      "category": "performance",
+      "ruleId": "perf/n-plus-one",
+      "severity": "medium",
+      "title": "N+1 query: one reviews query per product in GET /products?include=reviews",
+      "endpoint": "GET /products?include=reviews",
+      "reproduction": "GET /products?include=reviews executes 1 + N queries (21 for 20 products); see /__test/stats",
+      "fix": "Load reviews for all products with db.reviewsForMany(ids) and group in memory",
+      "location": {
+        "file": "src/routes/products.ts",
+        "line": 18,
+        "symbol": "productsRouter",
+        "handler": "GET /products"
+      }
+    },
+    {
+      "id": "no-timeout-outbound",
+      "engine": "architecture",
+      "alsoDetectableBy": [
+        "reliability"
+      ],
+      "category": "reliability",
+      "ruleId": "reliability/outbound-no-timeout",
+      "severity": "high",
+      "title": "Outbound call to payments without a timeout",
+      "endpoint": "POST /orders",
+      "reproduction": "Make payments-fake hang: POST /orders never completes",
+      "fix": "Pass signal: AbortSignal.timeout(2000) to fetch",
+      "location": {
+        "file": "src/payments-client.ts",
+        "line": 22,
+        "symbol": "charge"
+      }
+    },
+    {
+      "id": "sync-crypto-login",
+      "engine": "architecture",
+      "alsoDetectableBy": [
+        "performance"
+      ],
+      "category": "performance",
+      "ruleId": "perf/sync-crypto-in-handler",
+      "severity": "medium",
+      "title": "Synchronous pbkdf2Sync in the login handler blocks the event loop",
+      "endpoint": "POST /auth/login",
+      "reproduction": "Concurrent logins delay unrelated requests (GET /healthz) by ~N x 20 ms",
+      "fix": "Use the async crypto.pbkdf2 (libuv threadpool)",
+      "location": {
+        "file": "src/auth.ts",
+        "line": 47,
+        "symbol": "login",
+        "callee": "pbkdf2Sync"
+      }
+    },
+    {
+      "id": "module-cycle",
+      "engine": "architecture",
+      "alsoDetectableBy": [],
+      "category": "architecture",
+      "ruleId": "arch/module-cycle",
+      "severity": "low",
+      "title": "Module dependency cycle: services/inventory.ts <-> services/orders.ts",
+      "cycle": [
+        "src/services/inventory.ts",
+        "src/services/orders.ts"
+      ],
+      "reproduction": "Static import graph contains the cycle inventory.ts -> orders.ts -> inventory.ts",
+      "fix": "Move pendingQuantity into a third module or invert the dependency",
+      "location": {
+        "file": "src/services/inventory.ts",
+        "line": 4,
+        "kind": "import",
+        "imports": "./orders.js"
+      }
+    },
+    {
+      "id": "stock-race",
+      "engine": "bugs",
+      "alsoDetectableBy": [
+        "agent"
+      ],
+      "category": "bug",
+      "ruleId": "bugs/race-lost-update",
+      "severity": "high",
+      "title": "Race condition on stock decrement (check-then-await-then-write) oversells",
+      "endpoint": "POST /orders",
+      "reproduction": "Product 20 has stock 1; 5 concurrent POST /orders for it -> more than one 201",
+      "fix": "Atomic conditional decrement (compare-and-set) or a per-product lock",
+      "location": {
+        "file": "src/services/inventory.ts",
+        "line": 14,
+        "symbol": "reserve"
+      }
+    },
+    {
+      "id": "idempotency-ignored",
+      "engine": "bugs",
+      "alsoDetectableBy": [
+        "agent"
+      ],
+      "category": "bug",
+      "ruleId": "bugs/idempotency-key-ignored",
+      "severity": "high",
+      "title": "Idempotency-Key ignored on POST /orders: retries create duplicate orders",
+      "endpoint": "POST /orders",
+      "reproduction": "Send the same POST /orders twice with the same Idempotency-Key -> two different order ids",
+      "fix": "Store key -> response for 24 h and replay it",
+      "location": {
+        "file": "src/routes/orders.ts",
+        "line": 16,
+        "symbol": "ordersRouter",
+        "handler": "POST /orders"
+      }
+    },
+    {
+      "id": "bola-orders",
+      "engine": "bugs",
+      "alsoDetectableBy": [
+        "agent"
+      ],
+      "category": "security",
+      "ruleId": "bugs/bola",
+      "severity": "critical",
+      "title": "BOLA: any authenticated user can read any order via GET /orders/:id",
+      "endpoint": "GET /orders/{id}",
+      "reproduction": "alice creates an order; bob GETs /orders/<alice's id> -> 200 (contract: 404)",
+      "fix": "Return 404 unless order.userId === current user (or admin)",
+      "location": {
+        "file": "src/routes/orders.ts",
+        "line": 46,
+        "symbol": "ordersRouter",
+        "handler": "GET /orders/:id"
+      }
+    },
+    {
+      "id": "schema-drift-price",
+      "engine": "bugs",
+      "alsoDetectableBy": [],
+      "category": "correctness",
+      "ruleId": "bugs/schema-mismatch",
+      "severity": "medium",
+      "title": "Schema drift: GET /products/:id returns price as a string (contract: number)",
+      "endpoint": "GET /products/{id}",
+      "jsonPointer": "/price",
+      "reproduction": "GET /products/1 -> {\"price\": \"7.50\"}",
+      "fix": "Return the numeric price",
+      "location": {
+        "file": "src/routes/products.ts",
+        "line": 36,
+        "symbol": "productsRouter",
+        "handler": "GET /products/:id"
+      }
+    },
+    {
+      "id": "boundary-500",
+      "engine": "bugs",
+      "alsoDetectableBy": [
+        "agent"
+      ],
+      "category": "bug",
+      "ruleId": "bugs/server-error-on-boundary",
+      "severity": "medium",
+      "title": "500 on boundary quantity (qty=0, qty<0 or qty>100) instead of 400",
+      "endpoint": "POST /cart/items",
+      "alsoEndpoints": [
+        "POST /orders"
+      ],
+      "reproduction": "POST /cart/items {productId:1, qty:0} -> 500; qty:101 -> 500",
+      "fix": "Validate 1 <= qty <= 100 and return 400",
+      "location": {
+        "file": "src/pricing.ts",
+        "line": 10,
+        "symbol": "unitPrice"
+      }
+    },
+    {
+      "id": "unbounded-retry",
+      "engine": "reliability",
+      "alsoDetectableBy": [
+        "architecture"
+      ],
+      "category": "reliability",
+      "ruleId": "reliability/retry-without-backoff",
+      "severity": "high",
+      "title": "Unbounded retry loop to payments with no backoff, jitter or attempt cap",
+      "endpoint": "POST /orders",
+      "reproduction": "payments failNext=25 -> one POST /orders makes 26 charge attempts back-to-back",
+      "fix": "Cap attempts (e.g. 3), exponential backoff with full jitter, circuit breaker",
+      "location": {
+        "file": "src/payments-client.ts",
+        "line": 17,
+        "symbol": "charge"
+      }
+    },
+    {
+      "id": "idempotency-key-race",
+      "engine": "agent",
+      "alsoDetectableBy": [
+        "bugs"
+      ],
+      "category": "bug",
+      "ruleId": "agent/idempotency-key-race",
+      "severity": "high",
+      "title": "Concurrent POST /orders with the same Idempotency-Key each create an order",
+      "description": "DISCOVERED, not planted: found by the Adversarial Test Agent (idempotency-concurrent technique) and kept as ground truth. Here it is a consequence of idempotency-ignored (the key is never read, so sequential repeats duplicate too).",
+      "discovered": true,
+      "endpoint": "POST /orders",
+      "reproduction": "Send 5 concurrent POST /orders with one Idempotency-Key -> more than one distinct order id",
+      "fix": "Make key reservation atomic: insert the key (unique) before doing the work, or a per-key lock; concurrent duplicates wait for and replay the first response",
+      "location": {
+        "file": "src/routes/orders.ts",
+        "line": 32,
+        "symbol": "ordersRouter",
+        "handler": "POST /orders"
+      }
+    }
+  ]
+}

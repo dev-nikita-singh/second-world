@@ -1,0 +1,129 @@
+openapi: 3.1.0
+info:
+  title: shop-fastify (intended contract)
+  version: 1.0.0
+  description: Correct behaviour. Deviations in src/ are seeded and listed in expected-findings.json.
+servers:
+  - url: http://127.0.0.1:3001
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
+  schemas:
+    Product:
+      type: object
+      required: [id, name, price, stock, category]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        price: { type: number }
+        stock: { type: integer, minimum: 0 }
+        category: { type: string }
+    Order:
+      type: object
+      required: [id, userId, productId, qty, total, status, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        productId: { type: integer }
+        qty: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: number }
+        status: { type: string, enum: [paid, payment_failed] }
+        createdAt: { type: string, format: date-time }
+paths:
+  /healthz:
+    get:
+      security: []
+      responses: { "200": { description: OK } }
+  /products:
+    get:
+      security: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 10 } }
+      responses:
+        "200":
+          description: A page of products
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, page, pages, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Product" } }
+                  page: { type: integer }
+                  pages: { type: integer }
+                  total: { type: integer }
+        "400": { description: Invalid page/limit }
+  /products/search:
+    get:
+      security: []
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1 } }
+      responses:
+        "200":
+          description: Products whose name contains the word q
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Product" } }
+        "400": { description: Missing q }
+  /products/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      security: []
+      responses:
+        "200":
+          description: Product
+          content: { application/json: { schema: { $ref: "#/components/schemas/Product" } } }
+        "404": { description: Not found }
+    delete:
+      description: Admin only.
+      responses:
+        "204": { description: Deleted }
+        "401": { description: Unauthenticated }
+        "403": { description: Not an admin }
+        "404": { description: Not found }
+  /terms:
+    get:
+      security: []
+      responses:
+        "200": { description: Terms, content: { text/plain: { schema: { type: string } } } }
+  /orders:
+    post:
+      parameters:
+        - { name: Idempotency-Key, in: header, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, qty]
+              properties:
+                productId: { type: integer }
+                qty: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "201":
+          description: Created (or replayed for a repeated Idempotency-Key)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Order" } } }
+        "400": { description: Invalid body }
+        "401": { description: Unauthenticated }
+        "404": { description: Unknown product }
+        "409": { description: Out of stock }
+        "502": { description: Payment failed }
+        "503": { description: Payments circuit open (fail fast) }
+  /orders/{id}:
+    get:
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Own order (or any, for admin)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Order" } } }
+        "401": { description: Unauthenticated }
+        "404": { description: Not found or not yours }

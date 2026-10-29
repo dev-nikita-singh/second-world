@@ -1,0 +1,44 @@
+# Progress: sw-bugs
+
+## Done (all deliverables 1–11; READY in CONTRACTS.md)
+- `src/engines/bugs/`: schema.ts (BugsInputSchema), contract.ts (swagger-parser bundle, OAS 3.0/3.1, Swagger 2 best-effort, operation index, pattern matching), validator.ts (Ajv2020/Ajv draft-07 + ajv-formats, LRU compiled validators, whole doc as `sw://contract`, 3.0 nullable/boolean-exclusive normalisation), json-schema.ts (lazy $ref resolver, allOf merge, inferSchema), dictionary.ts (configured values + harvested ids), generators/{sample,boundary,arbitrary,mutations}.ts, algorithms/{ipog,ddmin,linearizability}.ts, classify.ts (Wilson), rules.ts, http.ts (undici executor reuse, safety target check, budget lease + throttle, mutation gate, 429 Retry-After back-off, barrier bursts, redaction, curl with `$SW_AUTH_<ROLE>`), hooks.ts (http / execa argv, no shell), invariants.ts (user modules via dynamic import + builtin max-success/linearizable/same-response), cases.ts (replayable BugCase + evaluator: conformance, denied, idempotent, round-trip, concurrency, model), generate.ts (contract/boundary/equivalence/pairwise/negative/auth/stateful/concurrency cases), property.ts (fast-check property + model-based commands), session.ts, engine.ts (technique loop, dedup, replay protocol, ddmin, findings, matrix/coverage, discovery), index.ts (bugsEngine, runBugHunt, replayFinding, parseBugsInput).
+- Tests: 66 passing. Unit: tests/unit/bugs/{algorithms (15), generators (17), contract (18), http (6)}. Integration: tests/integration/bugs/{shop-express (3, ~11 s), shop-fastify (1, ~15 s), mini-api (10, ~2 s)}.
+- Recall/precision: shop-express recall 1.00 (5/5: schema-drift-price, boundary-500, idempotency-ignored, bola-orders, stock-race), precision 1.00. shop-fastify recall 1.00 (3/3: boundary-500-limit, schema-drift-created-at, bfla-delete-product), precision 1.00, so correct-by-design behaviours are not reported.
+- tsc: 0 errors repo-wide. biome clean on my paths.
+
+## Done (resume: sw-qa fixes)
+- F13a credential convention: `SW_AUTH_<ROLE>` = full header value; `BugsHttp.curl` emits `-H "<header>: $SW_AUTH_<ROLE>"` for bearer/basic/header roles (one placeholder, no scheme). src/engines/agent/export.ts credential line (ownership exception): uses the env value as the full header, adds the scheme only if missing (sw-agent's own test uses bare tokens).
+- F13b: `CaseRun.requests` records the resolved request per step. `BugsHttp.curlSteps(steps, resolved)` renders recorded values. If unknown, it uses a shell capture `VAR=$(curl … | node -e …)` + `"$VAR"`. Bursts use a `for … & done; wait` loop. ddmin keeps the failing run of the minimised subsequence so ids match.
+- Replay fix: artifact.ts `embedContext` (case.context: contract required/hash, roles, assertions, invariant refs absolutised, full concurrency spec; explicit roles in steps) and `hydrateForReplay`, which fails safe with a reason. runCase is also fail-safe: a missing concurrency test/invariant fn, or a conformance step without its contract op, is inconclusive. `replayFinding` → classification "inconclusive" + reason. CLI `sw replay` (exception): prints the reason and exits 2.
+- New tests: unit http.test (curl conventions incl. property test: no `{{`/`%7B%7B`), artifact.test (9: every check kind round-trips, fail-safe cases); integration shop-express BOLA curl executed for real (curl binary + undici fallback; async spawn because the server is in-process), cli-replay.test (bugs → reset → `sw replay` exit 1; unresolvable invariant → exit 2; legacy artifact → exit 2). Total bugs tests: 85.
+- tsc: 1 error, not mine (tests/fixtures/reports.ts StageResult, sw-examples). `src/cli/commands/*.ts` were already not biome-formatted before my change (perf.ts fails the same way).
+
+## In progress
+- none
+
+## Next (optional follow-ups)
+- Pairwise over body enum/boolean properties (currently only query/header params).
+- Linearizability for mixed-operation histories from config (built-ins currently check identical-op bursts).
+- HAR export of exchanges (currently a custom redacted JSON artifact).
+- Discovery crawling (follow links); discovery currently GETs configured paths only.
+
+## Decisions
+- Contract: swagger-parser `bundle` only (no circular objects). Generators resolve `$ref` lazily with depth caps. Ajv gets the bundled doc as `sw://contract`, and op schemas have their refs rewritten to `sw://contract#/...`.
+- Validity of generated input is decided by Ajv, never by generator labels. Parameters are judged on their wire form (`wireCoerce`).
+- Expectations: valid input → documented status, no undocumented 5xx, documented media type, schema-valid body. Invalid input → never 5xx (rule server-error-on-boundary for field values, server-error-on-invalid-input for malformed bodies). 2xx on invalid input is an observation only. 413/414/431 (size limits) are observations.
+- Fingerprint = sha256(bugs|rule|operation|pointer with array indices → `*`|keyword). The first case per fingerprint is kept; property cases are overwritten by later (more shrunk) ones.
+- Reproduction: the reset hook runs before each replay; there are `replays` conclusive runs (inconclusive ones, i.e. transport/budget/mutation-blocked, are not counted). k/n failures extend the run up to maxReplays, then Wilson classification.
+- ddmin only for conformance/model cases with more than 2 steps. Model steps carry their command, and `rebuildModelExpectations` recomputes the expected status/JSON for any subsequence, which keeps ddmin sound.
+- Auth: privileged roles have `privileged: true` or a name matching /admin|root|super/. BFLA candidates are operations configured in `auth.privileged`, or operations that document 403 and mention admin/privileged. BOLA needs auto-derived resources (POST collection + GET item): owner creates, attacker reads, check is "must not be 2xx".
+- Mutations: allowMutations → safety config allowMutations / env isolated|staging → requireApproval("mutating-requests"). If none applies, mutations are blocked: never sent, and a limitation is recorded. User-configured hooks are always allowed and audited.
+- Credentials never appear in artifacts. Roles are referenced by name, and curl uses `$SW_AUTH_<ROLE>`.
+
+## Blockers / requests
+- none (oneOf→anyOf in shop-express openapi done by main)
+
+## Wave 4
+- [done] Body pairwise: src/engines/bugs/generators/pairwise.ts (bodyFactors/bodyConstraint/applyBodyRow; INACTIVE marker below optional objects, complete partial-row constraint). generate.ts pairwiseCases = params + body factors in one IPOG array, sliced to maxCasesPerOperation. tests/unit/bugs/pairwise.test.ts (7) green.
+- [done] Mixed-op linearizability: schema ConcurrencyTest.{as,pointer,mix[]} (mix: operation,count,role,pathParams,query,headers,body,as,pointer,value,phase before|during|after; burst+during ≤ 64). linearizability.ts stockRwModel (unknown initial fixed by first read) + describeHistory. invariants.ts checkMixed (stock/counter/register/set; ambiguous statuses = unknown effect). cases.ts CaseStep.mix + runCase phases; http.ts curlSteps renders mix; artifact.ts explicit roles for mix. Tests: unit linearizability-mixed (14), integration mixed-race (4): stock-race found on shop-express as reproduced-defect (both product 20 and the lost-update on product 1 that only reads reveal); shop-fastify: no race.
+- [done] HAR 1.2 export: src/engines/bugs/har.ts toHar(); engine writes <artifactsDir>/bugs-<fp>/reproduction.har next to bugs-<fp>.json (subdir so `sw replay`'s /^bugs-<hex>.json$/ lookup is unaffected; CLI renames the whole pending dir). Credential header → `$SW_AUTH_<ROLE>` (same as curl), cookies/set-cookie/auth-like headers/secret query params → "[REDACTED]", URL userinfo dropped, final redactor.redactObject pass. Tests: unit har (4, incl. tests/integration/bugs/har-validate.ts HAR 1.2 required-field validator), integration mixed-race checks the real files. mini-api test now expects 2 artifacts per finding.
+- Verified: `npx vitest run tests/unit/bugs tests/integration/bugs tests/unit/reporting` 24 files / 266 tests green; recall/precision 1.00/1.00 on both apps; tsc 0 errors; biome clean on my paths. Also green: tests/unit/cli/bugs, tests/system/{safety-and-replay,artifact-locations,full-investigation,example-configs,regression}, tests/integration/agent.
+- Gaps: `mix` is config-only (no CLI flag; src/cli not mine). examples/*/sw.config.ts have no concurrency section, so a bare `sw bugs --config examples/shop-express/sw.config.ts` still needs a concurrency test to find stock-race. HAR timings only carry total time (wait); bodies truncated at maxRecordedBody (4096). Pairwise rows are cut to maxCasesPerOperation, which can drop pairs when the budget is smaller than the covering array. docs/ not updated (sw-docs owns): document ConcurrencyTest.mix/as/pointer and reproduction.har.

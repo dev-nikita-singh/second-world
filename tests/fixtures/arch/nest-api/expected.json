@@ -1,0 +1,18 @@
+{
+  "routes": ["DELETE /users/:id", "GET /users", "GET /users/:id", "POST /users"],
+  "edges": [
+    ["route:GET /users", "fn:src/users/users.controller.ts#UsersController.list", "calls"],
+    [
+      "fn:src/users/users.controller.ts#UsersController.list",
+      "fn:src/users/users.service.ts#UsersService.list",
+      "calls"
+    ],
+    ["fn:src/users/users.service.ts#UsersService.list", "datastore:prisma", "reads"],
+    ["fn:src/users/users.service.ts#UsersService.remove", "datastore:prisma", "writes"]
+  ],
+  "reachability": { "route:DELETE /users/:id": ["datastore:prisma"] },
+  "findings": [
+    { "ruleId": "ARCH007", "file": "src/users/users.controller.ts", "line": 23 },
+    { "ruleId": "ARCH011", "file": "src/users/users.service.ts", "line": 20 }
+  ]
+}

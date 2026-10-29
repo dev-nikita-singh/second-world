@@ -1,0 +1,19 @@
+{
+  "routes": ["DELETE /api/users/:id", "GET /api/users", "GET /api/users/:id", "GET /healthz"],
+  "edges": [
+    ["route:GET /api/users", "fn:src/routes/users.ts#GET /users", "calls"],
+    ["fn:src/routes/users.ts#GET /users", "fn:src/services/user-service.ts#listUsersWithTeams", "calls"],
+    ["fn:src/services/user-service.ts#listUsersWithTeams", "datastore:postgres", "reads"],
+    ["fn:src/services/user-service.ts#deleteUser", "datastore:postgres", "writes"],
+    ["fn:src/services/user-service.ts#getUser", "fn:src/clients/billing.ts#fetchInvoices", "calls"],
+    ["fn:src/clients/billing.ts#fetchInvoices", "external:billing.example.com", "calls"],
+    ["module:src/routes/users.ts", "module:src/services/user-service.ts", "imports"]
+  ],
+  "reachability": { "route:GET /api/users/:id": ["datastore:postgres", "external:billing.example.com"] },
+  "findings": [
+    { "ruleId": "ARCH001", "file": "src/clients/billing.ts", "line": 6 },
+    { "ruleId": "ARCH005", "file": "src/services/user-service.ts", "line": 9 },
+    { "ruleId": "ARCH006", "file": "src/db.ts", "line": 5 },
+    { "ruleId": "ARCH007", "file": "src/routes/users.ts", "line": 15 }
+  ]
+}

@@ -1,0 +1,2539 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "shop"
+            }
+          },
+          {
+            "key": "service.version",
+            "value": {
+              "stringValue": "1.0.0"
+            }
+          },
+          {
+            "key": "host.arch",
+            "value": {
+              "arrayValue": {
+                "values": [
+                  {
+                    "stringValue": "x64"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "fixture"
+          },
+          "spans": [
+            {
+              "traceId": "00000000000000000000000000000013",
+              "spanId": "0000000000000051",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700002300000000",
+              "endTimeUnixNano": "1761700002302000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "ffffffffffffffff"
+            },
+            {
+              "traceId": "00000000000000000000000000000012",
+              "spanId": "0000000000000050",
+              "name": "Db.UPDATE",
+              "kind": 3,
+              "startTimeUnixNano": "1761700002191000000",
+              "endTimeUnixNano": "1761700002193000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "UPDATE"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000004a"
+            },
+            {
+              "traceId": "00000000000000000000000000000012",
+              "spanId": "000000000000004e",
+              "name": "POST",
+              "kind": 3,
+              "startTimeUnixNano": "1761700002108000000",
+              "endTimeUnixNano": "1761700002190000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "peer.service",
+                  "value": {
+                    "stringValue": "payments"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "4010"
+                  }
+                },
+                {
+                  "key": "url.full",
+                  "value": {
+                    "stringValue": "http://127.0.0.1:4010/charges"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "503"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000004a"
+            },
+            {
+              "traceId": "00000000000000000000000000000012",
+              "spanId": "000000000000004d",
+              "name": "Db.INSERT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700002105000000",
+              "endTimeUnixNano": "1761700002107000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "INSERT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000004a"
+            },
+            {
+              "traceId": "00000000000000000000000000000012",
+              "spanId": "000000000000004c",
+              "name": "Db.UPDATE",
+              "kind": 3,
+              "startTimeUnixNano": "1761700002103000000",
+              "endTimeUnixNano": "1761700002105000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "UPDATE"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000004a"
+            },
+            {
+              "traceId": "00000000000000000000000000000012",
+              "spanId": "000000000000004b",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700002101000000",
+              "endTimeUnixNano": "1761700002103000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000004a"
+            },
+            {
+              "traceId": "00000000000000000000000000000012",
+              "spanId": "000000000000004a",
+              "name": "POST /orders",
+              "kind": 2,
+              "startTimeUnixNano": "1761700002100000000",
+              "endTimeUnixNano": "1761700002200000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/orders"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "500"
+                  }
+                }
+              ],
+              "status": {
+                "code": 2,
+                "message": "payment failed"
+              }
+            },
+            {
+              "traceId": "00000000000000000000000000000011",
+              "spanId": "0000000000000049",
+              "name": "Db.UPDATE",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001991000000",
+              "endTimeUnixNano": "1761700001993000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "UPDATE"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000043"
+            },
+            {
+              "traceId": "00000000000000000000000000000011",
+              "spanId": "0000000000000047",
+              "name": "POST",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001908000000",
+              "endTimeUnixNano": "1761700001990000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "peer.service",
+                  "value": {
+                    "stringValue": "payments"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "4010"
+                  }
+                },
+                {
+                  "key": "url.full",
+                  "value": {
+                    "stringValue": "http://127.0.0.1:4010/charges"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "201"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000043"
+            },
+            {
+              "traceId": "00000000000000000000000000000011",
+              "spanId": "0000000000000046",
+              "name": "Db.INSERT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001905000000",
+              "endTimeUnixNano": "1761700001907000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "INSERT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000043"
+            },
+            {
+              "traceId": "00000000000000000000000000000011",
+              "spanId": "0000000000000045",
+              "name": "Db.UPDATE",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001903000000",
+              "endTimeUnixNano": "1761700001905000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "UPDATE"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000043"
+            },
+            {
+              "traceId": "00000000000000000000000000000011",
+              "spanId": "0000000000000044",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001901000000",
+              "endTimeUnixNano": "1761700001903000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000043"
+            },
+            {
+              "traceId": "00000000000000000000000000000011",
+              "spanId": "0000000000000043",
+              "name": "POST /orders",
+              "kind": 2,
+              "startTimeUnixNano": "1761700001900000000",
+              "endTimeUnixNano": "1761700002000000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/orders"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "201"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "00000000000000000000000000000010",
+              "spanId": "0000000000000042",
+              "name": "Db.UPDATE",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001791000000",
+              "endTimeUnixNano": "1761700001793000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "UPDATE"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000003c"
+            },
+            {
+              "traceId": "00000000000000000000000000000010",
+              "spanId": "0000000000000040",
+              "name": "POST",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001708000000",
+              "endTimeUnixNano": "1761700001790000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "peer.service",
+                  "value": {
+                    "stringValue": "payments"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "4010"
+                  }
+                },
+                {
+                  "key": "url.full",
+                  "value": {
+                    "stringValue": "http://127.0.0.1:4010/charges"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "201"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000003c"
+            },
+            {
+              "traceId": "00000000000000000000000000000010",
+              "spanId": "000000000000003f",
+              "name": "Db.INSERT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001705000000",
+              "endTimeUnixNano": "1761700001707000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "INSERT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000003c"
+            },
+            {
+              "traceId": "00000000000000000000000000000010",
+              "spanId": "000000000000003e",
+              "name": "Db.UPDATE",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001703000000",
+              "endTimeUnixNano": "1761700001705000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "UPDATE"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000003c"
+            },
+            {
+              "traceId": "00000000000000000000000000000010",
+              "spanId": "000000000000003d",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001701000000",
+              "endTimeUnixNano": "1761700001703000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000003c"
+            },
+            {
+              "traceId": "00000000000000000000000000000010",
+              "spanId": "000000000000003c",
+              "name": "POST /orders",
+              "kind": 2,
+              "startTimeUnixNano": "1761700001700000000",
+              "endTimeUnixNano": "1761700001800000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/orders"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "201"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "0000000000000000000000000000000f",
+              "spanId": "000000000000003b",
+              "name": "Db.UPDATE",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001591000000",
+              "endTimeUnixNano": "1761700001593000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "UPDATE"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000035"
+            },
+            {
+              "traceId": "0000000000000000000000000000000f",
+              "spanId": "0000000000000039",
+              "name": "POST",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001508000000",
+              "endTimeUnixNano": "1761700001590000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "peer.service",
+                  "value": {
+                    "stringValue": "payments"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "4010"
+                  }
+                },
+                {
+                  "key": "url.full",
+                  "value": {
+                    "stringValue": "http://127.0.0.1:4010/charges"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "201"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000035"
+            },
+            {
+              "traceId": "0000000000000000000000000000000f",
+              "spanId": "0000000000000038",
+              "name": "Db.INSERT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001505000000",
+              "endTimeUnixNano": "1761700001507000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "INSERT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000035"
+            },
+            {
+              "traceId": "0000000000000000000000000000000f",
+              "spanId": "0000000000000037",
+              "name": "Db.UPDATE",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001503000000",
+              "endTimeUnixNano": "1761700001505000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "UPDATE"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000035"
+            },
+            {
+              "traceId": "0000000000000000000000000000000f",
+              "spanId": "0000000000000036",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001501000000",
+              "endTimeUnixNano": "1761700001503000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000035"
+            },
+            {
+              "traceId": "0000000000000000000000000000000f",
+              "spanId": "0000000000000035",
+              "name": "POST /orders",
+              "kind": 2,
+              "startTimeUnixNano": "1761700001500000000",
+              "endTimeUnixNano": "1761700001600000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/orders"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "201"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "0000000000000000000000000000000e",
+              "spanId": "0000000000000034",
+              "name": "Db.UPDATE",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001391000000",
+              "endTimeUnixNano": "1761700001393000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "UPDATE"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000002e"
+            },
+            {
+              "traceId": "0000000000000000000000000000000e",
+              "spanId": "0000000000000032",
+              "name": "POST",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001308000000",
+              "endTimeUnixNano": "1761700001390000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "peer.service",
+                  "value": {
+                    "stringValue": "payments"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "4010"
+                  }
+                },
+                {
+                  "key": "url.full",
+                  "value": {
+                    "stringValue": "http://127.0.0.1:4010/charges"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "201"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000002e"
+            },
+            {
+              "traceId": "0000000000000000000000000000000e",
+              "spanId": "0000000000000031",
+              "name": "Db.INSERT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001305000000",
+              "endTimeUnixNano": "1761700001307000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "INSERT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000002e"
+            },
+            {
+              "traceId": "0000000000000000000000000000000e",
+              "spanId": "0000000000000030",
+              "name": "Db.UPDATE",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001303000000",
+              "endTimeUnixNano": "1761700001305000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "UPDATE"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000002e"
+            },
+            {
+              "traceId": "0000000000000000000000000000000e",
+              "spanId": "000000000000002f",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001301000000",
+              "endTimeUnixNano": "1761700001303000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000002e"
+            },
+            {
+              "traceId": "0000000000000000000000000000000e",
+              "spanId": "000000000000002e",
+              "name": "POST /orders",
+              "kind": 2,
+              "startTimeUnixNano": "1761700001300000000",
+              "endTimeUnixNano": "1761700001400000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "POST"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/orders"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "201"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "0000000000000000000000000000000d",
+              "spanId": "000000000000002d",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001204000000",
+              "endTimeUnixNano": "1761700001209000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000029"
+            },
+            {
+              "traceId": "0000000000000000000000000000000d",
+              "spanId": "000000000000002c",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001204000000",
+              "endTimeUnixNano": "1761700001216000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000029"
+            },
+            {
+              "traceId": "0000000000000000000000000000000d",
+              "spanId": "000000000000002b",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001204000000",
+              "endTimeUnixNano": "1761700001210000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000029"
+            },
+            {
+              "traceId": "0000000000000000000000000000000d",
+              "spanId": "000000000000002a",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001201000000",
+              "endTimeUnixNano": "1761700001203000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000029"
+            },
+            {
+              "traceId": "0000000000000000000000000000000d",
+              "spanId": "0000000000000029",
+              "name": "GET /products",
+              "kind": 2,
+              "startTimeUnixNano": "1761700001200000000",
+              "endTimeUnixNano": "1761700001220000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "0000000000000000000000000000000c",
+              "spanId": "0000000000000028",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001104000000",
+              "endTimeUnixNano": "1761700001109000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000024"
+            },
+            {
+              "traceId": "0000000000000000000000000000000c",
+              "spanId": "0000000000000027",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001104000000",
+              "endTimeUnixNano": "1761700001116000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000024"
+            },
+            {
+              "traceId": "0000000000000000000000000000000c",
+              "spanId": "0000000000000026",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001104000000",
+              "endTimeUnixNano": "1761700001110000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000024"
+            },
+            {
+              "traceId": "0000000000000000000000000000000c",
+              "spanId": "0000000000000025",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001101000000",
+              "endTimeUnixNano": "1761700001103000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000024"
+            },
+            {
+              "traceId": "0000000000000000000000000000000c",
+              "spanId": "0000000000000024",
+              "name": "GET /products",
+              "kind": 2,
+              "startTimeUnixNano": "1761700001100000000",
+              "endTimeUnixNano": "1761700001120000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "0000000000000000000000000000000b",
+              "spanId": "0000000000000023",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001004000000",
+              "endTimeUnixNano": "1761700001009000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000001f"
+            },
+            {
+              "traceId": "0000000000000000000000000000000b",
+              "spanId": "0000000000000022",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001004000000",
+              "endTimeUnixNano": "1761700001016000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000001f"
+            },
+            {
+              "traceId": "0000000000000000000000000000000b",
+              "spanId": "0000000000000021",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001004000000",
+              "endTimeUnixNano": "1761700001010000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000001f"
+            },
+            {
+              "traceId": "0000000000000000000000000000000b",
+              "spanId": "0000000000000020",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700001001000000",
+              "endTimeUnixNano": "1761700001003000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000001f"
+            },
+            {
+              "traceId": "0000000000000000000000000000000b",
+              "spanId": "000000000000001f",
+              "name": "GET /products",
+              "kind": 2,
+              "startTimeUnixNano": "1761700001000000000",
+              "endTimeUnixNano": "1761700001020000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "0000000000000000000000000000000a",
+              "spanId": "000000000000001e",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000903000000",
+              "endTimeUnixNano": "1761700000905000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000001c"
+            },
+            {
+              "traceId": "0000000000000000000000000000000a",
+              "spanId": "000000000000001d",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000901000000",
+              "endTimeUnixNano": "1761700000903000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000001c"
+            },
+            {
+              "traceId": "0000000000000000000000000000000a",
+              "spanId": "000000000000001c",
+              "name": "GET /products/:id",
+              "kind": 2,
+              "startTimeUnixNano": "1761700000900000000",
+              "endTimeUnixNano": "1761700000912000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products/:id"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "00000000000000000000000000000009",
+              "spanId": "000000000000001b",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000803000000",
+              "endTimeUnixNano": "1761700000807000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000019"
+            },
+            {
+              "traceId": "00000000000000000000000000000009",
+              "spanId": "000000000000001a",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000801000000",
+              "endTimeUnixNano": "1761700000803000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000019"
+            },
+            {
+              "traceId": "00000000000000000000000000000009",
+              "spanId": "0000000000000019",
+              "name": "GET /products/:id",
+              "kind": 2,
+              "startTimeUnixNano": "1761700000800000000",
+              "endTimeUnixNano": "1761700000814000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products/:id"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "00000000000000000000000000000008",
+              "spanId": "0000000000000018",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000703000000",
+              "endTimeUnixNano": "1761700000706000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000016"
+            },
+            {
+              "traceId": "00000000000000000000000000000008",
+              "spanId": "0000000000000017",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000701000000",
+              "endTimeUnixNano": "1761700000703000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000016"
+            },
+            {
+              "traceId": "00000000000000000000000000000008",
+              "spanId": "0000000000000016",
+              "name": "GET /products/:id",
+              "kind": 2,
+              "startTimeUnixNano": "1761700000700000000",
+              "endTimeUnixNano": "1761700000713000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products/:id"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "00000000000000000000000000000007",
+              "spanId": "0000000000000015",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000603000000",
+              "endTimeUnixNano": "1761700000605000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000013"
+            },
+            {
+              "traceId": "00000000000000000000000000000007",
+              "spanId": "0000000000000014",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000601000000",
+              "endTimeUnixNano": "1761700000603000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000013"
+            },
+            {
+              "traceId": "00000000000000000000000000000007",
+              "spanId": "0000000000000013",
+              "name": "GET /products/:id",
+              "kind": 2,
+              "startTimeUnixNano": "1761700000600000000",
+              "endTimeUnixNano": "1761700000612000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products/:id"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "00000000000000000000000000000006",
+              "spanId": "0000000000000012",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000503000000",
+              "endTimeUnixNano": "1761700000507000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000010"
+            },
+            {
+              "traceId": "00000000000000000000000000000006",
+              "spanId": "0000000000000011",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000501000000",
+              "endTimeUnixNano": "1761700000503000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000010"
+            },
+            {
+              "traceId": "00000000000000000000000000000006",
+              "spanId": "0000000000000010",
+              "name": "GET /products/:id",
+              "kind": 2,
+              "startTimeUnixNano": "1761700000500000000",
+              "endTimeUnixNano": "1761700000514000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products/:id"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "00000000000000000000000000000005",
+              "spanId": "000000000000000f",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000403000000",
+              "endTimeUnixNano": "1761700000406000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000000d"
+            },
+            {
+              "traceId": "00000000000000000000000000000005",
+              "spanId": "000000000000000e",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000401000000",
+              "endTimeUnixNano": "1761700000403000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000000d"
+            },
+            {
+              "traceId": "00000000000000000000000000000005",
+              "spanId": "000000000000000d",
+              "name": "GET /products/:id",
+              "kind": 2,
+              "startTimeUnixNano": "1761700000400000000",
+              "endTimeUnixNano": "1761700000413000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products/:id"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "00000000000000000000000000000004",
+              "spanId": "000000000000000c",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000303000000",
+              "endTimeUnixNano": "1761700000305000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000000a"
+            },
+            {
+              "traceId": "00000000000000000000000000000004",
+              "spanId": "000000000000000b",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000301000000",
+              "endTimeUnixNano": "1761700000303000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "000000000000000a"
+            },
+            {
+              "traceId": "00000000000000000000000000000004",
+              "spanId": "000000000000000a",
+              "name": "GET /products/:id",
+              "kind": 2,
+              "startTimeUnixNano": "1761700000300000000",
+              "endTimeUnixNano": "1761700000312000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products/:id"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "00000000000000000000000000000003",
+              "spanId": "0000000000000009",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000203000000",
+              "endTimeUnixNano": "1761700000207000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000007"
+            },
+            {
+              "traceId": "00000000000000000000000000000003",
+              "spanId": "0000000000000008",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000201000000",
+              "endTimeUnixNano": "1761700000203000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000007"
+            },
+            {
+              "traceId": "00000000000000000000000000000003",
+              "spanId": "0000000000000007",
+              "name": "GET /products/:id",
+              "kind": 2,
+              "startTimeUnixNano": "1761700000200000000",
+              "endTimeUnixNano": "1761700000214000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products/:id"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "00000000000000000000000000000002",
+              "spanId": "0000000000000006",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000103000000",
+              "endTimeUnixNano": "1761700000106000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000004"
+            },
+            {
+              "traceId": "00000000000000000000000000000002",
+              "spanId": "0000000000000005",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000101000000",
+              "endTimeUnixNano": "1761700000103000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000004"
+            },
+            {
+              "traceId": "00000000000000000000000000000002",
+              "spanId": "0000000000000004",
+              "name": "GET /products/:id",
+              "kind": 2,
+              "startTimeUnixNano": "1761700000100000000",
+              "endTimeUnixNano": "1761700000113000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products/:id"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            },
+            {
+              "traceId": "00000000000000000000000000000001",
+              "spanId": "0000000000000003",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000003000000",
+              "endTimeUnixNano": "1761700000005000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000001"
+            },
+            {
+              "traceId": "00000000000000000000000000000001",
+              "spanId": "0000000000000002",
+              "name": "Db.SELECT",
+              "kind": 3,
+              "startTimeUnixNano": "1761700000001000000",
+              "endTimeUnixNano": "1761700000003000000",
+              "attributes": [
+                {
+                  "key": "db.system",
+                  "value": {
+                    "stringValue": "other_sql"
+                  }
+                },
+                {
+                  "key": "db.name",
+                  "value": {
+                    "stringValue": "Db"
+                  }
+                },
+                {
+                  "key": "db.operation",
+                  "value": {
+                    "stringValue": "SELECT"
+                  }
+                }
+              ],
+              "parentSpanId": "0000000000000001"
+            },
+            {
+              "traceId": "00000000000000000000000000000001",
+              "spanId": "0000000000000001",
+              "name": "GET /products/:id",
+              "kind": 2,
+              "startTimeUnixNano": "1761700000000000000",
+              "endTimeUnixNano": "1761700000012000000",
+              "attributes": [
+                {
+                  "key": "http.request.method",
+                  "value": {
+                    "stringValue": "GET"
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/products/:id"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "127.0.0.1"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": "3000"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": "200"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

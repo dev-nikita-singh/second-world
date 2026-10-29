@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+.second-world/
+*.log
+
+# keep the agent coordination log
+!.agents/messages.log

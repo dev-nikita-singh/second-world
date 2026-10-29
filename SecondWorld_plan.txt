@@ -1,0 +1,855 @@
+SECOND WORLD
+An Intelligent Software Experimentation, Testing & Optimization Engine
+Document type: Technical Project Specification
+Project status: Proposed — pre-development
+Initial implementation: TypeScript / Node.js npm package
+Primary objective: Enable developers to inspect, test, stress, diagnose, and experiment with software systems before deploying changes to production.
+
+1. PROJECT OVERVIEW
+1.1 What is SECOND WORLD?
+SECOND WORLD is a modular developer toolkit that helps developers understand how their applications are structured, how they behave under different workloads, how they fail, and how potential improvements affect their performance and reliability.
+It combines source-code analysis, API testing, load generation, performance measurement, controlled failure experiments, runtime observability, and AI-assisted investigation into one extensible system.
+A developer can provide a source-code repository, a running application URL, API specifications, and optional runtime telemetry. SECOND WORLD analyzes the available information and allows the developer to execute individual testing capabilities or combine them into a complete investigation workflow.
+The long-term vision is to create a system that can:
+1. Build a model of an application's components and dependencies.
+2. Generate controlled workloads against the application.
+3. Measure latency, throughput, errors, and resource usage.
+4. Identify reproducible functional defects.
+5. Investigate potential architectural weaknesses.
+6. Test how the application responds to dependency failures.
+7. Generate hypotheses about performance and reliability problems.
+8. Propose candidate fixes and test them in isolated environments.
+9. Compare alternative implementations against a baseline.
+10. Preserve experiment results so developers can track improvements and regressions.
+The system must distinguish between observed facts, reproducible defects, suspected problems, and AI-generated hypotheses.
+1.2 Core product philosophy
+SECOND WORLD is not intended to be merely another load-testing tool, static code analyzer, or AI code reviewer.
+Its defining concept is software experimentation.
+Instead of simply reporting that an application is slow, it should progressively help the developer investigate why it is slow, determine which components might be responsible, construct an experiment, test a proposed improvement, and verify whether the result improved.
+However, not every capability requires AI or the complete platform. Each engine should be independently useful.
+For example:
+* A developer can run a load test without supplying a source-code repository.
+* A developer can inspect architecture without running a performance test.
+* A developer can validate an API without enabling AI.
+* A developer can test a proposed fix without running the entire reliability suite.
+* A developer can use AI analysis as an optional layer over collected evidence.
+This modularity is a fundamental architectural requirement.
+
+2. PRODUCT CAPABILITIES AT A GLANCE
+SECOND WORLD will contain the following major engines.
+EnginePrimary responsibilityCan run independently?Performance LabMeasure application performance under controlled workloadsYesStress & Capacity LabDiscover how performance changes as load increasesYesArchitecture InspectorAnalyze source code, components, and dependenciesYesAPI Bug HunterDetect and reproduce API contract and functional defectsYesAdversarial Test AgentGenerate and execute additional test scenariosYes, with a configured target and safety limitsReliability LabTest behavior under controlled dependency failuresYes, when the necessary test environment is availableDigital Twin / System ModelRepresent the application's architecture and observed behaviorYes, with limitations based on available informationWhat-If Experiment EngineEvaluate alternative workloads, configurations, or implementationsYesEvolution EngineBenchmark candidate fixes against an existing baselineYesAI AnalystExplain findings and propose investigationsYes, when supplied with relevant evidenceEvidence & Reporting EngineCombine findings and produce reproducible reportsYesExperiment HistoryStore and compare previous experiment resultsYes, with persistent storage configuredThese are logical modules, not necessarily separate processes. The initial implementation should use a modular monolith, with separate modules and well-defined interfaces inside one TypeScript package.
+
+3. FEATURE ONE: PERFORMANCE LAB
+3.1 Purpose
+Performance Lab measures how a running application behaves when it receives requests under a controlled workload.
+It is the foundation of the first MVP.
+The engine should help developers answer:
+* How many requests per second can this application sustain during a specified test?
+* How does response time change as concurrency increases?
+* Which endpoints are slow?
+* What percentage of requests fail?
+* Are timeouts increasing under load?
+* Does the application meet its configured performance thresholds?
+* Is the load generator itself becoming a bottleneck?
+3.2 Input configuration
+A developer should be able to configure:
+* Target base URL.
+* Permitted target hosts.
+* HTTP methods and endpoint paths.
+* Request headers.
+* Test authentication, when needed.
+* Request bodies and payload templates.
+* Number of virtual users or desired request rate.
+* Test duration.
+* Ramp-up period.
+* Request timeout.
+* Think time between simulated user actions.
+* Expected response status codes.
+* Response assertions.
+* Performance thresholds.
+* Maximum permitted request volume.
+The configuration must support both simple API requests and more complex sequences of dependent requests.
+3.3 Metrics
+The engine will collect:
+Latency
+* Average latency.
+* Median latency, or p50.
+* p90 latency.
+* p95 latency.
+* p99 latency.
+* Maximum observed latency.
+* Connection time and other timing breakdowns where available.
+Throughput
+* Completed requests per second.
+* Successful requests per second.
+* Failed requests per second.
+* Response bytes per second.
+Errors
+* HTTP status-code distribution.
+* Connection failures.
+* Timeouts.
+* Network errors.
+* Assertion failures.
+* Unexpected response formats.
+Resource information
+* CPU usage.
+* Memory consumption.
+* Event-loop delay.
+* Database connection-pool metrics.
+* Database query timings.
+Resource measurements require suitable instrumentation or operating-system access. They cannot always be obtained from an HTTP endpoint alone.
+3.4 Core algorithms
+A. Concurrent request scheduling
+The scheduler manages how many requests or virtual users may be active simultaneously.
+The implementation should use bounded concurrency rather than creating unlimited concurrent requests.
+Relevant concepts include:
+* Promises and asynchronous execution.
+* Worker pools.
+* Queues.
+* Cancellation.
+* Backpressure.
+* Timeout management.
+B. Latency measurement
+For a request:
+Latency = Request completion time ? Request start time.
+The engine records durations using a monotonic clock where possible.
+C. Percentile calculation
+The engine calculates p50, p90, p95, and p99 from collected latency measurements.
+For large workloads, it should use an appropriate histogram or streaming-statistics implementation instead of retaining every individual sample indefinitely.
+The report must document its percentile calculation method.
+D. Throughput calculation
+Requests per second = Completed requests / Measurement duration.
+The measurement interval and treatment of failed requests must be explicit.
+E. Error-rate calculation
+Error rate = Failed requests / Total requests × 100%.
+Failure definitions should be configurable because a response such as HTTP 404 might be expected in one test and represent a failure in another.
+3.5 Independent usage
+A developer should be able to execute Performance Lab without enabling any other engine.
+Example:
+const report = await world.performance.test({
+  target: "http://localhost:3000",
+  duration: "60s",
+  virtualUsers: 100,
+  rampUp: "10s",
+  requests: [
+    {
+      name: "List products",
+      method: "GET",
+      path: "/api/products"
+    }
+  ]
+});
+This is a proposed interface, not an implemented API.
+The result should contain raw or aggregated measurements, threshold evaluations, errors, and an exportable report.
+
+4. FEATURE TWO: STRESS & CAPACITY LAB
+4.1 Purpose
+Stress & Capacity Lab investigates how an application behaves as workload increases.
+Performance Lab can execute a configured workload. Stress & Capacity Lab builds on that foundation by running a series of workloads and comparing the results.
+4.2 Supported experiments
+Gradual ramp-up
+Increase the number of concurrent users over time.
+Step-load testing
+Test at defined concurrency levels, such as 10, 25, 50, 100, and 200 users.
+Spike testing
+Increase the workload sharply to observe the application's response to sudden traffic changes.
+Soak testing
+Maintain a workload for a prolonged period to investigate degradation, resource leaks, or gradual latency increases.
+Fixed-arrival-rate testing
+Attempt to generate requests at a specified rate, regardless of response completion time.
+This requires a scheduling model that can detect when the generator falls behind its target request rate.
+4.3 Capacity analysis
+At each stage, the engine records:
+* Achieved throughput.
+* Latency percentiles.
+* Error rates.
+* Timeouts.
+* Resource utilization, where available.
+* Whether configured performance thresholds were met.
+It can then identify the highest tested load that satisfied the specified requirements.
+It must not automatically claim that this is the application's absolute maximum capacity.
+Actual capacity depends on hardware, deployment configuration, workload characteristics, database behavior, and other environmental factors.
+4.4 Independent usage
+A developer can run a capacity test without running architecture inspection or AI analysis.
+The engine should return a stage-by-stage report and identify where performance requirements were first breached.
+
+5. FEATURE THREE: ARCHITECTURE INSPECTOR
+5.1 Purpose
+Architecture Inspector analyzes the source code and available configuration to build an understandable model of the application's structure.
+It aims to identify components, dependencies, request paths, and potential architectural weaknesses.
+5.2 What it inspects
+Depending on the supported framework and available source code, it can investigate:
+* API routes.
+* Controllers and handlers.
+* Services and repositories.
+* Database clients.
+* SQL queries.
+* Cache integrations.
+* External API clients.
+* Message queues.
+* Authentication middleware.
+* Authorization checks.
+* Retry and timeout configuration.
+* Connection-pool configuration.
+* Dependency injection.
+* Circular module dependencies.
+* Configuration relationships.
+The inspector should explicitly state what it could not determine.
+Source-code inspection alone does not reveal every runtime dependency or the actual production topology.
+5.3 Source-code analysis
+For TypeScript applications, the initial implementation should use the TypeScript Compiler API to parse source files and analyze their syntax trees.
+The analysis pipeline should:
+1. Discover supported source files.
+2. Parse the files into abstract syntax trees.
+3. Identify route definitions and relevant function calls.
+4. Extract potential component dependencies.
+5. Associate discovered relationships with source locations.
+6. Apply architecture rules.
+7. Generate a component graph and findings.
+The system should avoid executing arbitrary project code merely to inspect it.
+5.4 Dependency graph
+Represent each discovered component as a node and each dependency as a directed edge.
+Example:
+HTTP Route
+    |
+    v
+Order Controller
+    |
+    v
+Order Service
+    |
+    +----------+
+    |          |
+    v          v
+Repository   Payment Client
+    |
+    v
+PostgreSQL
+The graph can answer questions such as:
+* Which endpoints depend on a specific service?
+* Which components depend on an external API?
+* Which modules have circular dependencies?
+* Which components have many downstream dependencies?
+* Which request paths reach the database?
+* Which components might be affected if a dependency becomes unavailable?
+5.5 Algorithms
+The initial implementation should use:
+* Graph traversal using breadth-first search and depth-first search.
+* Cycle detection.
+* Strongly connected component analysis when useful.
+* AST traversal.
+* Rule-based pattern matching.
+* Dependency aggregation.
+The system should preserve source locations and evidence for every important finding.
+5.6 Architecture rules
+Possible rules include:
+* An outbound request may lack an identifiable timeout.
+* Retry configuration may be unbounded.
+* A service may depend directly on several unrelated external systems.
+* A module dependency cycle may exist.
+* A database connection pool may be configured inconsistently with application concurrency.
+* A request handler may perform potentially expensive synchronous work.
+These are potential risks, not automatically confirmed defects.
+5.7 Independent usage
+A developer should be able to run architecture inspection without a running application.
+Example:
+const report = await world.architecture.inspect({
+  project: "./"
+});
+The result should contain discovered components, dependencies, source locations, potential risks, and confidence or verification status.
+
+6. FEATURE FOUR: API BUG HUNTER
+6.1 Purpose
+API Bug Hunter executes tests against a running application to identify functional defects and unexpected behavior.
+Its core principle is to verify behavior against explicit expectations.
+6.2 API contract testing
+The engine checks whether responses satisfy a specified contract.
+It can validate:
+* HTTP status codes.
+* Response schemas.
+* Required properties.
+* Data types.
+* Headers.
+* Error response formats.
+* Response invariants.
+OpenAPI specifications should eventually be supported as a source of API contracts.
+6.3 Boundary-value testing
+The engine generates test inputs near important boundaries.
+For example, if an API accepts an integer from 1 to 100, test values might include:
+* 
+1. 
+* 
+1. 
+* 
+2. 
+* 
+99. 
+* 
+100. 
+* 
+101. 
+It can also test missing values, null values, invalid types, and malformed input.
+6.4 Property-based testing
+The engine generates multiple inputs and checks whether specified properties remain true.
+A suitable TypeScript library to investigate is fast-check.
+Properties should come from API contracts, documented invariants, or developer-defined expectations.
+6.5 Stateful and concurrency testing
+Some defects only occur across multiple operations.
+For example, two simultaneous requests may attempt to purchase the last available item.
+The test should:
+1. Establish a known starting state.
+2. Send concurrent requests.
+3. Read the resulting state.
+4. Verify the expected invariant.
+5. Record a reproducible failure when the invariant is violated.
+This requires controlled test data and a clear definition of correct behavior.
+6.6 Authentication and authorization testing
+The engine can test documented access-control behavior using controlled accounts and resources.
+It should verify that:
+* Unauthenticated requests are rejected when required.
+* Expired credentials are handled correctly.
+* Users cannot access resources belonging to other test users when access is prohibited.
+* Privileged operations require the expected permissions.
+It must not access unrelated users' data or perform unauthorized testing against third-party systems.
+6.7 Independent usage
+API Bug Hunter should run without Performance Lab.
+A developer can execute contract checks and functional tests against a local or staging endpoint.
+The report should distinguish reproducible failures from unverified concerns.
+
+7. FEATURE FIVE: ADVERSARIAL TEST AGENT
+7.1 Purpose
+The Adversarial Test Agent generates additional test scenarios based on the application's contracts, source-code structure, previous failures, and observed runtime behavior.
+It goes beyond a fixed list of predefined test cases.
+7.2 How it works
+The agent follows a bounded workflow:
+1. Collect information about the target and permitted operations.
+2. Review existing tests and available contracts.
+3. Identify an area with incomplete test coverage or suspicious behavior.
+4. Form a test hypothesis.
+5. Generate a concrete test scenario.
+6. Validate the scenario against safety restrictions.
+7. Execute the scenario in an approved environment.
+8. Evaluate the result against explicit assertions.
+9. Save evidence and reproduction steps.
+10. Use the result to inform subsequent experiments.
+7.3 Example
+The agent discovers that an order API accepts an idempotency key.
+It proposes testing whether two simultaneous requests with the same key produce duplicate orders.
+The test runner executes the scenario against a controlled environment and verifies the resulting database state.
+If the documented contract promises idempotency and the test reproducibly violates it, the engine records a confirmed defect.
+7.4 Independence
+The agent can run as a standalone testing capability when supplied with a target, constraints, and a suitable test environment.
+It does not need to run a load test first.
+However, it should be able to use architecture findings and previous performance results when those are available.
+
+8. FEATURE SIX: RELIABILITY LAB
+8.1 Purpose
+Reliability Lab investigates how an application behaves when dependencies become slow, unavailable, or unreliable.
+8.2 Supported experiments
+Potential scenarios include:
+* Increased latency from an external API.
+* Database connection failures.
+* HTTP 500 responses from a dependency.
+* Network timeouts.
+* Queue consumer interruption.
+* Cache unavailability.
+* Service restarts.
+* Temporary dependency recovery.
+8.3 Measurements
+The engine should record:
+* Request failure rate.
+* Timeout rate.
+* Recovery time.
+* Retry count.
+* Duplicate operations.
+* Queue backlog, where observable.
+* Health-check status.
+* Error propagation.
+* Effects on unrelated request paths.
+8.4 Testing techniques
+The implementation can use:
+* Controlled fault injection.
+* Timeout testing.
+* Retry and backoff verification.
+* Recovery testing.
+* Circuit-breaker testing.
+* Dependency isolation.
+A tool such as Toxiproxy can eventually help introduce controlled network faults.
+8.5 Independent usage
+Reliability Lab should support standalone experiments when the developer has a suitable environment and the necessary instrumentation.
+The developer must explicitly authorize disruptive experiments, and destructive or state-changing scenarios should use isolated environments.
+Production fault injection should not be enabled by default.
+
+9. FEATURE SEVEN: DIGITAL TWIN / SYSTEM MODEL
+9.1 Purpose
+The Digital Twin capability builds a progressively richer representation of the application's architecture and observed behavior.
+It is not simply a diagram of source-code dependencies.
+The model should combine multiple evidence sources:
+* Static source-code analysis.
+* API specifications.
+* Configuration files.
+* Deployment descriptions.
+* Runtime traces.
+* Metrics.
+* Logs.
+* Results of controlled experiments.
+Not every integration is required for the first version.
+9.2 Model structure
+The model should represent:
+* Components.
+* Dependencies.
+* Request paths.
+* External services.
+* Databases.
+* Queues.
+* Caches.
+* Runtime observations.
+* Performance characteristics.
+* Known failure conditions.
+* Confidence in inferred relationships.
+Each relationship should identify its evidence source.
+For example, a dependency inferred from a source-code call should be distinguishable from a dependency observed in a runtime trace.
+9.3 Independent usage
+The System Model can operate without running a load test.
+It can inspect a repository and generate an initial component graph.
+If runtime telemetry is available, it can enrich that graph with observed behavior.
+The system should never imply that a source-code-only graph fully represents production behavior.
+
+10. FEATURE EIGHT: WHAT-IF EXPERIMENT ENGINE
+10.1 Purpose
+The What-If Engine evaluates alternative workloads, configurations, or implementations.
+It should help developers answer questions such as:
+* What happens if traffic doubles?
+* What happens if database latency increases?
+* What happens if the connection-pool size changes?
+* Does a proposed cache improve response times?
+* Does an alternative query improve throughput?
+* Does a new timeout configuration improve recovery behavior?
+10.2 Experiment workflow
+Each experiment should define:
+1. A baseline.
+2. A hypothesis.
+3. A controlled change.
+4. The workload or scenario.
+5. The measurements to collect.
+6. The success criteria.
+7. The results.
+8. The comparison against the baseline.
+For example, a developer may compare the existing product-listing query with an optimized version.
+Both implementations should be tested against equivalent data, workloads, and environment conditions.
+10.3 Measurements
+The engine can compare:
+* p50, p95, and p99 latency.
+* Throughput.
+* Error rate.
+* CPU and memory usage.
+* Database query time.
+* Resource consumption.
+* Functional correctness.
+10.4 Independent usage
+The engine can compare two configurations or implementations without enabling the full AI agent.
+AI may help formulate hypotheses, but the measurements and comparison should remain deterministic.
+Any projected results must be labeled as estimates rather than measured outcomes.
+
+11. FEATURE NINE: EVOLUTION ENGINE
+11.1 Purpose
+Evolution Engine helps developers evaluate proposed code fixes and architectural changes.
+The system should not automatically modify production code.
+Instead, it should create or use an isolated candidate implementation and compare it with a known baseline.
+11.2 Workflow
+1. Select a confirmed or suspected problem.
+2. Identify the relevant code path.
+3. Propose one or more candidate changes.
+4. Create an isolated branch or test environment.
+5. Run the existing test suite.
+6. Run relevant regression tests.
+7. Benchmark the baseline.
+8. Benchmark each candidate.
+9. Compare performance and correctness.
+10. Present the results for human review.
+11.3 Example
+A database query has high execution time.
+The Evolution Engine evaluates:
+* The existing query.
+* A candidate rewritten query.
+* A candidate index change.
+Each candidate is tested against the same dataset and equivalent workloads.
+The engine identifies which candidates improved performance, whether the improvement is statistically convincing, and whether any correctness tests failed.
+11.4 Safety requirements
+Candidate fixes must:
+* Be isolated from production.
+* Preserve the original implementation.
+* Pass appropriate correctness tests.
+* Avoid unapproved destructive operations.
+* Be reviewed before merging.
+* Be rejected when their changes cannot be verified adequately.
+11.5 Independent usage
+The Evolution Engine can be used independently when the developer supplies a baseline and candidate implementation.
+It does not require the AI analyst or the other engines to be enabled.
+
+12. FEATURE TEN: AI ANALYST
+12.1 Purpose
+The AI Analyst interprets collected evidence and helps developers decide what to investigate next.
+It is an optional intelligence layer, not the source of truth for measurements.
+12.2 Responsibilities
+The analyst can:
+* Summarize test results.
+* Explain performance degradation.
+* Relate findings to architecture.
+* Identify suspicious patterns.
+* Suggest additional experiments.
+* Prioritize investigations.
+* Explain potential consequences.
+* Recommend possible fixes.
+* Compare candidate solutions.
+* Summarize changes between experiment runs.
+12.3 Evidence-based analysis
+The AI should receive structured findings rather than unfiltered access to everything in the project.
+For example, it might receive:
+* Endpoint latency measurements.
+* Error rates.
+* Relevant source-code locations.
+* Database timing metrics.
+* Dependency relationships.
+* Test outcomes.
+* Existing findings.
+It should then produce a structured explanation.
+Every claim should be traceable to evidence where possible.
+12.4 AI independence
+The AI Analyst can operate independently on previously collected reports.
+It should not be required for load generation, architecture parsing, schema validation, metric calculations, or basic reporting.
+A developer without an AI API key should still be able to use the deterministic testing capabilities.
+12.5 Provider abstraction
+The package should expose an interface that permits different model providers to be integrated.
+The core package should not be tightly coupled to one AI vendor.
+AI requests must also respect source-code privacy, data redaction, and user configuration.
+
+13. FEATURE ELEVEN: EVIDENCE & REPORTING ENGINE
+13.1 Purpose
+The reporting engine combines findings from individual modules and makes them understandable and reproducible.
+Every engine should be able to produce its own report. The combined report is an additional capability, not a prerequisite.
+13.2 Finding structure
+A finding should contain:
+* Unique identifier.
+* Category.
+* Title.
+* Severity.
+* Status.
+* Evidence.
+* Source locations, where applicable.
+* Affected components.
+* Reproduction steps.
+* Potential impact.
+* Recommended investigation or fix.
+* Confidence.
+* Verification status.
+* Links to related experiments.
+A suggested TypeScript structure is:
+interface Finding {
+  id: string;
+
+  category:
+    | "performance"
+    | "architecture"
+    | "bug"
+    | "reliability"
+    | "security";
+
+  title: string;
+
+  severity:
+    | "critical"
+    | "high"
+    | "medium"
+    | "low";
+
+  status:
+    | "confirmed"
+    | "suspected"
+    | "needs-verification";
+
+  evidence: string[];
+
+  recommendation: string;
+}
+The actual implementation should support richer structured evidence and typed references.
+13.3 Finding classifications
+A confirmed performance-threshold breach is not the same as a confirmed functional bug.
+Similarly, an architecture rule that flags a possible problem is not proof that the application is defective.
+The report must clearly distinguish:
+* Observed measurement.
+* Confirmed threshold breach.
+* Reproducible functional defect.
+* Suspected architectural risk.
+* AI-generated hypothesis.
+* Unverified recommendation.
+13.4 Output formats
+The initial release should support:
+* Human-readable terminal output.
+* JSON reports.
+* Machine-readable exit codes for CI/CD.
+Later versions may support HTML reports and richer visualizations.
+
+14. FEATURE TWELVE: EXPERIMENT HISTORY
+14.1 Purpose
+Experiment History stores previous runs so developers can compare performance and behavior over time.
+14.2 Capabilities
+It should eventually support:
+* Saving baselines.
+* Comparing test runs.
+* Tracking regressions.
+* Recording candidate fixes.
+* Comparing architecture snapshots.
+* Tracking previously confirmed bugs.
+* Linking fixes to verification runs.
+* Identifying recurring failure patterns.
+14.3 Independent usage
+Experiment History can work as a local report repository without any AI capabilities.
+For the initial implementation, reports can be saved as JSON files.
+A database-backed history system can be introduced when the need for search, collaboration, or large experiment collections becomes clear.
+
+15. USING FEATURES INDIVIDUALLY AND TOGETHER
+Independent execution is a core product requirement.
+The package should not force developers to enable every engine for every task.
+Scenario A: Performance only
+A developer supplies a URL and API endpoints.
+SECOND WORLD runs a load test and returns latency, throughput, and error metrics.
+No repository access, AI provider, or architecture analysis is required.
+Scenario B: Architecture only
+A developer supplies a repository.
+SECOND WORLD parses the supported source files, builds a dependency graph, and reports potential architectural risks.
+A running application is optional.
+Scenario C: API bugs only
+A developer supplies a URL, API contracts, and test scenarios.
+SECOND WORLD executes the tests and reports reproducible failures.
+Load testing and AI analysis are optional.
+Scenario D: AI investigation only
+A developer provides an existing performance report.
+The AI Analyst explains the results, identifies possible causes, and suggests further investigations.
+No new load test is required.
+Scenario E: What-if testing only
+A developer supplies two configurations or implementations and a workload.
+SECOND WORLD benchmarks them against the same criteria and reports the differences.
+Scenario F: Complete investigation
+A developer provides a repository, running application, API contracts, and suitable telemetry.
+SECOND WORLD:
+1. Inspects the architecture.
+2. Identifies important request paths.
+3. Runs performance tests.
+4. Executes API correctness checks.
+5. Correlates failures with dependencies and runtime evidence.
+6. Generates hypotheses.
+7. Runs approved additional experiments.
+8. Evaluates candidate fixes.
+9. Produces a unified report.
+Each scenario should use the same underlying types, configuration validation, safety controls, and evidence model.
+
+16. PROPOSED PACKAGE ARCHITECTURE
+The first release should be a single TypeScript package with modular internal components.
+A possible structure is:
+second-world/
+?
+??? src/
+?   ??? index.ts
+?   ?
+?   ??? cli/
+?   ?   ??? commands/
+?   ?   ??? output.ts
+?   ?
+?   ??? core/
+?   ?   ??? orchestrator.ts
+?   ?   ??? config.ts
+?   ?   ??? errors.ts
+?   ?
+?   ??? performance/
+?   ?   ??? scheduler.ts
+?   ?   ??? request-executor.ts
+?   ?   ??? worker-pool.ts
+?   ?   ??? metrics.ts
+?   ?
+?   ??? architecture/
+?   ?   ??? source-parser.ts
+?   ?   ??? dependency-graph.ts
+?   ?   ??? rules.ts
+?   ?
+?   ??? bugs/
+?   ?   ??? assertions.ts
+?   ?   ??? schema-checker.ts
+?   ?   ??? concurrency-tests.ts
+?   ?
+?   ??? reliability/
+?   ?   ??? fault-scenarios.ts
+?   ?   ??? recovery-tests.ts
+?   ?
+?   ??? experiments/
+?   ?   ??? experiment-runner.ts
+?   ?   ??? comparisons.ts
+?   ?
+?   ??? agents/
+?   ?   ??? test-agent.ts
+?   ?   ??? ai-analyst.ts
+?   ?
+?   ??? evidence/
+?   ?   ??? collector.ts
+?   ?   ??? findings.ts
+?   ?   ??? report.ts
+?   ?
+?   ??? types/
+?       ??? index.ts
+?
+??? tests/
+??? examples/
+??? docs/
+??? package.json
+??? tsconfig.json
+??? vitest.config.ts
+??? README.md
+??? LICENSE
+??? .gitignore
+This is a proposed organization, not a requirement to implement every module immediately.
+The initial codebase should contain only the modules needed for the first milestone.
+
+17. TECHNOLOGY STACK
+Core implementation
+TypeScript and Node.js
+Used for the npm package, CLI, orchestration, configuration, testing logic, and report generation.
+Configuration
+Zod
+Used to validate test configurations and structured inputs.
+CLI
+Commander
+Used to create developer-friendly commands.
+Source-code analysis
+TypeScript Compiler API
+Used to parse TypeScript source files and extract supported structural information.
+Testing
+Vitest
+Used for unit tests and package-level testing.
+HTTP testing
+Use Node.js HTTP capabilities or a suitable HTTP client for controlled request execution.
+For mature load-generation functionality, evaluate integrating an existing engine such as k6 or Artillery rather than reimplementing every capability.
+Browser testing
+Playwright
+Can be introduced later for browser workflows, UI behavior, and realistic multi-step scenarios.
+AI integration
+A provider abstraction with optional structured-output support.
+Data storage
+JSON reports initially. Introduce a database only when persistent history or collaboration requires it.
+Observability
+Later integrations can support OpenTelemetry-compatible traces, metrics, and logs.
+CI/CD
+GitHub Actions for automated testing, packaging, and release workflows.
+
+18. ALGORITHMS AND COMPUTER SCIENCE REQUIREMENTS
+The project does not require inventing new algorithms.
+It requires applying established algorithms and techniques correctly.
+TechniquePrimary useBounded concurrencyControl simultaneous requestsQueue schedulingManage workload executionPercentile statisticsAnalyze latency distributionsHistogramsAggregate large numbers of measurementsRate schedulingGenerate target request ratesBreadth-first searchTraverse dependency graphsDepth-first searchAnalyze dependencies and detect cyclesStrongly connected componentsIdentify cyclic graph structuresAST traversalInspect source codeRule-based analysisIdentify potential code and configuration risksProperty-based testingGenerate inputs and validate propertiesBoundary-value analysisTest edge casesState-machine testingTest sequences of operationsConcurrency testingDetect race conditions and state inconsistenciesBaseline comparisonEvaluate performance changesStatistical comparisonDetermine whether measured improvements are convincingEvidence correlationConnect code paths, runtime traces, and performance resultsAnomaly detectionIdentify unusual behavior in historical measurementsAdvanced machine learning is not required for the initial version.
+Reliable measurements, clear contracts, and reproducible experiments are more important than adding a sophisticated AI model prematurely.
+
+19. SAFETY AND TRUST REQUIREMENTS
+SECOND WORLD will generate traffic and may inspect source code. Safety must be designed into the architecture.
+The package should:
+* Default to local and approved staging environments.
+* Require authorization for external targets.
+* Enforce configurable request and concurrency limits.
+* Provide immediate cancellation.
+* Prevent unintended access to unrelated hosts.
+* Avoid executing arbitrary repository code during static analysis.
+* Redact secrets and sensitive response data.
+* Use isolated test databases for state-changing scenarios.
+* Require explicit approval for disruptive fault injection.
+* Keep AI access to tools and execution capabilities restricted.
+* Preserve an audit trail of experiments.
+* Distinguish measured facts from AI hypotheses.
+The package should also avoid assuming that a successful HTTP response proves the underlying business operation succeeded. Where necessary, tests should verify application state through an explicit contract or controlled test instrumentation.
+
+20. DEVELOPMENT ROADMAP
+The complete vision is ambitious, so development should be incremental.
+Phase 1: Package foundation
+Build:
+* TypeScript package.
+* CLI.
+* Configuration validation.
+* Error handling.
+* Test infrastructure.
+* JSON output.
+Deliverable: A working package foundation.
+Phase 2: Performance Lab
+Build:
+* HTTP workload execution.
+* Bounded concurrency.
+* Ramp-up.
+* Timeouts.
+* Latency metrics.
+* Throughput and error-rate calculations.
+* Percentile reporting.
+* Threshold evaluation.
+Deliverable: An independently usable performance-testing engine.
+Phase 3: Architecture Inspector
+Build:
+* Source discovery.
+* TypeScript parsing.
+* Route detection.
+* Dependency extraction.
+* Graph generation.
+* Initial static rules.
+Deliverable: An architecture report.
+Phase 4: API Bug Hunter
+Build:
+* Contract assertions.
+* Schema validation.
+* Boundary tests.
+* Reproducible test reports.
+* Selected concurrency tests.
+Deliverable: An independently usable API testing engine.
+Phase 5: Evidence and AI Analyst
+Build:
+* Shared finding schema.
+* Evidence collection.
+* Structured reports.
+* Optional AI explanations.
+* Finding classification.
+Deliverable: A unified investigation report.
+Phase 6: Runtime correlation
+Add:
+* Runtime traces.
+* Application metrics.
+* Database telemetry.
+* Code-path correlation.
+* Dependency-aware performance analysis.
+Deliverable: Better-supported explanations for performance problems.
+Phase 7: Advanced experimentation
+Add:
+* Adversarial test generation.
+* Controlled failure scenarios.
+* What-if experiments.
+* Candidate-fix benchmarking.
+* Experiment history.
+Deliverable: The first version of the broader experimentation platform.
+
+21. SUCCESS CRITERIA
+The project should be evaluated on measurable engineering outcomes.
+Performance Lab
+Can it measure throughput and latency correctly against a controlled test server?
+Architecture Inspector
+Can it identify known dependencies in supported example projects and link findings to source locations?
+API Bug Hunter
+Can it reliably reproduce deliberately introduced defects without reporting every unusual response as a bug?
+Reliability Lab
+Can it run controlled fault scenarios and measure recovery behavior without affecting unrelated systems?
+AI Analyst
+Can its explanations be traced to collected evidence, and does it distinguish hypotheses from confirmed findings?
+Evolution Engine
+Can it compare baseline and candidate implementations under equivalent conditions and detect regressions?
+Overall product
+Can each module be used independently, while the complete workflow combines their findings without duplicating or contradicting evidence?
+These tests should form the acceptance criteria for the corresponding milestones.
+
+22. FINAL PRODUCT DEFINITION
+SECOND WORLD is a modular software experimentation engine designed to help developers understand, test, and improve their applications.
+Its individual capabilities cover performance testing, capacity analysis, architecture inspection, functional bug detection, adversarial test generation, reliability testing, system modeling, what-if experiments, candidate-fix benchmarking, AI-assisted investigation, evidence-based reporting, and experiment history.
+Each capability must be independently usable when its required inputs and environment are available. Developers should not need to enable the entire platform to run one test.
+The initial implementation will be a TypeScript npm package with a CLI, a shared configuration and evidence model, and independent testing modules.
+The long-term objective is to connect source code, architecture, workload behavior, runtime telemetry, reproducible failures, and candidate fixes into one engineering workflow.
+The defining principle is that SECOND WORLD should not merely tell developers what might be wrong. It should help them collect evidence, reproduce problems, experiment with solutions, and verify whether those solutions work.
+

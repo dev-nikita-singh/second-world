@@ -1,0 +1,195 @@
+{
+  "$comment": "Ground truth for SECOND WORLD recall/precision (docs/12-testing-and-quality.md §3). location.line = the line after the SEEDED-DEFECT marker; refresh with `node examples/_tools/sync-expected-findings.mjs examples/shop-fastify`. Reproduced by tests/integration/examples/shop-fastify.test.ts. `correctByDesign` lists behaviours that are implemented correctly here and must NOT be reported (precision). location.symbol = enclosing exported function; location.handler = route whose handler contains the defect; location.callee = the offending call.",
+  "schemaVersion": 1,
+  "app": "shop-fastify",
+  "framework": "fastify@5",
+  "defects": [
+    {
+      "id": "slow-search",
+      "engine": "evolution",
+      "alsoDetectableBy": [
+        "performance",
+        "architecture"
+      ],
+      "category": "performance",
+      "ruleId": "perf/slow-query-full-scan",
+      "severity": "medium",
+      "title": "Product search does a full scan with one query per product",
+      "endpoint": "GET /products/search",
+      "reproduction": "GET /products/search?q=red -> 41 queries (1 + 40); FIXED=1 -> 1 query",
+      "fix": "Use the inverted index (db.searchIndexed) — enabled by FIXED=1",
+      "fixedBy": "FIXED=1",
+      "location": {
+        "file": "src/server.ts",
+        "line": 69,
+        "symbol": "createApp",
+        "handler": "GET /products/search"
+      }
+    },
+    {
+      "id": "retry-no-jitter",
+      "engine": "reliability",
+      "alsoDetectableBy": [
+        "architecture"
+      ],
+      "category": "reliability",
+      "ruleId": "reliability/retry-without-jitter",
+      "severity": "medium",
+      "title": "Retries to payments use a constant 50 ms delay without jitter (synchronised retry storm)",
+      "endpoint": "POST /orders",
+      "reproduction": "payments failNext=3 -> attempt gaps are all ~50 ms (constant, identical across clients)",
+      "fix": "Exponential backoff with full jitter",
+      "location": {
+        "file": "src/payments-client.ts",
+        "line": 33,
+        "symbol": "charge"
+      }
+    },
+    {
+      "id": "no-circuit-breaker",
+      "engine": "reliability",
+      "alsoDetectableBy": [],
+      "category": "reliability",
+      "ruleId": "reliability/no-circuit-breaker",
+      "severity": "medium",
+      "title": "No circuit breaker: a failing payments provider is called 4x on every order forever",
+      "endpoint": "POST /orders",
+      "reproduction": "payments failPct=100; 5 orders -> 20 attempts (no short-circuit after repeated failures)",
+      "fix": "Open a breaker after N consecutive failures; fail fast with 503 while open",
+      "location": {
+        "file": "src/payments-client.ts",
+        "line": 13,
+        "symbol": "charge"
+      }
+    },
+    {
+      "id": "boundary-500-limit",
+      "engine": "bugs",
+      "alsoDetectableBy": [
+        "agent"
+      ],
+      "category": "bug",
+      "ruleId": "bugs/server-error-on-boundary",
+      "severity": "medium",
+      "title": "500 on boundary page size (limit=0 or negative) instead of 400",
+      "endpoint": "GET /products",
+      "reproduction": "GET /products?limit=0 -> 500; limit=-1 -> 500",
+      "fix": "Validate 1 <= limit <= 100 with a Fastify querystring schema",
+      "location": {
+        "file": "src/server.ts",
+        "line": 59,
+        "symbol": "createApp",
+        "handler": "GET /products"
+      }
+    },
+    {
+      "id": "bfla-delete-product",
+      "engine": "bugs",
+      "alsoDetectableBy": [
+        "agent"
+      ],
+      "category": "security",
+      "ruleId": "bugs/bfla",
+      "severity": "critical",
+      "title": "Broken function-level authorization: customers can DELETE /products/:id (admin-only)",
+      "endpoint": "DELETE /products/{id}",
+      "reproduction": "DELETE /products/1 with bob-token -> 204 (contract: 403)",
+      "fix": "Require role admin",
+      "location": {
+        "file": "src/server.ts",
+        "line": 88,
+        "symbol": "createApp",
+        "handler": "DELETE /products/:id"
+      }
+    },
+    {
+      "id": "sync-fs-in-handler",
+      "engine": "architecture",
+      "alsoDetectableBy": [
+        "performance"
+      ],
+      "category": "performance",
+      "ruleId": "perf/sync-io-in-handler",
+      "severity": "low",
+      "title": "readFileSync on every GET /terms request",
+      "endpoint": "GET /terms",
+      "reproduction": "Static: fs.readFileSync call inside a route handler",
+      "fix": "Read once at startup or use fs.promises",
+      "location": {
+        "file": "src/server.ts",
+        "line": 94,
+        "symbol": "createApp",
+        "handler": "GET /terms",
+        "callee": "readFileSync"
+      }
+    },
+    {
+      "id": "schema-drift-created-at",
+      "engine": "bugs",
+      "alsoDetectableBy": [],
+      "category": "correctness",
+      "ruleId": "bugs/schema-mismatch",
+      "severity": "medium",
+      "title": "Schema drift: GET /orders/:id returns createdAt as a number (contract: date-time string)",
+      "endpoint": "GET /orders/{id}",
+      "jsonPointer": "/createdAt",
+      "reproduction": "Create an order, GET /orders/<id> -> createdAt is epoch millis",
+      "fix": "Return the ISO string",
+      "location": {
+        "file": "src/server.ts",
+        "line": 130,
+        "symbol": "createApp",
+        "handler": "GET /orders/:id"
+      }
+    },
+    {
+      "id": "idempotency-key-race",
+      "engine": "agent",
+      "alsoDetectableBy": [
+        "bugs"
+      ],
+      "category": "bug",
+      "ruleId": "agent/idempotency-key-race",
+      "severity": "high",
+      "title": "Concurrent POST /orders with the same Idempotency-Key each create an order",
+      "description": "DISCOVERED, not planted: found by the Adversarial Test Agent (idempotency-concurrent technique) and kept as ground truth. The key lookup -> await (stock, payment) -> insert sequence is not atomic; sequential repeats ARE replayed correctly (see correctByDesign idempotency-honoured).",
+      "discovered": true,
+      "endpoint": "POST /orders",
+      "reproduction": "Send 5 concurrent POST /orders with one Idempotency-Key -> more than one distinct order id",
+      "fix": "Make key reservation atomic: insert the key (unique) before doing the work, or a per-key lock; concurrent duplicates wait for and replay the first response",
+      "location": {
+        "file": "src/server.ts",
+        "line": 107,
+        "symbol": "createApp",
+        "handler": "POST /orders"
+      }
+    }
+  ],
+  "correctByDesign": [
+    {
+      "id": "idempotency-honoured",
+      "endpoint": "POST /orders",
+      "note": "Sequential repeats with the same Idempotency-Key return the original order. Concurrent duplicates are NOT handled: known discovered defect idempotency-key-race."
+    },
+    {
+      "id": "orders-ownership-checked",
+      "endpoint": "GET /orders/{id}",
+      "note": "Other users get 404 (no BOLA)"
+    },
+    {
+      "id": "stock-atomic",
+      "endpoint": "POST /orders",
+      "note": "Atomic conditional decrement: never oversells"
+    },
+    {
+      "id": "outbound-timeout",
+      "endpoint": "POST /orders",
+      "note": "fetch uses AbortSignal.timeout(2000)"
+    },
+    {
+      "id": "order-qty-validated",
+      "endpoint": "POST /orders",
+      "note": "qty outside 1..100 -> 400"
+    }
+  ]
+}

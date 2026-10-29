@@ -1,0 +1,17 @@
+# Fixture: how shop-express + payments-fake would be deployed together (tests/integration/model).
+services:
+  shop:
+    build: ../../../../examples/shop-express
+    ports:
+      - "3000:3000"
+    environment:
+      PAYMENTS_URL: http://payments:4010
+      SESSION_SECRET: s3cr3t-fixture-value-do-not-store
+    depends_on:
+      - payments
+  payments:
+    build: ../../../../examples/payments-fake
+    ports:
+      - "4010:4010"
+    environment:
+      - PORT=4010

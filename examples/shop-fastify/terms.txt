@@ -1,0 +1,2 @@
+Terms of service (fixture).
+This file is read synchronously on every GET /terms request (seeded defect).

@@ -1,0 +1,249 @@
+openapi: 3.1.0
+info:
+  title: shop-express (intended contract)
+  version: 1.0.0
+  description: >
+    The CORRECT behaviour of the shop API. The implementation in src/ deviates from
+    this contract in seeded, documented ways (see expected-findings.json); this file is
+    what SECOND WORLD's API Bug Hunter checks against.
+servers:
+  - url: http://127.0.0.1:3000
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Repeating a request with the same key returns the original response and creates nothing new.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Review:
+      type: object
+      required: [id, productId, rating, text]
+      properties:
+        id: { type: integer }
+        productId: { type: integer }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        text: { type: string }
+    Product:
+      type: object
+      required: [id, name, price, stock, category]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+        price: { type: number, minimum: 0 }
+        stock: { type: integer, minimum: 0 }
+        category: { type: string, enum: [books, games, tools, garden] }
+    ProductWithReviews:
+      allOf:
+        - $ref: "#/components/schemas/Product"
+        - type: object
+          required: [reviews]
+          properties:
+            reviews:
+              type: array
+              items: { $ref: "#/components/schemas/Review" }
+    Quantity:
+      type: integer
+      minimum: 1
+      maximum: 100
+    Line:
+      type: object
+      required: [productId, qty]
+      properties:
+        productId: { type: integer, minimum: 1 }
+        qty: { $ref: "#/components/schemas/Quantity" }
+    CartItem:
+      type: object
+      required: [productId, qty, unitPrice]
+      properties:
+        productId: { type: integer }
+        qty: { $ref: "#/components/schemas/Quantity" }
+        unitPrice: { type: number }
+    Order:
+      type: object
+      required: [id, userId, items, total, status, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            required: [productId, qty, unitPrice]
+            properties:
+              productId: { type: integer }
+              qty: { $ref: "#/components/schemas/Quantity" }
+              unitPrice: { type: number }
+        total: { type: number, minimum: 0 }
+        status: { type: string, enum: [pending, paid, payment_failed] }
+        chargeId: { type: string }
+        createdAt: { type: string, format: date-time }
+paths:
+  /healthz:
+    get:
+      security: []
+      responses:
+        "200": { description: OK }
+  /auth/login:
+    post:
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, userId, role]
+                properties:
+                  token: { type: string }
+                  userId: { type: string }
+                  role: { type: string, enum: [customer, admin] }
+        "400": { description: Invalid body }
+        "401": { description: Bad credentials }
+  /products:
+    get:
+      security: []
+      parameters:
+        - { name: category, in: query, schema: { type: string } }
+        - { name: include, in: query, schema: { type: string, enum: [reviews] } }
+      responses:
+        "200":
+          description: Product list (with reviews when include=reviews)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      anyOf:
+                        - $ref: "#/components/schemas/Product"
+                        - $ref: "#/components/schemas/ProductWithReviews"
+  /products/{id}:
+    get:
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: The product
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { description: Invalid id }
+        "404": { description: Not found }
+  /cart:
+    get:
+      responses:
+        "200":
+          description: Current user's cart
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CartItem" } }
+                  total: { type: number }
+        "401": { description: Unauthenticated }
+    delete:
+      responses:
+        "204": { description: Cleared }
+        "401": { description: Unauthenticated }
+  /cart/items:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Line" }
+      responses:
+        "201":
+          description: Item added/updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CartItem" } }
+        "400": { description: Invalid body or qty outside 1..100 }
+        "401": { description: Unauthenticated }
+        "404": { description: Unknown product }
+  /orders:
+    get:
+      responses:
+        "200":
+          description: The current user's orders only
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Order" } }
+        "401": { description: Unauthenticated }
+    post:
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items: { type: array, minItems: 1, items: { $ref: "#/components/schemas/Line" } }
+      responses:
+        "201":
+          description: Order created and paid. Never oversells stock. Same Idempotency-Key → same order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "400": { description: Invalid body or qty outside 1..100 }
+        "401": { description: Unauthenticated }
+        "404": { description: Unknown product }
+        "409": { description: Out of stock }
+        "504": { description: Payment provider timed out (bounded, < 5 s) }
+  /orders/{id}:
+    get:
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The order, only if it belongs to the caller (or caller is admin)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "401": { description: Unauthenticated }
+        "404": { description: Not found or not yours }
+  /admin/stats:
+    get:
+      responses:
+        "200": { description: Admin dashboard data }
+        "401": { description: Unauthenticated }
+        "403": { description: Not an admin }
