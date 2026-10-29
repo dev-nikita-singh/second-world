@@ -282,6 +282,14 @@ export function buildEvolutionInput(cfg: ResolvedConfig, input: Obj = {}): Obj {
   const merged = deepMerge(sec, input);
   if (merged.repo === undefined) merged.repo = cfg.cwd;
   else if (typeof merged.repo === "string") merged.repo = resolvePath(cfg.cwd, merged.repo);
+  // SECOND WORLD's own state is never a "working tree change" (the CLI adds the same; API callers too).
+  const own = [".second-world", cfg.config.report.outDir, cfg.config.history.dir].map((p) => resolvePath(cfg.cwd, p));
+  for (const sec of ["architecture", "model"] as const) {
+    const c = (cfg.config[sec] as Obj | undefined)?.cacheDir;
+    if (typeof c === "string") own.push(resolvePath(cfg.cwd, c));
+  }
+  const given = Array.isArray(merged.ignorePaths) ? (merged.ignorePaths as unknown[]).filter((x): x is string => typeof x === "string") : [];
+  merged.ignorePaths = [...new Set([...own, ...given.map((p) => resolvePath(cfg.cwd, p))])];
   if (merged.workload === undefined && isObj(cfg.config.performance)) {
     const { target: _t, ...rest } = cfg.config.performance as Obj;
     resolvePerfAuthRoles(cfg, rest, "performance");
