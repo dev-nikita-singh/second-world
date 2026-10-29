@@ -138,6 +138,7 @@ export async function runPerfWorker(port: MessagePort, init: WorkerInit): Promis
         ? new Gcra({ rate: init.rpsCap, burst: Math.max(1, Math.ceil(init.rpsCap / 10)) })
         : null;
     let taken = 0;
+    let lastWindowSent = Number.NaN;
     send({ t: "ready" });
     const startAt = await started;
     // Shared absolute start: epoch ms → this thread's monotonic clock.
@@ -174,10 +175,17 @@ export async function runPerfWorker(port: MessagePort, init: WorkerInit): Promis
       },
       onStop: (reason) => send({ t: "stop", reason }),
       onTick: (t) => {
+        // The tick's p95/p99 come from the newest closed window; main merges it across workers.
+        const w = t.metrics.series.lastClosed();
+        const sendWindow = w?.histogram != null && w.startMs !== lastWindowSent;
+        if (sendWindow) lastWindowSent = w.startMs;
         send({
           t: "tick",
           payload: t.payload,
           taken,
+          ...(sendWindow && w?.histogram
+            ? { window: { startMs: w.startMs, hist: w.histogram.encode() } }
+            : {}),
           ...(init.snapshotTicks && t.now >= t.measureStart
             ? { snapshot: snapshotMetrics(t.metrics, { windows: false }) }
             : {}),

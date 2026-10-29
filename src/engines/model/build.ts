@@ -5,6 +5,7 @@
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { maybeGunzip, stripGzipExtension } from "../../adapters/telemetry/gzip.js";
 import { type NormalizedMetric, type NormalizedSpan, parseOtlp } from "../../adapters/telemetry/otlp.js";
 import { isOtlpProtobufFile, parseOtlpProtobuf } from "../../adapters/telemetry/otlp-proto.js";
 import { parsePrometheus } from "../../adapters/telemetry/prometheus.js";
@@ -294,9 +295,12 @@ export async function buildModel(
   };
   for (const f of input.traces) {
     try {
-      const buf = await readFile(path.resolve(cwd, f));
+      // gzip (magic 1f 8b, any name) is decompressed under a size/ratio cap, then detected as usual.
+      const raw = await readFile(path.resolve(cwd, f));
+      const gz = maybeGunzip(raw);
+      const buf = Buffer.from(gz.bytes.buffer, gz.bytes.byteOffset, gz.bytes.byteLength);
       addParsed(
-        isOtlpProtobufFile(f, buf)
+        isOtlpProtobufFile(gz.gzipped ? stripGzipExtension(f) : f, buf)
           ? parseOtlpProtobuf(buf, { maxSpans: input.maxSpans })
           : parseOtlp(buf.toString("utf8"), { maxSpans: input.maxSpans }),
         f,

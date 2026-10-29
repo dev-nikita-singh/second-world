@@ -3,7 +3,7 @@
  * from its self-contained artifact even though the config has no concurrency tests, and an
  * artifact whose check cannot be resolved must be "inconclusive" (exit 2), never "fixed" (exit 0).
  */
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runCli } from "../../helpers/cli.js";
@@ -27,6 +27,25 @@ function findArtifact(dir: string, fingerprint: string): string {
     }
   }
   throw new Error(`artifact for ${fingerprint} not found`);
+}
+
+interface ReportLike {
+  results?: ReportLike[];
+  artifacts?: { path: string }[];
+  findings?: { reproduction?: { artifacts?: string[] }; evidence?: { artifact?: string }[] }[];
+}
+
+/** Every artifact path referenced anywhere in a report (result artifacts, reproductions, evidence). */
+function referencedPaths(report: ReportLike): string[] {
+  const paths: string[] = [];
+  for (const r of [report, ...(report.results ?? [])]) {
+    for (const a of r.artifacts ?? []) paths.push(a.path);
+    for (const f of r.findings ?? []) {
+      paths.push(...(f.reproduction?.artifacts ?? []));
+      for (const e of f.evidence ?? []) if (e.artifact) paths.push(e.artifact);
+    }
+  }
+  return paths;
 }
 
 const reset = (): Promise<Response> => fetch(`${app.url}/__test/reset`, { method: "POST" });
@@ -88,6 +107,19 @@ describe("sw bugs → sw replay (concurrency finding)", () => {
     const race = findings.find((f) => f.ruleId === "bugs/race-lost-update");
     expect(race?.classification).toBe("reproduced-defect");
     fp = race?.fingerprint as string;
+    // Every referenced artifact (JSON + HAR) must exist after the pending dir is renamed (stdout and report.json).
+    const written = JSON.parse(
+      readFileSync(join(tmp.path, ".second-world", "reports", "report.json"), "utf8"),
+    ) as ReportLike;
+    for (const rep of [report as ReportLike, written]) {
+      const paths = referencedPaths(rep);
+      expect(paths.some((p) => p.endsWith(join(`bugs-${fp}`, "reproduction.har")))).toBe(true);
+      expect(paths.some((p) => p.endsWith(`bugs-${fp}.json`))).toBe(true);
+      for (const p of paths) {
+        expect(existsSync(p), p).toBe(true);
+        expect(p).not.toMatch(/pending-/);
+      }
+    }
     artifactPath = findArtifact(tmp.path, fp);
     const art = JSON.parse(readFileSync(artifactPath, "utf8")) as {
       case: { context?: { concurrency?: { invariant?: unknown } } };

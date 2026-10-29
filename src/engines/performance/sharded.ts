@@ -7,7 +7,8 @@
  * within a grace period), the Safety Guard hooks (DNS pinning, re-checks, redirect checks are RPCs
  * answered here), abortOnFail thresholds (evaluated on merged live snapshots) and the final result.
  * Each worker runs the in-process generator (`runLoad`) on its share and returns HDR histograms
- * that are merged bucket-wise (exact). CO correction and the generator self-check happen per worker.
+ * that are merged bucket-wise (exact). Live perf.tick p95/p99 are exact too: the workers' newest closed
+ * 1 s window histograms are HDR-added once per window (tick-merge.ts). CO correction and the generator self-check happen per worker.
  *
  * Rate caps: a closed/iterations rate cap (min(safety.maxRps, budget.maxRps)) becomes a GCRA at
  * cap/N in every worker. With an uneven VU split the total can stay below the cap (limitation).
@@ -37,6 +38,7 @@ import {
 import type { PerformanceInput } from "./schema.js";
 import type { GeneratorHealth } from "./self-check.js";
 import { type MetricsSnapshot, mergeSnapshots, planShards } from "./shard.js";
+import { TickWindowMerger } from "./tick-merge.js";
 import type { PerformanceData } from "./types.js";
 import {
   type MainToWorker,
@@ -234,6 +236,7 @@ export async function executeSharded(
 
   // ---- spawn
   const slots: Slot[] = [];
+  const tickMerger = new TickWindowMerger(plans.length);
   let failure: RpcError | null = null;
   let globalStop: { reason: StopReason; safetyAbort?: SafetyAbortInfo } | null = null;
   let terminateTimer: ReturnType<typeof setTimeout> | undefined;
@@ -339,6 +342,7 @@ export async function executeSharded(
           break;
         case "tick":
           slot.lastTick = m.payload;
+          if (m.window) tickMerger.offer(slot.index, m.window.startMs, m.window.hist);
           slot.taken = m.taken;
           if (m.snapshot) slot.lastSnapshot = m.snapshot;
           account(slot);
@@ -408,13 +412,15 @@ export async function executeSharded(
   const tick = setInterval(() => {
     const ticks = slots.map((s) => s.lastTick).filter((x): x is TickPayload => x !== undefined);
     if (ticks.length === 0) return;
+    // Exact union percentiles: HDR-add the newest window every live worker closed (once per window).
+    const merged = tickMerger.merge(slots.map((s) => !s.done));
     ctx.events.emit("perf.tick", {
       runId: pre.runId,
       elapsedS: Math.max(...ticks.map((t) => t.elapsedS)),
       phase: ticks[0]?.phase ?? "measure",
       rps: round(ticks.reduce((a, t) => a + t.rps, 0)),
-      p95: Math.max(...ticks.map((t) => t.p95)),
-      p99: Math.max(...ticks.map((t) => t.p99)),
+      p95: merged ? Math.round(merged.p95) / 1000 : 0,
+      p99: merged ? Math.round(merged.p99) / 1000 : 0,
       errors: ticks.reduce((a, t) => a + t.errors, 0),
       totalErrors: ticks.reduce((a, t) => a + t.totalErrors, 0),
       requests: ticks.reduce((a, t) => a + t.requests, 0),

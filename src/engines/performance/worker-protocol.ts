@@ -49,7 +49,14 @@ export type OutcomeSnapshot = Omit<LoadOutcome, "metrics" | "t0">;
 export type WorkerToMain =
   | { t: "ready" }
   | { t: "rpc"; id: number; req: RpcRequest }
-  | { t: "tick"; payload: TickPayload; taken: number; snapshot?: MetricsSnapshot }
+  | {
+      t: "tick";
+      payload: TickPayload;
+      taken: number;
+      snapshot?: MetricsSnapshot;
+      /** Newest closed 1 s window (sent once per window): merged in main for exact tick p95/p99. */
+      window?: { startMs: number; hist: string };
+    }
   | { t: "stop"; reason: StopReason }
   | { t: "done"; outcome: OutcomeSnapshot; snapshot: MetricsSnapshot; taken: number }
   | { t: "fail"; error: RpcError };

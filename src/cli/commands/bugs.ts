@@ -6,7 +6,7 @@
  * Reproductions are persisted under .second-world/artifacts/<runId>/bugs-<fingerprint>.json.
  */
 import { existsSync, readdirSync, renameSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { ulid } from "ulid";
 import { ConfigError, ExitCode, SecondWorldError } from "../../core/errors.js";
 import type { EngineResult } from "../../core/evidence/schemas.js";
@@ -95,6 +95,20 @@ export function bugsInputFromFlags(o: Record<string, unknown>, cwd = process.cwd
   return input;
 }
 
+/**
+ * Rewrites every artifact path under `from` to the same path under `to`, wherever the result
+ * references it: result.artifacts, findings[].reproduction.artifacts and findings[].evidence[].artifact.
+ * Called after the pending artifacts dir is renamed to the runId, so no reference points at a gone path.
+ */
+export function relocateArtifacts(result: EngineResult, from: string, to: string): void {
+  const move = (p: string): string => (p === from || p.startsWith(from + sep) || p.startsWith(`${from}/`) ? to + p.slice(from.length) : p);
+  result.artifacts = result.artifacts.map((a) => ({ ...a, path: move(a.path) }));
+  for (const f of result.findings) {
+    if (f.reproduction) f.reproduction = { ...f.reproduction, artifacts: f.reproduction.artifacts.map(move) };
+    f.evidence = f.evidence.map((e) => ("artifact" in e && typeof e.artifact === "string" ? { ...e, artifact: move(e.artifact) } : e));
+  }
+}
+
 export async function bugsCommand(o: Record<string, unknown>, g: GlobalOptions): Promise<void> {
   const s = style(colorEnabled(g));
   const world = await worldFromGlobals(g);
@@ -137,7 +151,7 @@ export async function bugsCommand(o: Record<string, unknown>, g: GlobalOptions):
       const final = join(artifactsRoot, result.runId);
       try {
         renameSync(pending, final);
-        result.artifacts = result.artifacts.map((a) => (a.path.startsWith(pending) ? { ...a, path: final + a.path.slice(pending.length) } : a));
+        relocateArtifacts(result, pending, final);
       } catch {
         // keep the pending dir; replay searches every artifacts subdir
       }

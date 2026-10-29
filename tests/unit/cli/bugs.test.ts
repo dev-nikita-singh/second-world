@@ -6,8 +6,9 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { bugsInputFromFlags, parseInvariant } from "../../../src/cli/commands/bugs.js";
+import { bugsInputFromFlags, parseInvariant, relocateArtifacts } from "../../../src/cli/commands/bugs.js";
 import { loadConfig } from "../../../src/core/config/loader.js";
+import type { EngineResult } from "../../../src/core/evidence/schemas.js";
 import { buildBugsInput } from "../../../src/core/world.js";
 import { REPO_ROOT, runCli } from "../../helpers/cli.js";
 import { type RunningExample, startExample } from "../../helpers/examples.js";
@@ -176,4 +177,34 @@ describe("sw bugs / sw replay vs shop-express (subprocess)", () => {
     expect(res.limitations.map((l: { code: string }) => l.code)).toContain("BUGS_MUTATIONS_BLOCKED");
     expect(res.data.mutationsAllowed).toBe(false);
   }, 150_000);
+});
+
+describe("relocateArtifacts (pending dir renamed to the runId)", () => {
+  it("rewrites result.artifacts, reproduction.artifacts and evidence[].artifact; leaves other paths", () => {
+    const from = join("root", "pending-X");
+    const to = join("root", "RUN");
+    const json = join(from, "bugs-ab.json");
+    const har = join(from, "bugs-ab", "reproduction.har");
+    const result = {
+      artifacts: [
+        { name: "bugs-ab", path: json, mediaType: "application/json" },
+        { name: "other", path: join("root", "pending-XY", "f.json"), mediaType: "application/json" },
+      ],
+      findings: [
+        {
+          reproduction: { steps: [], artifacts: [json, har] },
+          evidence: [
+            { kind: "http-exchange", requestHash: "ab", method: "GET", url: "u", status: 500, artifact: json },
+            { kind: "note", text: "x" },
+          ],
+        },
+      ],
+    } as unknown as EngineResult;
+    relocateArtifacts(result, from, to);
+    expect(result.artifacts.map((a) => a.path)).toEqual([join(to, "bugs-ab.json"), join("root", "pending-XY", "f.json")]);
+    const f = result.findings[0] as unknown as { reproduction: { artifacts: string[] }; evidence: { artifact?: string }[] };
+    expect(f.reproduction.artifacts).toEqual([join(to, "bugs-ab.json"), join(to, "bugs-ab", "reproduction.har")]);
+    expect(f.evidence[0]?.artifact).toBe(join(to, "bugs-ab.json"));
+    expect(f.evidence[1]).toEqual({ kind: "note", text: "x" });
+  });
 });
