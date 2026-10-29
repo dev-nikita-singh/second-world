@@ -161,3 +161,15 @@ FIXED by main: config path semantics. ResolvedConfig.cwd was always process cwd 
 DONE by main: examples/shop-express/sw.config.ts has a mixed-op concurrency test → plain `sw bugs` finds stock-race (bugs/race-lost-update, reproduced-defect).
 | sw-reliability | DONE | + config-flow test (invariants via sw.config) |
 FINAL wave 4 (main): full suite 148 files, 1315 passed / 1 skipped / 1 failed → the failure was calibrated.test.ts fixture p50 ±2 ms (2.1–2.2 ms). A/B against the pre-wave backup interleaved: both pass 3/3 → Windows timer noise under Docker load, not a regression; fixture check widened to ±3 ms (accuracy suite keeps ±2 ms). tsc clean.
+
+## Wave 5 — fixes + testing (user 2026-10-29: "git init, do the fixes, do testing, keep the work going")
+
+Git: baseline commit 452ec5b on `master`; wave 5 works on branch `wave-5`. Agents do NOT commit — main reviews and commits per agent.
+LF line endings enforced by .gitattributes.
+
+| Agent | Owns | Task |
+|---|---|---|
+| `sw-qa` | `tests/system/**`, `tests/e2e/**` (new), `.agents/progress/sw-qa.md` | Exploratory end-to-end QA as a real user: packed tarball install, every command on both example apps; report bugs to main; write regression tests |
+| `sw-examples` | `examples/**`, `tests/integration/examples/**`, `tests/helpers/examples.ts` | shop-fastify: add GET /orders + concurrency/invariants config so every planted defect is detectable from the example configs; expected-findings kept exact |
+| `sw-reliability` | `src/engines/reliability/**`, `src/adapters/faults/**`, their tests | Paginated invariant collections; watchdog clears its ledger entry; review the slow-body/black-hole-only duplicate production |
+| `sw-fixes` | listed per item in its brief | Small known defects: reproduction.artifacts path rename, gzipped .pb detection, exact live perf.tick percentiles |
