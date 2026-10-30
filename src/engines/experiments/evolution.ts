@@ -10,7 +10,7 @@
  */
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import { CapabilityError, EngineError } from "../../core/errors.js";
+import { CapabilityError, ConfigError, EngineError } from "../../core/errors.js";
 import type { EngineResult, Finding, Limitation } from "../../core/evidence/schemas.js";
 import { createEvidenceStore, createFinding } from "../../core/evidence/store.js";
 import type { EngineContext } from "../../core/types.js";
@@ -221,6 +221,7 @@ export async function executeEvolution(
     seen.add(n);
   }
 
+  let baselineEnvError: ConfigError | CapabilityError | undefined;
   const gate = async (
     arm: Arm,
     g: GateResult["gate"],
@@ -232,6 +233,14 @@ export async function executeEvolution(
     try {
       r = await fn();
     } catch (e) {
+      // The baseline checkout failing for an environment/repo reason (git, filesystem, refs) ends the run
+      // with that error's exit code (2/4) instead of a target-side "baseline failed" (5).
+      if (
+        g === "worktree" &&
+        arm.kind === "baseline" &&
+        (e instanceof ConfigError || e instanceof CapabilityError)
+      )
+        baselineEnvError ??= e;
       r = { ok: false, detail: e instanceof Error ? e.message : String(e) };
     }
     arm.gates.push({
@@ -355,7 +364,7 @@ export async function executeEvolution(
   // Docker sandbox convention (docs/03-engines/experiments.md §B.3): published ports reach 0.0.0.0 only.
   const healthHint =
     (sandbox as Sandbox).kind === "docker"
-      ? "docker sandbox: the app must listen on $HOST (set to 0.0.0.0 in the container), not 127.0.0.1 — e.g. server.listen(port, process.env.HOST ?? \"127.0.0.1\")"
+      ? 'docker sandbox: the app must listen on $HOST (set to 0.0.0.0 in the container), not 127.0.0.1 — e.g. server.listen(port, process.env.HOST ?? "127.0.0.1")'
       : undefined;
   const startArm = (arm: Arm): Promise<RunningApp> =>
     startApp({
@@ -385,6 +394,7 @@ export async function executeEvolution(
   try {
     // ---- baseline + candidates: correctness gates
     if (!(await prepare(baseline, false))) {
+      if (baselineEnvError) throw baselineEnvError; // rethrown by the catch below, after cleanup
       baselineError = `baseline could not be prepared: ${baseline.rejected.join("; ")}`;
       throw new EngineError("SW_ENGINE_EVOLUTION_BASELINE", baselineError);
     }

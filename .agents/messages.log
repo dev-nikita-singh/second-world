@@ -93,3 +93,4 @@
 2026-10-29T21:45Z sw-examples -> main: DONE wave 5 (from-config recall/precision 1.0 both apps; 137 tests pass; tsc clean)
 2026-10-29T22:20Z sw-coverage -> main: DONE 15 coverage files/206 tests; unit L 81.4→84.11 B 67.38→70.91; 4 bugs reported all fixed; unit green, tsc clean
 2026-10-29T22:45Z sw-qa -> main: DONE wave 5: 12 bugs reported (all functional ones fixed), 5 new test files (32 tests), all it.fails flipped; tsc clean
+2026-10-30T18:10Z sw-exit6 -> main: done — stress all-stage-error → 5/3, all-fail no longer exit 0; evolve git/worktree → 2/4; 27 new tests, 138/138 area tests pass

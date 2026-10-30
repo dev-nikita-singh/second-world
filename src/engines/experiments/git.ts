@@ -7,12 +7,14 @@ import { createHash } from "node:crypto";
 import { realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { execa } from "execa";
-import { CapabilityError, ConfigError, EngineError } from "../../core/errors.js";
+import { CapabilityError, ConfigError } from "../../core/errors.js";
 
 export interface GitResult {
   stdout: string;
   stderr: string;
   exitCode: number;
+  /** True when git was killed by the timeout. */
+  timedOut?: boolean;
 }
 
 export async function git(
@@ -37,26 +39,99 @@ export async function git(
         hint: "Install git to use the Evolution engine",
       });
     }
-    return { stdout: String(r.stdout ?? ""), stderr: String(r.stderr ?? ""), exitCode: r.exitCode ?? -1 };
+    return {
+      stdout: String(r.stdout ?? ""),
+      stderr: String(r.stderr ?? ""),
+      exitCode: r.exitCode ?? -1,
+      ...(r.timedOut ? { timedOut: true } : {}),
+    };
   } catch (e) {
     if (e instanceof CapabilityError) throw e;
     throw new CapabilityError("SW_CAP_GIT", `git could not be run: ${(e as Error).message}`);
   }
 }
 
-/** Runs git and throws EngineError on a non-zero exit. Returns trimmed stdout. */
+interface GitRule {
+  re: RegExp;
+  kind: "config" | "capability";
+  hint: string;
+}
+
+/** stderr patterns → error class + hint. First match wins; checked against `LC_ALL=C` git output. */
+const GIT_RULES: readonly GitRule[] = [
+  {
+    re: /dubious ownership/i,
+    kind: "config",
+    hint: "git refuses this repository (owned by another user): git config --global --add safe.directory <repo>",
+  },
+  {
+    re: /file ?name too long|path too long/i,
+    kind: "capability",
+    hint: "Path too long for the filesystem. On Windows: git config --global core.longpaths true, or set evolution.tmpDir to a short path (e.g. C:/sw-tmp)",
+  },
+  {
+    re: /no space left|disk quota|not enough space/i,
+    kind: "capability",
+    hint: "Free disk space, or set evolution.tmpDir on a volume with room for the candidate checkouts",
+  },
+  {
+    re: /\.lock\b|is locked|locked working tree/i,
+    kind: "capability",
+    hint: "Another git process holds a lock. If none is running, remove the stale .git/*.lock file and run: git worktree prune",
+  },
+  {
+    re: /already registered|already exists|missing but/i,
+    kind: "capability",
+    hint: "Stale worktree metadata: run git worktree prune in the repository and retry",
+  },
+  {
+    re: /permission denied|operation not permitted|access is denied|read-only file system|unable to create|could not create|cannot mkdir|unable to write/i,
+    kind: "capability",
+    hint: "The filesystem refused the write: check permissions of the repository's .git directory and the temp directory (evolution.tmpDir)",
+  },
+  {
+    re: /not a git repository|unknown revision|bad revision|invalid reference|not a valid object name|bad object|ambiguous argument|corrupt|index file|bad config|bad numeric config/i,
+    kind: "config",
+    hint: "Check the repository and the refs given to sw evolve (git status / git rev-parse --verify <ref> should succeed)",
+  },
+];
+
+/**
+ * Maps a failed git invocation to the right error class (docs/09-cli-and-api.md exit codes): problems in
+ * the user's repository / refs / git config → ConfigError (exit 2); git or the filesystem being unable to
+ * do the work (permissions, path length, locks, disk space, timeouts) → CapabilityError (exit 4).
+ * Never EngineError: a non-zero git exit is not a bug in SECOND WORLD. `fallback` applies when no
+ * pattern matches.
+ */
+export function gitFailure(
+  what: string,
+  r: GitResult,
+  fallback: "config" | "capability" = "config",
+): ConfigError | CapabilityError {
+  const err = r.stderr.trim().replace(/\s+/g, " ").slice(0, 400);
+  if (r.timedOut) {
+    return new CapabilityError("SW_CAP_GIT_TIMEOUT", `${what} timed out`, {
+      hint: "A very large repository or a slow disk; retry, or check for a hung git process",
+      details: { stderr: err },
+    });
+  }
+  const rule = GIT_RULES.find((x) => x.re.test(err));
+  const kind = rule?.kind ?? fallback;
+  const msg = `${what} failed (exit ${r.exitCode})${err ? `: ${err}` : ""}`;
+  const hint = rule?.hint ?? "Run the same git command in the repository to see the full error";
+  return kind === "config"
+    ? new ConfigError("SW_CONFIG_EVOLUTION_GIT", msg, { hint, details: { exitCode: r.exitCode } })
+    : new CapabilityError("SW_CAP_EVOLUTION_GIT", msg, { hint, details: { exitCode: r.exitCode } });
+}
+
+/** Runs git and throws (see gitFailure: ConfigError / CapabilityError) on a non-zero exit. Returns trimmed stdout. */
 export async function gitOk(
   cwd: string,
   args: readonly string[],
   opts: { timeoutMs?: number; input?: string } = {},
 ): Promise<string> {
   const r = await git(cwd, args, opts);
-  if (r.exitCode !== 0) {
-    throw new EngineError(
-      "SW_ENGINE_EVOLUTION_GIT",
-      `git ${args.join(" ")} failed (exit ${r.exitCode}): ${r.stderr.trim().slice(0, 500)}`,
-    );
-  }
+  if (r.exitCode !== 0 || r.timedOut) throw gitFailure(`git ${args.join(" ")}`.slice(0, 200), r);
   return r.stdout.trim();
 }
 
@@ -78,10 +153,12 @@ export async function repoRoot(cwd: string): Promise<string> {
       },
     );
   const r = await git(cwd, ["rev-parse", "--show-toplevel"]);
-  if (r.exitCode !== 0)
+  if (r.exitCode !== 0 || r.timedOut) {
+    if (r.timedOut || !/not a git repository/i.test(r.stderr)) throw gitFailure(`git rev-parse in ${cwd}`, r);
     throw new ConfigError("SW_CONFIG_EVOLUTION_REPO", `${cwd} is not inside a git repository`, {
       hint: "Pass --repo <dir> (or evolution.repo in sw.config) pointing at a git checkout",
     });
+  }
   return r.stdout.trim();
 }
 

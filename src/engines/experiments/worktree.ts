@@ -8,8 +8,8 @@
 import { lstat, mkdtemp, readdir, rm, unlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { EngineError } from "../../core/errors.js";
-import { git, gitOk } from "./git.js";
+import { CapabilityError, ConfigError } from "../../core/errors.js";
+import { git, gitFailure, gitOk } from "./git.js";
 
 export interface Worktree {
   name: string;
@@ -43,7 +43,20 @@ export class WorktreeManager {
   }
 
   private async parentDir(): Promise<string> {
-    this.parent ??= await mkdtemp(path.join(this.tmpRoot, "sw-evo-"));
+    if (this.parent) return this.parent;
+    try {
+      this.parent = await mkdtemp(path.join(this.tmpRoot, "sw-evo-"));
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code ?? "";
+      const msg = `cannot create a temp directory for worktrees in ${this.tmpRoot}: ${code || (e as Error).message}`;
+      if (code === "ENOENT" || code === "ENOTDIR")
+        throw new ConfigError("SW_CONFIG_EVOLUTION_TMPDIR", msg, {
+          hint: "Set evolution.tmpDir (or TMPDIR/TEMP) to an existing directory",
+        });
+      throw new CapabilityError("SW_CAP_EVOLUTION_WORKTREE", msg, {
+        hint: "Check permissions and free space of the temp directory, or set evolution.tmpDir",
+      });
+    }
     return this.parent;
   }
 
@@ -57,10 +70,8 @@ export class WorktreeManager {
     const r = await git(this.repo, [...eol, "worktree", "add", "--detach", "--force", dir, commit]);
     if (r.exitCode !== 0) {
       await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => undefined);
-      throw new EngineError(
-        "SW_ENGINE_EVOLUTION_WORKTREE",
-        `git worktree add failed for ${name}: ${r.stderr.trim().slice(0, 400)}`,
-      );
+      // The commit was resolved beforehand, so an unmatched failure is git/the filesystem refusing (exit 4).
+      throw gitFailure(`git worktree add (${name})`, r, "capability");
     }
     const wt = { name, dir, commit };
     this.trees.push(wt);

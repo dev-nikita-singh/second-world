@@ -47,3 +47,11 @@ sw stress --mode soak --rate 100 --duration 2h
 
 - "Capacity" is always **"highest tested load that met requirements in this environment"**, together with an environment fingerprint.
 - USL/extrapolated numbers carry `kind: "estimate"` and are rendered in a separate section.
+
+## 7. When every stage fails (exit codes)
+
+- **Nothing answers** (every connection refused / DNS / connect timeout): limitation `target-unreachable`, exit **5**.
+- **Nothing measured** (every request timed out or was still in flight when the stage ended, e.g. a server that never responds and `timeout` ≥ `hold`): limitation `no-measurements`, exit **5**. Lower `timeout` or lengthen `hold` to measure the timeouts as errors.
+- **The Safety Guard stopped the only stage(s)** (e.g. DNS rebinding): the stage's `dns-rebind` limitation is carried over, exit **3**.
+- **The target answers but every request fails** (5xx, connection reset after connect): this is a measured breach (error rate 100 %), exit **1**. A stage where every request failed is never marked "generator saturated": instant failures make closed-loop VUs spin, which is not a generator limit.
+- A stage error with none of these causes stays an engine error (exit 70) and should be reported as a bug.

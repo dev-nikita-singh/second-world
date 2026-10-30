@@ -137,6 +137,13 @@ function toStageResult(
   else if (res.status === "cancelled" && !abortedEarly) status = "cancelled";
   else status = breachReasons.length > 0 ? "breached" : "passed";
   const lat = d?.latency.corrected;
+  // Every request failed (5xx, resets, timeouts): closed-loop VUs spin on instant failures, so a
+  // generator-saturation verdict would hide that the target failed everything (same rule as the
+  // Performance Lab's target-unreachable case).
+  const requests = d?.totals.requests ?? 0;
+  const allFailed = requests > 0 && (d?.totals.failed ?? 0) >= requests;
+  const satReasons = d?.generator.reasons ?? [];
+  const genSaturated = (d?.generator.saturated ?? false) && !allFailed;
   return {
     index: p.index,
     kind: p.kind,
@@ -154,7 +161,7 @@ function toStageResult(
     startMs,
     endMs,
     measuredMs: d?.window.measuredMs ?? 0,
-    requests: d?.totals.requests ?? 0,
+    requests,
     ok: d?.totals.ok ?? 0,
     failed: d?.totals.failed ?? 0,
     errorRate,
@@ -174,10 +181,8 @@ function toStageResult(
     generator: {
       // A Little's-Law-only verdict is a consistency check, not proof of saturation (it aliases with
       // constant arrivals on short stages); it reduces confidence instead of invalidating.
-      saturated:
-        (d?.generator.saturated ?? false) && (d?.generator.reasons ?? []).some((r) => !isLittlesLaw(r)),
-      littlesLawOnly:
-        (d?.generator.saturated ?? false) && (d?.generator.reasons ?? []).every((r) => isLittlesLaw(r)),
+      saturated: genSaturated && satReasons.some((r) => !isLittlesLaw(r)),
+      littlesLawOnly: genSaturated && satReasons.every((r) => isLittlesLaw(r)),
       reasons: d?.generator.reasons ?? [],
       cpuPercent: d?.generator.cpuPercent ?? 0,
       eventLoopDelayP99Ms: d?.generator.eventLoopDelayP99Ms ?? 0,
@@ -224,6 +229,8 @@ export async function executeStress(
     ctx.safety as ExecutorSafety,
   );
   const stages: StageResult[] = [];
+  /** Limitations of each stage's Performance Lab run, parallel to `stages`. */
+  const stageLims: Limitation[][] = [];
   let stopReason: StressStopReason = "completed";
   let stopDetail: string | undefined;
   let totalRequests = 0;
@@ -322,6 +329,7 @@ export async function executeStress(
     if (res.data?.environment && !environment) environment = res.data.environment;
     totalRequests += sr.requests;
     stages.push(sr);
+    stageLims.push(res.limitations);
     ctx.events.emit("stress.stage.end", {
       runId,
       stage: p.index,
@@ -420,14 +428,10 @@ export async function executeStress(
 
   // ---- analysis
   // A target that refuses every connection is not a saturated generator: say what happened.
-  const unreachable = stages.length > 0 && stages.every((s) => s.status === "error" && s.targetUnreachable === true);
-  if (unreachable) {
-    limitations.push({
-      code: "target-unreachable",
-      message: `Every stage failed to connect to ${String(input.base.target ?? "the target")}. Is it running?`,
-      impact: "invalidates",
-    });
-  }
+  const unreachable =
+    stages.length > 0 && stages.every((s) => s.status === "error" && s.targetUnreachable === true);
+  const allErrored = stages.length > 0 && stages.every((s) => s.status === "error");
+  if (allErrored) limitations.push(...allErroredLimitations(stageLims, target, unreachable));
   const invalidFrom = unreachable ? null : applySaturationInvalidation(stages);
   if (invalidFrom !== null) {
     const s = stages[invalidFrom] as StageResult;
@@ -564,6 +568,46 @@ export async function executeStress(
     artifacts: [],
     data,
   };
+}
+
+/** Perf limitation codes that mean the Safety Guard stopped the stage (→ exit 3). */
+const SAFETY_STAGE_CODES = new Set(["dns-rebind"]);
+/** Perf limitation codes that mean the target, not SECOND WORLD, made the stage unmeasurable (→ exit 5). */
+const TARGET_STAGE_CODES = new Set(["target-unreachable", "no-measurements"]);
+
+/**
+ * Why every stage ended with status "error", as run-level limitations the verdict understands
+ * (docs/03-engines/stress-capacity-lab.md §7). Returns [] when a stage errored for a reason that is
+ * neither the target nor the Safety Guard: that stays an engine error (exit 70).
+ */
+export function allErroredLimitations(
+  stageLims: readonly (readonly Limitation[])[],
+  target: string,
+  unreachable: boolean,
+): Limitation[] {
+  const t = target || "the target";
+  const safety = stageLims.flat().find((l) => l.impact === "invalidates" && SAFETY_STAGE_CODES.has(l.code));
+  if (safety) return [{ ...safety, message: `Stopped by the Safety Guard: ${safety.message}` }];
+  if (unreachable) {
+    return [
+      {
+        code: "target-unreachable",
+        message: `Every stage failed to connect to ${t}. Is it running?`,
+        impact: "invalidates",
+      },
+    ];
+  }
+  const targetSide =
+    stageLims.length > 0 &&
+    stageLims.every((ls) => ls.some((l) => l.impact === "invalidates" && TARGET_STAGE_CODES.has(l.code)));
+  if (!targetSide) return [];
+  return [
+    {
+      code: "no-measurements",
+      message: `No stage completed a measurable request against ${t} (every request timed out or never finished inside the stage). Check that the target answers within \`timeout\`, or lengthen \`hold\`.`,
+      impact: "invalidates",
+    },
+  ];
 }
 
 function buildFindings(data: StressData, ctx: EngineContext, runId: string, input: StressInput): Finding[] {
