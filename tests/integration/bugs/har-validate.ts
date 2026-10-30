@@ -32,6 +32,29 @@ export function validateHar12(doc: unknown): string[] {
       }
     });
   };
+  /** send/wait/receive required ≥ 0; blocked/dns/connect/ssl optional, ≥ 0 or -1; ssl ⊂ connect; sum ≈ time. */
+  const timings = (t: J, time: unknown, at: string): void => {
+    for (const k of ["send", "wait", "receive"]) {
+      num(t, k, at);
+      if (typeof t[k] === "number" && (t[k] as number) < 0) errs.push(`${at}.${k}: must be ≥ 0`);
+    }
+    for (const k of ["blocked", "dns", "connect", "ssl"]) {
+      if (t[k] === undefined) continue;
+      num(t, k, at);
+      const v = t[k] as number;
+      if (typeof v === "number" && v < 0 && v !== -1) errs.push(`${at}.${k}: must be ≥ 0 or -1`);
+    }
+    const ssl = typeof t.ssl === "number" ? t.ssl : -1;
+    const connect = typeof t.connect === "number" ? t.connect : -1;
+    if (ssl >= 0 && (connect < 0 || ssl > connect + 1e-6)) errs.push(`${at}.ssl: must be included in connect`);
+    if (typeof time !== "number") return;
+    let sum = 0;
+    for (const k of ["blocked", "dns", "connect", "send", "wait", "receive"]) {
+      const v = t[k];
+      if (typeof v === "number" && v >= 0) sum += v;
+    }
+    if (Math.abs(sum - time) > 0.01 + time * 0.001) errs.push(`${at}: timings sum ${sum} ≠ entry time ${time}`);
+  };
   if (!obj(doc, "$")) return errs;
   const log = doc.log;
   if (!obj(log, "log")) return errs;
@@ -76,8 +99,7 @@ export function validateHar12(doc: unknown): string[] {
       num(r, "bodySize", `${at}.response`);
     }
     obj(e.cache, `${at}.cache`);
-    if (obj(e.timings, `${at}.timings`))
-      for (const k of ["send", "wait", "receive"]) num(e.timings, k, `${at}.timings`);
+    if (obj(e.timings, `${at}.timings`)) timings(e.timings, e.time, `${at}.timings`);
   });
   return errs;
 }

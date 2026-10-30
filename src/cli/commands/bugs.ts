@@ -50,6 +50,101 @@ export function parseInvariant(spec: string): Record<string, unknown> | string {
   return spec; // module path (resolved by the engine against cwd)
 }
 
+export const MIX_FORM =
+  '"<METHOD> <path>[:<count>] [as=<op>] [count=<n>] [phase=before|during|after] [pointer=/json/ptr] [value=<v>] [role=<name>] [<pathParam>=<v>] [query.<k>=<v>] [header.<k>=<v>] [body=<json>]"';
+const MIX_AS = ["take", "read", "inc", "dec", "write", "add", "remove", "has"];
+const MIX_PHASES = ["before", "during", "after"];
+
+function mixError(spec: string, why: string): ConfigError {
+  return new ConfigError("SW_CONFIG_FLAG", `--mix "${spec}": ${why}`, {
+    hint: `Expected ${MIX_FORM}, e.g. --mix "GET /products/{id} id=20 as=read pointer=/stock count=2"`,
+  });
+}
+
+/** Path/query values: numbers stay numbers (the contract decides), true/false → boolean for query. */
+function scalar(v: string, booleans: boolean): string | number | boolean {
+  if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+  if (booleans && (v === "true" || v === "false")) return v === "true";
+  return v;
+}
+
+/**
+ * `--mix` → one ConcurrencyTest.mix entry (docs/03-engines/api-bug-hunter.md §6). Whitespace-separated
+ * `key=value` tokens after "METHOD /path"; `body=` takes the rest of the string (JSON, may contain
+ * spaces). `as` defaults to `read` for GET/HEAD and is required otherwise.
+ */
+export function parseMix(spec: string): Record<string, unknown> {
+  const text = spec.trim();
+  const head = /^([A-Za-z]+)\s+(\S+)/.exec(text);
+  if (!head) throw mixError(spec, 'must start with an operation, "METHOD /path"');
+  const method = (head[1] as string).toUpperCase();
+  let path = head[2] as string;
+  const entry: Record<string, unknown> = {};
+  const shorthand = /^(.*\S):(\d+)$/.exec(path);
+  if (shorthand) {
+    path = shorthand[1] as string;
+    entry.count = Number(shorthand[2]);
+  }
+  if (!path.startsWith("/")) throw mixError(spec, `path must start with "/", got "${path}"`);
+  entry.operation = `${method} ${path}`;
+  const pathNames = new Set([...path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1] as string));
+  const pathParams: Record<string, string | number> = {};
+  const query: Record<string, string | number | boolean> = {};
+  const headers: Record<string, string> = {};
+  let rest = text.slice(head[0].length).trim();
+  while (rest.length > 0) {
+    const bodyAt = /^body=/.exec(rest);
+    if (bodyAt) {
+      try {
+        entry.body = JSON.parse(rest.slice(5));
+      } catch {
+        throw mixError(spec, "body= must be valid JSON (and the last token)");
+      }
+      break;
+    }
+    const tok = /^(\S+)\s*/.exec(rest) as RegExpExecArray;
+    rest = rest.slice(tok[0].length);
+    const t = tok[1] as string;
+    const eq = t.indexOf("=");
+    if (eq <= 0) throw mixError(spec, `"${t}" is not key=value`);
+    const k = t.slice(0, eq);
+    const v = t.slice(eq + 1);
+    if (k === "count") {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1 || n > 64) throw mixError(spec, `count must be an integer 1..64, got "${v}"`);
+      entry.count = n;
+    } else if (k === "as") {
+      if (!MIX_AS.includes(v)) throw mixError(spec, `as must be ${MIX_AS.join("|")}, got "${v}"`);
+      entry.as = v;
+    } else if (k === "phase") {
+      if (!MIX_PHASES.includes(v)) throw mixError(spec, `phase must be before|during|after, got "${v}"`);
+      entry.phase = v;
+    } else if (k === "pointer") {
+      if (v !== "" && !v.startsWith("/")) throw mixError(spec, `pointer must be a JSON pointer ("/stock"), got "${v}"`);
+      entry.pointer = v;
+    } else if (k === "value" || k === "role") {
+      entry[k] = v;
+    } else if (k.startsWith("query.") && k.length > 6) {
+      query[k.slice(6)] = scalar(v, true);
+    } else if (k.startsWith("header.") && k.length > 7) {
+      headers[k.slice(7)] = v;
+    } else if (pathNames.has(k)) {
+      pathParams[k] = scalar(v, false) as string | number;
+    } else {
+      const known = ["as", "count", "phase", "pointer", "value", "role", "body", "query.<k>", "header.<k>", ...pathNames];
+      throw mixError(spec, `unknown key "${k}" (known: ${known.join(", ")})`);
+    }
+  }
+  if (entry.as === undefined) {
+    if (method !== "GET" && method !== "HEAD") throw mixError(spec, `as=<${MIX_AS.join("|")}> is required for ${method}`);
+    entry.as = "read";
+  }
+  if (Object.keys(pathParams).length) entry.pathParams = pathParams;
+  if (Object.keys(query).length) entry.query = query;
+  if (Object.keys(headers).length) entry.headers = headers;
+  return entry;
+}
+
 /** Maps `sw bugs` flags to a loose Bug Hunter input. */
 /** `cwd`: directory the command was run from (flag paths are relative to it). */
 export function bugsInputFromFlags(o: Record<string, unknown>, cwd = process.cwd()): Record<string, unknown> {
@@ -72,7 +167,10 @@ export function bugsInputFromFlags(o: Record<string, unknown>, cwd = process.cwd
   if (o.allowMutations === true) input.allowMutations = true;
   if (o.timeout !== undefined) input.timeout = o.timeout;
   const ops = list(o.concurrencyTest);
+  // Not split on commas: a mix body is JSON.
+  const mixSpecs = o.mix === undefined ? [] : (Array.isArray(o.mix) ? o.mix : [o.mix]).map(String);
   if (ops) {
+    const mix = mixSpecs.map(parseMix);
     const burst = int("burst", o.burst) ?? 10;
     let body: unknown;
     if (o.body !== undefined) {
@@ -88,9 +186,10 @@ export function bugsInputFromFlags(o: Record<string, unknown>, cwd = process.cwd
       ...(o.role ? { role: o.role } : {}),
       ...(body !== undefined ? { body } : {}),
       ...(o.invariant ? { invariant: parseInvariant(String(o.invariant)) } : {}),
+      ...(mix.length ? { mix } : {}),
     }));
-  } else if (o.burst !== undefined || o.invariant !== undefined) {
-    throw new ConfigError("SW_CONFIG_FLAG", "--burst/--invariant require --concurrency-test \"METHOD /path\"");
+  } else if (o.burst !== undefined || o.invariant !== undefined || mixSpecs.length > 0) {
+    throw new ConfigError("SW_CONFIG_FLAG", "--burst/--invariant/--mix require --concurrency-test \"METHOD /path\"");
   }
   return input;
 }

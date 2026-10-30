@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRedactor } from "../../../src/core/log/redact.js";
-import { HAR_REDACTED, toHar } from "../../../src/engines/bugs/har.js";
+import { HAR_REDACTED, harTimings, toHar } from "../../../src/engines/bugs/har.js";
 import { type Exchange, ROLE_INVALID } from "../../../src/engines/bugs/http.js";
 import type { Credential } from "../../../src/engines/bugs/schema.js";
 import { validateHar12 } from "../../integration/bugs/har-validate.js";
@@ -76,6 +76,24 @@ const exchanges: Exchange[] = [
   }),
   ex({ role: "user", requestHeaders: {}, status: 0, error: "timeout: no response", tStart: 120, tEnd: 5120 }),
   ex({ role: "user", requestHeaders: {}, status: 0, blocked: "mutation" }),
+  // New TLS connection: queue 1 + dns 2 + tcp 3 + tls 4 (wait 10), server 7, transfer 3 → 20 ms.
+  ex({
+    role: "user",
+    requestHeaders: {},
+    status: 200,
+    tStart: 130,
+    tEnd: 150,
+    phases: { waitMs: 10, serverMs: 7, transferMs: 3, dnsMs: 2, tcpMs: 3, tlsMs: 4 },
+  }),
+  // Reused keep-alive socket: no connection phases.
+  ex({
+    role: "user",
+    requestHeaders: {},
+    status: 200,
+    tStart: 151,
+    tEnd: 156,
+    phases: { waitMs: 0.5, serverMs: 4, transferMs: 0.5 },
+  }),
 ];
 
 describe("HAR 1.2 export of reproductions", () => {
@@ -90,10 +108,63 @@ describe("HAR 1.2 export of reproductions", () => {
   it("validates against the HAR 1.2 required fields", () => {
     expect(validateHar12(har)).toEqual([]);
     expect(validateHar12(JSON.parse(text))).toEqual([]);
-    expect(har.log.entries).toHaveLength(5); // blocked requests were never sent
+    expect(har.log.entries).toHaveLength(7); // blocked requests were never sent
     expect(har.log.entries[1]?.startedDateTime).toBe("2026-10-29T12:00:00.004Z");
     expect(har.log.entries[0]?.request.postData?.text).toContain("productId");
     expect(har.log.entries[4]?.response._error).toMatch(/timeout/);
+  });
+
+  it("fills HAR 1.2 timings from the recorded phases (connect includes ssl, sum = time)", () => {
+    expect(har.log.entries[5]?.timings).toEqual({
+      blocked: 1,
+      dns: 2,
+      connect: 7,
+      ssl: 4,
+      send: 0,
+      wait: 7,
+      receive: 3,
+    });
+    expect(har.log.entries[6]?.timings).toEqual({
+      blocked: 0.5,
+      dns: -1,
+      connect: -1,
+      ssl: -1,
+      send: 0,
+      wait: 4,
+      receive: 0.5,
+    });
+    // No phases (transport error / injected executor): everything is wait, the rest does not apply.
+    expect(har.log.entries[4]?.timings).toEqual({
+      blocked: -1,
+      dns: -1,
+      connect: -1,
+      ssl: -1,
+      send: 0,
+      wait: 5000,
+      receive: 0,
+    });
+    // Plain HTTP connection: connect = tcp, ssl -1; rounding overshoot is trimmed so the sum holds.
+    expect(harTimings({ phases: { waitMs: 3, serverMs: 2, transferMs: 1.0004, tcpMs: 2.5 } }, 6)).toEqual({
+      blocked: 0.5,
+      dns: -1,
+      connect: 2.5,
+      ssl: -1,
+      send: 0,
+      wait: 2,
+      receive: 1,
+    });
+    expect(harTimings({ phases: { waitMs: 0, serverMs: 3, transferMs: 1 } }, 3.9).receive).toBeCloseTo(0.9, 6);
+  });
+
+  it("the validator checks timings (ssl inside connect, -1 only for optional phases, sum = time)", () => {
+    const bad = JSON.parse(text);
+    bad.log.entries[5].timings.ssl = 9; // > connect
+    bad.log.entries[6].timings.wait = -1; // required phase
+    bad.log.entries[0].timings.wait += 50; // sum ≠ time
+    const errs = validateHar12(bad);
+    expect(errs.some((e) => /entries\[5\].*ssl/.test(e))).toBe(true);
+    expect(errs.some((e) => /entries\[6\].*wait: must be ≥ 0/.test(e))).toBe(true);
+    expect(errs.some((e) => /entries\[0\].*sum/.test(e))).toBe(true);
   });
 
   it("the validator rejects documents missing required fields", () => {

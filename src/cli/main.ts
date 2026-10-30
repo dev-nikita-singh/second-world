@@ -185,6 +185,11 @@ export function buildProgram(): Command {
     .option("--invariant <spec>", "linearizable:<stock|counter|register|set>[:initial] | max-success:<n> | same-response | ./module.ts")
     .option("--role <name>", "auth role for concurrency bursts")
     .option("--body <json>", "request body for concurrency bursts")
+    .option(
+      "--mix <spec>",
+      'interleave another operation with each burst (repeatable): "METHOD /path[:count] [as=take|read|inc|dec|write|add|remove|has] [count=n] [phase=before|during|after] [pointer=/ptr] [value=v] [role=r] [<pathParam>=v] [query.k=v] [header.k=v] [body=<json>]"; as defaults to read for GET',
+      collect,
+    )
     .option("--timeout <dur>", "request timeout")
     .option("--json", "print the combined report JSON on stdout")
     .option("--no-history", "do not save this run to history")

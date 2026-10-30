@@ -51,8 +51,51 @@ export interface HarEntry {
     _error?: string;
   };
   cache: Record<string, never>;
-  timings: { send: number; wait: number; receive: number };
+  timings: HarTimings;
   comment?: string;
+}
+
+/**
+ * HAR 1.2 timings (ms). -1 = does not apply / unknown. `connect` includes `ssl` (spec), so the
+ * entry time is blocked + dns + connect + send + wait + receive over the non -1 fields.
+ */
+export interface HarTimings {
+  blocked: number;
+  dns: number;
+  connect: number;
+  ssl: number;
+  send: number;
+  wait: number;
+  receive: number;
+}
+
+const r3 = (n: number): number => Math.round(Math.max(0, n) * 1000) / 1000;
+
+/**
+ * Maps recorded phases to HAR timings. `blocked` takes the rest of the request's wait (pool
+ * queue, earlier redirect hops), so the non -1 fields (ssl excluded, it is inside connect) sum to
+ * `time`. Entry time is the final attempt only (429 back-off retries are not in it). `send` is 0: undici exposes no "request fully written" event, so
+ * writing the request is counted in `wait`. Without phases (transport error, injected executor)
+ * the whole time is `wait`.
+ */
+export function harTimings(e: Pick<Exchange, "phases">, time: number): HarTimings {
+  const ph = e.phases;
+  if (!ph) return { blocked: -1, dns: -1, connect: -1, ssl: -1, send: 0, wait: time, receive: 0 };
+  const dns = ph.dnsMs === undefined ? -1 : r3(ph.dnsMs);
+  const ssl = ph.tlsMs === undefined ? -1 : r3(ph.tlsMs);
+  const connect =
+    ph.tcpMs === undefined && ph.tlsMs === undefined ? -1 : r3((ph.tcpMs ?? 0) + (ph.tlsMs ?? 0));
+  let wait = r3(ph.serverMs);
+  let receive = r3(ph.transferMs);
+  // Clock rounding can make the phases exceed the total by a few µs: trim receive, then wait.
+  const over = wait + receive + Math.max(0, dns) + Math.max(0, connect) - time;
+  if (over > 0) {
+    const cut = Math.min(receive, over);
+    receive = r3(receive - cut);
+    wait = r3(wait - (over - cut));
+  }
+  const blocked = r3(time - Math.max(0, dns) - Math.max(0, connect) - wait - receive);
+  return { blocked, dns, connect, ssl, send: 0, wait, receive };
 }
 
 export interface Har {
@@ -152,7 +195,7 @@ export function toHar(exchanges: readonly Exchange[], o: HarOptions): Har {
         ...(e.error ? { _error: e.error } : {}),
       },
       cache: {},
-      timings: { send: 0, wait: time, receive: 0 },
+      timings: harTimings(e, time),
     };
     if (e.requestBody !== undefined)
       entry.request.postData = { mimeType: reqCt, params: [], text: e.requestBody };

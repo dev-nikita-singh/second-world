@@ -5,6 +5,7 @@
  * docs/03-engines/api-bug-hunter.md §3–§5, docs/11-safety-security-privacy.md §2, §4.
  */
 import {
+  type ConnectionTiming,
   createUndiciExecutor,
   type ExecutorSafety,
   flattenHeaders,
@@ -57,7 +58,28 @@ export interface Exchange {
   blocked?: "mutation" | "budget";
   role?: string | null;
   rateLimitedRetries: number;
+  /**
+   * Phase timing (ms) from the executor's detailed timing, for HAR `timings`. Absent when the
+   * request got no response headers or the executor was injected without detailed timing.
+   * dns/tcp/tls are present only when this request opened a new connection.
+   */
+  phases?: ExchangePhases;
 }
+
+export interface ExchangePhases {
+  /** Queue + connection establishment before the request was written. */
+  waitMs: number;
+  /** Request written → response headers. */
+  serverMs: number;
+  /** Response headers → body read. */
+  transferMs: number;
+  dnsMs?: number;
+  tcpMs?: number;
+  tlsMs?: number;
+}
+
+/** Connections remembered for attribution to the request that waited for them (bounded). */
+const MAX_PENDING_CONNECTIONS = 128;
 
 export class BudgetExhausted extends Error {
   constructor() {
@@ -158,6 +180,8 @@ export class BugsHttp {
   private readonly origin: string;
   private readonly basePath: string;
   private readonly checked = new Set<string>();
+  /** New connections (end time + phases) not yet attributed to a request. */
+  private readonly connections: { tEnd: number; t: ConnectionTiming }[] = [];
 
   constructor(
     private readonly ctx: EngineContext,
@@ -167,6 +191,9 @@ export class BugsHttp {
     this.origin = u.origin;
     this.basePath = u.pathname.replace(/\/$/, "");
     this.ownsExecutor = o.executor === undefined;
+    // Detailed timing (HAR timings): one interceptor wrapper per request and a timed connector;
+    // same pool, lookup and safety hooks, so what is sent and when is unchanged.
+    const now = (): number => performance.now();
     this.executor =
       o.executor ??
       createUndiciExecutor({
@@ -174,6 +201,13 @@ export class BugsHttp {
         connections: 64,
         maxBodyBytes: 1024 * 1024,
         safety: ctx.safety as ExecutorSafety, // F6 (sw-perf)
+        now,
+        timing: "detailed",
+        onConnection: (t) => {
+          if (t.error) return;
+          this.connections.push({ tEnd: now(), t });
+          if (this.connections.length > MAX_PENDING_CONNECTIONS) this.connections.shift();
+        },
       });
     const secrets: string[] = [o.invalidToken];
     if (o.expiredToken) secrets.push(o.expiredToken);
@@ -281,7 +315,29 @@ export class BugsHttp {
     if (text !== undefined) ex.responseBody = this.redactor.redactString(text.slice(0, max));
     if (json !== undefined) ex.json = json;
     if (r.error) ex.error = `${r.error.kind}: ${r.error.message}`;
+    if (r.phases) ex.phases = this.phasesOf(r);
     return ex;
+  }
+
+  /**
+   * Request phases plus the connection this request waited for: the first unattributed new
+   * connection that became usable between the request's start and the moment it was written.
+   * Under concurrency the attribution is approximate (any connection ready in the window).
+   */
+  private phasesOf(r: HttpResult): ExchangePhases {
+    const ph = r.phases as NonNullable<HttpResult["phases"]>;
+    const out: ExchangePhases = { waitMs: ph.waitMs, serverMs: ph.serverMs, transferMs: ph.transferMs };
+    const tSent = r.tStart + ph.waitMs;
+    const i = this.connections.findIndex((c) => c.tEnd >= r.tStart && c.tEnd <= tSent);
+    if (i >= 0) {
+      const { t } = this.connections[i] as { t: ConnectionTiming };
+      this.connections.splice(i, 1);
+      if (t.dnsMs !== undefined) out.dnsMs = t.dnsMs;
+      if (t.tcpMs !== undefined) out.tcpMs = t.tcpMs;
+      if (t.tlsMs !== undefined) out.tlsMs = t.tlsMs;
+      if (t.tcpMs === undefined && t.tlsMs === undefined) out.tcpMs = t.totalMs;
+    }
+    return out;
   }
 
   private blocked(tpl: RequestTemplate, kind: "mutation" | "budget"): Exchange {

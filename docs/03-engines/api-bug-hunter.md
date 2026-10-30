@@ -37,7 +37,7 @@ If no contract exists, the engine runs in **discovery mode**. It records observe
    - fails `1..n−1` of n → `reproduced-defect` with `flaky: true` and the observed rate (concurrency bugs are often like this). Re-run up to `maxReplays` to estimate probability with a Wilson confidence interval.
    - fails `0/n` on replay → `observation` (non-reproducible)
 5. **Minimise**: shrink the input (fast-check) and the request sequence (delta debugging, [DSA §7.4](../04-data-structures-and-algorithms.md#74-delta-debugging-ddmin)) to the smallest failing case.
-6. **Emit**: finding + `curl` / `sw replay <id>` reproduction command, plus `bugs-<fingerprint>/reproduction.har` (HAR 1.2; credentials as `$SW_AUTH_<ROLE>`, cookies and secret-looking values `[REDACTED]`), which opens in browser dev tools and HTTP clients.
+6. **Emit**: finding + `curl` / `sw replay <id>` reproduction command, plus `bugs-<fingerprint>/reproduction.har` (HAR 1.2; credentials as `$SW_AUTH_<ROLE>`, cookies and secret-looking values `[REDACTED]`), which opens in browser dev tools and HTTP clients. Each entry carries HAR 1.2 `timings` measured by the HTTP executor's detailed phase timing: `blocked` (pool queue and anything else before the request was written), `dns`, `connect` (TCP + TLS; includes `ssl`, as the spec says), `ssl`, `send`, `wait` (request written → response headers) and `receive` (headers → body read). Phases that did not happen are `-1`: `dns`/`connect`/`ssl` on a reused keep-alive connection, `ssl` on plain HTTP, `dns` for IP literals. The fields other than `-1` (and `ssl`, already inside `connect`) add up to the entry `time`. `send` is always 0: undici has no "request fully written" event, so writing the request counts as `wait`. When a request got no response headers (timeout, transport error), `wait` holds the whole time and the other phases are `-1`. Under a concurrent burst, a new connection is credited to a request that waited while that connection opened, so per-request `dns`/`connect` there are approximate. Detailed timing adds one handler wrapper per request and a timed connector per connection. It does not change what is sent or when.
 
 ## 4. Avoiding false positives
 
@@ -60,7 +60,7 @@ sw bugs --concurrency-test "POST /orders" --burst 20 --invariant "./invariants/s
 sw replay F-01JB8Z...   # re-run a saved failing case
 ```
 
-### Mixed-operation concurrency tests (config)
+### Mixed-operation concurrency tests (config and `--mix`)
 
 A concurrency test can interleave other operations with the burst, so lost updates show up even when every write succeeds. Each `mix` entry says what the request does on the sequential spec model (`as`: `take`, `read`, `inc`, `dec`, `write`, `add`, `remove`, `has`), where the value is (`pointer`, a JSON pointer into the response or request body) and when it runs (`phase`: `before`, `during` (inside the barrier burst) or `after`). The burst plus the concurrent mix requests are capped at 64. The history is checked for linearizability against the stock, counter, register or set model. Responses with an unknown effect (5xx, timeouts, 401/403/408/429) may or may not have happened.
 
@@ -77,6 +77,33 @@ bugs: {
   }],
 }
 ```
+
+The same tests from the command line: `--mix` (repeatable) adds one entry to every `--concurrency-test`:
+
+```bash
+sw bugs --openapi ./openapi.yaml --allow-mutations --yes --techniques concurrency \
+  --concurrency-test "POST /orders" --burst 3 --role user --body '{"items":[{"productId":1,"qty":1}]}' \
+  --invariant linearizable:stock \
+  --mix "GET /products/{id} id=1 pointer=/stock phase=before" \
+  --mix "GET /products/{id}:2 id=1 pointer=/stock" \
+  --mix "GET /products/{id} id=1 pointer=/stock phase=after"
+```
+
+Form: `"<METHOD> <path>[:<count>] [key=value ...]"`, tokens separated by spaces:
+
+| Key | Meaning |
+|---|---|
+| `:<count>` / `count=<n>` | copies of the request, 1–64 (default 1) |
+| `as=<op>` | `take`, `read`, `inc`, `dec`, `write`, `add`, `remove`, `has`. Defaults to `read` for GET/HEAD and is required for other methods |
+| `phase=` | `before`, `during` (default) or `after` |
+| `pointer=/json/ptr` | where the value is (response for read/has, request body for write/add/remove) |
+| `value=<v>` | fixed element for set operations |
+| `role=<name>` | auth role for this request |
+| `<name>=<v>` | path parameter, for each `{name}` in the path (numbers stay numbers) |
+| `query.<k>=<v>`, `header.<k>=<v>` | query parameter (numbers and `true`/`false` are typed), header |
+| `body=<json>` | JSON request body. Must be the last token and may contain spaces |
+
+A malformed `--mix`, or `--mix` without `--concurrency-test`, fails with `SW_CONFIG_FLAG` (exit 2) and prints the expected form. The 64-request cap (burst + `during` copies) is checked like a config file.
 
 A failing check lists the history in call order (e.g. `take→ok(201) · read→99`) in the finding. The curl reproduction and `sw replay` include the mixed requests.
 

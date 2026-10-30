@@ -143,6 +143,11 @@ describe("mixed-operation race detection: shop-express (planted stock-race)", ()
       expect(entries.some((e) => e.request.method === "GET" && /\/products\/\d+$/.test(e.request.url))).toBe(
         true,
       );
+      // Real phase timings from the executor (validator already checked sum = time, ssl ⊂ connect).
+      const timings = (har.log.entries as { timings: Record<string, number> }[]).map((e) => e.timings);
+      expect(timings.every((t) => t.blocked !== undefined && t.blocked >= 0)).toBe(true);
+      expect(timings.every((t) => t.ssl === -1)).toBe(true); // plain http
+      expect(timings.some((t) => (t.wait ?? 0) > 0)).toBe(true);
     }
   });
 
