@@ -186,3 +186,9 @@ FIXED by main (wave 5, sw-qa/sw-coverage reports): fed5901 evolve app-never-heal
 FIXED by main: 5649666 agent export U+2028/U+2029 code injection + analyze unknown severity · c1a566a docs/UX batch.
 | sw-fixes2 | DONE (54069e9) | evolve own-state checksum; inspect missing path exit 2; user-side 70s → 2/5 |
 FINAL wave 5 (main): full suite 185 files, 1649 passed / 1 skipped / 0 failed; tsc clean. Extra fixes: db5ef7d world evolution ignorePaths · a7fdf83 safety stop → exit 3 · ad860c4 test fixes (db5ef7d expectation; two load-sensitive assertions). Branch wave-5 not merged to master (awaiting user). Open: LICENSE copyright name (user).
+
+## Wave 6 (2026-10-30, branch `wave-6`; master = 2dfb365 after merging wave-5)
+| Agent | Status | Owns | Task |
+|---|---|---|---|
+| sw-exit6 | DONE (d2cc1d7) | src/engines/stress/**, src/engines/experiments/{worktree,git,evolution}.ts, tests/unit/stress/**, tests/unit/experiments/** (new files) | Exit 70 → correct code: (a) stress where every stage errors for a non-unreachable reason; (b) evolve git worktree / gitOk failures |
+| sw-bugs6 | DONE (8d9bb95) | src/cli/commands/bugs.ts, src/engines/bugs/har.ts (+ minimal engine.ts wiring), tests/unit/bugs/**, tests/unit/cli/** (new files), docs/03-engines/api-bug-hunter.md | `--mix` CLI flag for concurrency tests; HAR send/wait/receive (+ connect/dns) phase timings |

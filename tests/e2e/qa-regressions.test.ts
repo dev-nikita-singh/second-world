@@ -102,6 +102,14 @@ describe("sw perf --model iterations with a configured warmup", () => {
 });
 
 describe("unreachable target (README exit table: 5 = target unreachable)", () => {
+  // The dead port was free in beforeAll; in a long full-suite run another test's server can be
+  // given the same ephemeral port, so check it still refuses before every test.
+  beforeEach(async () => {
+    for (let i = 0; i < 5 && !(await portRefuses(Number(new URL(deadUrl).port))); i++)
+      deadUrl = `http://127.0.0.1:${await freePort()}`;
+    expect(await portRefuses(Number(new URL(deadUrl).port))).toBe(true);
+  });
+
   // Fixed (main, wave 5; was reported by sw-qa 2026-10-29): sw bugs against a dead port → "✔ PASS (exit 0)", 168 transport errors,
   // coverage 100%, every operation "pass" (bugs/cases.ts:561, bugs/engine.ts:537).
   it("sw bugs against a refused port does not pass (exit 5)", async () => {
@@ -125,7 +133,7 @@ describe("unreachable target (README exit table: 5 = target unreachable)", () =>
   // Fixed (main, wave 5; was reported by sw-qa 2026-10-29): stress exits 70 "engine error: stress" for a dead target.
   it("sw stress against a refused port exits 5, not 70", async () => {
     const r = await sw(["stress", deadUrl, "--steps", "2", "--hold", "1s", "--no-history"]);
-    expect(r.exitCode).toBe(5);
+    expect(r.exitCode, `timedOut=${r.timedOut}\n${r.stdout.slice(-1500)}\n${r.stderr.slice(-1500)}`).toBe(5);
   });
 });
 
