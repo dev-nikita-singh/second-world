@@ -151,8 +151,10 @@ describe.skipIf(!canBuild)("packed second-world package", () => {
     expect(files.filter((f) => /dist\/typescript-/.test(f))).toEqual([]);
     expect(pkg.peerDependencies?.typescript).toBeDefined();
     expect(statSync(tarball).size).toBeLessThan(5 * 1024 * 1024);
-    for (const f of pkg.files as string[])
+    for (const f of (pkg.files as string[]).filter((x) => !x.startsWith("!")))
       expect(existsSync(path.join(pkgDir, f)), `files entry ${f}`).toBe(true);
+    // Sourcemaps are not shipped (they were 220 of 235 files, ~6 MB unpacked).
+    expect(files.filter((f) => f.endsWith(".map"))).toEqual([]);
   });
 
   it("sw --help / --version / doctor run from the installed bin", async () => {
