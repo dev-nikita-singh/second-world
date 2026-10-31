@@ -97,7 +97,7 @@ Severity is derived deterministically, not chosen ad hoc: `severity = f(impact, 
 | Backend | When | Details |
 |---|---|---|
 | **JSONL files** (default) | Always available | `.second-world/history/runs.jsonl` (index, one line per run) + `runs/<ulid>.json.gz` (full report). Append-only, crash-safe (write temp, then `rename`), file lock via `O_EXCL` lock file with stale-lock detection |
-| **SQLite via `node:sqlite`** | Node ≥ 22.13, `history.backend: "sqlite"` | Built into Node, no native addon. Tables: runs, findings, metrics, baselines. Indexed by time, engine, fingerprint |
+| SQLite via `node:sqlite` (not implemented) | — | `history.backend: "sqlite"` is accepted but falls back to JSONL with a warning. Deferred: `node:sqlite` still prints an ExperimentalWarning on Node 22/24, and JSONL measured 81 ms `list` / 170 ms `trend` at 10,000 runs (default retention is 200). Revisit when `node:sqlite` is stable |
 | Remote (later) | Teams | HTTP API / S3-compatible object store adapter |
 
 ### B.2 Capabilities

@@ -36,7 +36,7 @@ export default definePlugin({
 | `Assertion` | `(response, args, ctx) → AssertionResult` | status, header, jsonPath, schema, latency, custom |
 | `FaultInjector` | `capabilities(), apply(fault, signal), revert()` | builtin-proxy, toxiproxy, docker |
 | `Reporter` | `render(report, opts) → string \| Stream` | tty, json, md, junit, sarif, html |
-| `HistoryStore` | `append, get, list, query, setBaseline` | jsonl, sqlite |
+| `HistoryStore` | `append, get, list, query, setBaseline` | jsonl (sqlite planned) |
 | `TelemetrySource` | `query(window, filters) → metrics/traces` | otlp-file, otlp-receiver, prometheus-scrape |
 | `Engine` | full engine contract | all 12 engines are built as internal "plugins" |
 | Lifecycle hooks | `config.resolved`, `run.started`, `engine.started`, `finding.created`, `run.completed`, `run.failed` | — |

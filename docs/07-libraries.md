@@ -85,7 +85,7 @@ Optional k6/Artillery bridges call the **external binaries** (`k6`, `artillery`)
 | `node:perf_hooks` | `performance.now()`, `monitorEventLoopDelay`, `eventLoopUtilization` |
 | `node:diagnostics_channel` | undici request timing hooks |
 | `node:worker_threads` | Load generator sharding, `MessagePort` histogram transfer |
-| `node:sqlite` | History backend (Node ≥ 22.13 unflagged) |
+| `node:sqlite` | Planned history backend (not used yet: still experimental in Node 22/24) |
 | `node:crypto` | SHA-256, `randomUUID`, `getRandomValues` (seed generation) |
 | `node:zlib` | gzip reports & artifacts |
 | `node:fs/promises`, `node:path`, `node:url`, `node:os` | Portable FS & environment |
