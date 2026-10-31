@@ -540,8 +540,9 @@ export async function main(argv: string[] = process.argv): Promise<number> {
       // usage errors (unknown option, bad choice, missing argument) → config/usage error
       return 2;
     }
-    const { reportError } = await import("./output.js");
-    return reportError(e, { color: !argv.includes("--no-color") && !process.env.NO_COLOR });
+    const { colorEnabled, reportError } = await import("./output.js");
+    // Errors go to stderr: colour only when stderr is a terminal (or FORCE_COLOR), never into a pipe.
+    return reportError(e, { color: colorEnabled({ color: !argv.includes("--no-color") }, process.stderr) });
   }
 }
 

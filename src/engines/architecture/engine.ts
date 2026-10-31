@@ -378,7 +378,9 @@ export async function runArchitecture(
     schemaVersion: 1,
     engine: "architecture",
     runId,
-    status: errorFindings > 0 ? "failed" : "passed",
+    // Nothing to inspect is "nothing measured" (exit 5), not a pass: a CI job pointed at the wrong
+    // folder must not go green.
+    status: disc.files.length === 0 ? "error" : errorFindings > 0 ? "failed" : "passed",
     startedAt,
     endedAt: clock.isoNow(),
     findings,

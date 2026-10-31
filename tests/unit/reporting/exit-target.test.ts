@@ -25,6 +25,12 @@ describe("exit code for target-side errors", () => {
         makeResult({ status: "error", limitations: [{ ...unreachable, code: "no-measurements" }] }),
       ]).exitCode,
     ).toBe(ExitCode.TargetUnreachable);
+    // sw inspect of a folder with no sources (wave 7, sw-ship7): nothing measured → 5, not a pass.
+    expect(
+      computeVerdict([
+        makeResult({ status: "error", limitations: [{ ...unreachable, code: "ARCH_NO_FILES" }] }),
+      ]).exitCode,
+    ).toBe(ExitCode.TargetUnreachable);
     expect(computeVerdict([makeResult({ status: "error", limitations: [] })]).exitCode).toBe(
       ExitCode.Internal,
     );

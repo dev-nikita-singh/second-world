@@ -39,7 +39,8 @@
     "coverage": "vitest run --coverage",
     "lint": "biome check src tests examples",
     "format": "biome format --write src tests examples",
-    "sw": "tsx src/cli/main.ts"
+    "sw": "tsx src/cli/main.ts",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@apidevtools/swagger-parser": "^13.1.0",

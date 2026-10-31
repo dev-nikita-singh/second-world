@@ -21,13 +21,16 @@ export interface Style {
   bold(s: string): string;
 }
 
-export function colorEnabled(g: Pick<GlobalOptions, "color"> = {}): boolean {
+export function colorEnabled(
+  g: Pick<GlobalOptions, "color"> = {},
+  stream: { isTTY?: boolean } = process.stdout,
+): boolean {
   if (g.color === false) return false;
   const env = process.env;
   if (env.NO_COLOR !== undefined && env.NO_COLOR !== "") return false;
   if (env.FORCE_COLOR !== undefined) return env.FORCE_COLOR !== "0";
   if (env.TERM === "dumb") return false;
-  return process.stdout.isTTY === true;
+  return stream.isTTY === true;
 }
 
 export function unicodeEnabled(): boolean {

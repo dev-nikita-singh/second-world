@@ -259,7 +259,8 @@ describe("engine contract", () => {
         ctx,
       );
       expect(r.engine).toBe("architecture");
-      expect(r.status).toBe("passed");
+      // Nothing to inspect is "nothing measured" (exit 5), not a pass.
+      expect(r.status).toBe("error");
       expect(r.limitations.map((l) => l.code)).toEqual(
         expect.arrayContaining(["ARCH_STATIC_ONLY", "ARCH_NO_FILES"]),
       );

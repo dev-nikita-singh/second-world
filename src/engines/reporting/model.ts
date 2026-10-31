@@ -115,7 +115,12 @@ export function isFailingFinding(f: Finding, failOn: FailOn): boolean {
  * Limitation codes meaning the run failed because of the target, not the engine (→ exit 5).
  * EVOLUTION-BASELINE-FAILED: the user's baseline commit could not be prepared (install/build) or benchmarked.
  */
-const TARGET_LIMITATIONS = new Set(["target-unreachable", "no-measurements", "EVOLUTION-BASELINE-FAILED"]);
+const TARGET_LIMITATIONS = new Set([
+  "target-unreachable",
+  "no-measurements",
+  "EVOLUTION-BASELINE-FAILED",
+  "ARCH_NO_FILES",
+]);
 /** Limitation codes meaning the Safety Guard stopped the run (→ exit 3). */
 const SAFETY_LIMITATIONS = new Set(["dns-rebind"]);
 
