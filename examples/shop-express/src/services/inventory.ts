@@ -20,7 +20,6 @@ export async function reserve(db: Db, productId: number, qty: number): Promise<R
 export async function stockReport(db: Db): Promise<{ productId: number; stock: number; pending: number }[]> {
   const products = await db.listProducts();
   const out: { productId: number; stock: number; pending: number }[] = [];
-  for (const p of products)
-    out.push({ productId: p.id, stock: p.stock, pending: await pendingQuantity(db, p.id) });
+  for (const p of products) out.push({ productId: p.id, stock: p.stock, pending: await pendingQuantity(db, p.id) });
   return out;
 }

@@ -43,7 +43,6 @@ export async function placeOrder(
 export async function pendingQuantity(db: Db, productId: number): Promise<number> {
   const orders = await db.allOrders();
   let q = 0;
-  for (const o of orders)
-    if (o.status === "pending") for (const i of o.items) if (i.productId === productId) q += i.qty;
+  for (const o of orders) if (o.status === "pending") for (const i of o.items) if (i.productId === productId) q += i.qty;
   return q;
 }

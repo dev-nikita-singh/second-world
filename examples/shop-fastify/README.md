@@ -28,16 +28,16 @@ Product 40 has stock 1.
 
 ## Seeded defects
 
-| id                                               | Engine                                 | Reproduce                                                                                                           |
-| ------------------------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `slow-search`                                    | evolution / performance / architecture | `GET /products/search?q=red` → 41 queries; `FIXED=1` → 1                                                            |
-| `retry-no-jitter`                                | reliability / architecture             | payments `failNext: 3` → constant 50 ms retry gaps                                                                  |
-| `no-circuit-breaker`                             | reliability                            | payments `failPct: 100` → 4 attempts on every order, forever                                                        |
-| `boundary-500-limit`                             | bugs                                   | `GET /products?limit=0` → 500                                                                                       |
-| `bfla-delete-product`                            | bugs (security)                        | bob `DELETE /products/1` → 204                                                                                      |
-| `sync-fs-in-handler`                             | architecture                           | `readFileSync` in the `/terms` handler                                                                              |
-| `schema-drift-created-at`                        | bugs                                   | `GET /orders/:id` → `createdAt` is a number                                                                         |
-| `idempotency-key-race` (discovered, not planted) | agent / bugs / reliability             | 5 concurrent `POST /orders` with one `Idempotency-Key` → several orders (sequential repeats are replayed correctly) |
+| id | Engine | Reproduce |
+|---|---|---|
+| `slow-search` | evolution / performance / architecture | `GET /products/search?q=red` → 41 queries; `FIXED=1` → 1 |
+| `retry-no-jitter` | reliability / architecture | payments `failNext: 3` → constant 50 ms retry gaps |
+| `no-circuit-breaker` | reliability | payments `failPct: 100` → 4 attempts on every order, forever |
+| `boundary-500-limit` | bugs | `GET /products?limit=0` → 500 |
+| `bfla-delete-product` | bugs (security) | bob `DELETE /products/1` → 204 |
+| `sync-fs-in-handler` | architecture | `readFileSync` in the `/terms` handler |
+| `schema-drift-created-at` | bugs | `GET /orders/:id` → `createdAt` is a number |
+| `idempotency-key-race` (discovered, not planted) | agent / bugs / reliability | 5 concurrent `POST /orders` with one `Idempotency-Key` → several orders (sequential repeats are replayed correctly) |
 
 ## Finding them with `sw.config.ts`
 
@@ -52,16 +52,16 @@ sw --config examples/shop-fastify/sw.config.ts --approve-disruptive reliability 
 sw --config examples/shop-fastify/sw.config.ts --approve-disruptive reliability run dependency-latency
 ```
 
-| Defect                    | Command                                            | Finding                                                                                                                                                                                                                                                                                                    |
-| ------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `slow-search`             | `sw inspect`                                       | ARCH005 at `src/server.ts` (query in a loop)                                                                                                                                                                                                                                                               |
-| `retry-no-jitter`         | `sw inspect`, `sw reliability run dependency-5xx`  | ARCH002; `reliability/retry-without-jitter`                                                                                                                                                                                                                                                                |
-| `no-circuit-breaker`      | `sw reliability run dependency-5xx`                | `reliability/no-circuit-breaker`                                                                                                                                                                                                                                                                           |
-| `boundary-500-limit`      | `sw bugs`                                          | `bugs/server-error-on-boundary` GET /products                                                                                                                                                                                                                                                              |
-| `bfla-delete-product`     | `sw bugs`                                          | `bugs/bfla` DELETE /products/{id}                                                                                                                                                                                                                                                                          |
-| `sync-fs-in-handler`      | `sw inspect`                                       | ARCH004 at `src/server.ts`                                                                                                                                                                                                                                                                                 |
-| `schema-drift-created-at` | `sw bugs`                                          | `bugs/schema-mismatch` GET /orders/{id}                                                                                                                                                                                                                                                                    |
-| `idempotency-key-race`    | `sw bugs`, `sw reliability run dependency-latency` | `bugs/race-lost-update` (concurrency test "same Idempotency-Key, concurrent"); `reliability/duplicate-operation` (invariants `one-order-per-key` and `orders-per-operation`: payments answers in 1.5 s, clients time out after 1 s and retry with the same key while the first request is still in flight) |
+| Defect | Command | Finding |
+|---|---|---|
+| `slow-search` | `sw inspect` | ARCH005 at `src/server.ts` (query in a loop) |
+| `retry-no-jitter` | `sw inspect`, `sw reliability run dependency-5xx` | ARCH002; `reliability/retry-without-jitter` |
+| `no-circuit-breaker` | `sw reliability run dependency-5xx` | `reliability/no-circuit-breaker` |
+| `boundary-500-limit` | `sw bugs` | `bugs/server-error-on-boundary` GET /products |
+| `bfla-delete-product` | `sw bugs` | `bugs/bfla` DELETE /products/{id} |
+| `sync-fs-in-handler` | `sw inspect` | ARCH004 at `src/server.ts` |
+| `schema-drift-created-at` | `sw bugs` | `bugs/schema-mismatch` GET /orders/{id} |
+| `idempotency-key-race` | `sw bugs`, `sw reliability run dependency-latency` | `bugs/race-lost-update` (concurrency test "same Idempotency-Key, concurrent"); `reliability/duplicate-operation` (invariants `one-order-per-key` and `orders-per-operation`: payments answers in 1.5 s, clients time out after 1 s and retry with the same key while the first request is still in flight) |
 
 `sw bugs` also runs a mixed orders/stock-reads concurrency test on product 40. It must stay
 linearizable here (atomic decrement). The FIXED/`slow-search` comparison (What-If / Evolution)

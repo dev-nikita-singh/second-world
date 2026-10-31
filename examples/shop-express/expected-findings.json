@@ -7,7 +7,9 @@
     {
       "id": "n-plus-one-reviews",
       "engine": "architecture",
-      "alsoDetectableBy": ["performance"],
+      "alsoDetectableBy": [
+        "performance"
+      ],
       "category": "performance",
       "ruleId": "perf/n-plus-one",
       "severity": "medium",
@@ -33,7 +35,9 @@
     {
       "id": "no-timeout-outbound",
       "engine": "architecture",
-      "alsoDetectableBy": ["reliability"],
+      "alsoDetectableBy": [
+        "reliability"
+      ],
       "category": "reliability",
       "ruleId": "reliability/outbound-no-timeout",
       "severity": "high",
@@ -62,7 +66,9 @@
     {
       "id": "sync-crypto-login",
       "engine": "architecture",
-      "alsoDetectableBy": ["performance"],
+      "alsoDetectableBy": [
+        "performance"
+      ],
       "category": "performance",
       "ruleId": "perf/sync-crypto-in-handler",
       "severity": "medium",
@@ -93,7 +99,10 @@
       "ruleId": "arch/module-cycle",
       "severity": "low",
       "title": "Module dependency cycle: services/inventory.ts <-> services/orders.ts",
-      "cycle": ["src/services/inventory.ts", "src/services/orders.ts"],
+      "cycle": [
+        "src/services/inventory.ts",
+        "src/services/orders.ts"
+      ],
       "reproduction": "Static import graph contains the cycle inventory.ts -> orders.ts -> inventory.ts",
       "fix": "Move pendingQuantity into a third module or invert the dependency",
       "location": {
@@ -114,7 +123,9 @@
     {
       "id": "stock-race",
       "engine": "bugs",
-      "alsoDetectableBy": ["agent"],
+      "alsoDetectableBy": [
+        "agent"
+      ],
       "category": "bug",
       "ruleId": "bugs/race-lost-update",
       "severity": "high",
@@ -140,7 +151,9 @@
     {
       "id": "idempotency-ignored",
       "engine": "bugs",
-      "alsoDetectableBy": ["agent"],
+      "alsoDetectableBy": [
+        "agent"
+      ],
       "category": "bug",
       "ruleId": "bugs/idempotency-key-ignored",
       "severity": "high",
@@ -176,7 +189,9 @@
     {
       "id": "bola-orders",
       "engine": "bugs",
-      "alsoDetectableBy": ["agent"],
+      "alsoDetectableBy": [
+        "agent"
+      ],
       "category": "security",
       "ruleId": "bugs/bola",
       "severity": "critical",
@@ -229,13 +244,17 @@
     {
       "id": "boundary-500",
       "engine": "bugs",
-      "alsoDetectableBy": ["agent"],
+      "alsoDetectableBy": [
+        "agent"
+      ],
       "category": "bug",
       "ruleId": "bugs/server-error-on-boundary",
       "severity": "medium",
       "title": "500 on boundary quantity (qty=0, qty<0 or qty>100) instead of 400",
       "endpoint": "POST /cart/items",
-      "alsoEndpoints": ["POST /orders"],
+      "alsoEndpoints": [
+        "POST /orders"
+      ],
       "reproduction": "POST /cart/items {productId:1, qty:0} -> 500; qty:101 -> 500",
       "fix": "Validate 1 <= qty <= 100 and return 400",
       "location": {
@@ -260,7 +279,9 @@
     {
       "id": "unbounded-retry",
       "engine": "reliability",
-      "alsoDetectableBy": ["architecture"],
+      "alsoDetectableBy": [
+        "architecture"
+      ],
       "category": "reliability",
       "ruleId": "reliability/retry-without-backoff",
       "severity": "high",
@@ -289,7 +310,9 @@
     {
       "id": "idempotency-key-race",
       "engine": "agent",
-      "alsoDetectableBy": ["bugs"],
+      "alsoDetectableBy": [
+        "bugs"
+      ],
       "category": "bug",
       "ruleId": "agent/idempotency-key-race",
       "severity": "high",
