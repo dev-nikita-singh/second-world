@@ -1,0 +1,517 @@
+openapi: 3.1.0
+info:
+  title: conduit-api (intended contract)
+  version: 1.0.0
+  description: >
+    The CORRECT behaviour of the Conduit API (RealWorld spec, https://realworld-docs.netlify.app/).
+    The implementation in src/ deviates from this contract in seeded, documented ways (see
+    expected-findings.json); this file is what SECOND WORLD's API Bug Hunter checks against.
+    Authentication: `Authorization: Token <token>` (RealWorld) or `Authorization: Bearer <token>`.
+    Errors use the RealWorld shape `{ "errors": { "<field>": ["<message>"] } }`.
+servers:
+  - url: http://127.0.0.1:3100
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  parameters:
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    Username:
+      name: username
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    Limit:
+      name: limit
+      in: query
+      description: Page size. A page never has more than `limit` articles.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 }
+  responses:
+    BadRequest:
+      description: Malformed JSON or a non-JSON content type
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Errors" }
+    Unauthorized:
+      description: Missing, malformed or unknown token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Errors" }
+    Forbidden:
+      description: The resource belongs to another user
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Errors" }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Errors" }
+    Conflict:
+      description: Username or email already taken
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Errors" }
+    Unprocessable:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Errors" }
+  schemas:
+    Errors:
+      type: object
+      required: [errors]
+      properties:
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+    Email:
+      type: string
+      format: email
+      maxLength: 254
+    Username:
+      type: string
+      minLength: 1
+      maxLength: 40
+      pattern: "^[A-Za-z0-9_-]+$"
+    Password:
+      type: string
+      minLength: 8
+      maxLength: 72
+    User:
+      type: object
+      required: [email, token, username, bio, image]
+      properties:
+        email: { type: string }
+        token: { type: string }
+        username: { type: string }
+        bio: { type: [string, "null"] }
+        image: { type: [string, "null"] }
+    UserResponse:
+      type: object
+      required: [user]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+    Profile:
+      type: object
+      required: [username, bio, image, following]
+      properties:
+        username: { type: string }
+        bio: { type: [string, "null"] }
+        image: { type: [string, "null"] }
+        following: { type: boolean }
+    ProfileResponse:
+      type: object
+      required: [profile]
+      properties:
+        profile: { $ref: "#/components/schemas/Profile" }
+    Article:
+      type: object
+      required:
+        [slug, title, description, body, tagList, createdAt, updatedAt, favorited, favoritesCount, author]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        body: { type: string }
+        tagList: { type: array, items: { type: string } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        favorited: { type: boolean }
+        favoritesCount:
+          type: integer
+          minimum: 0
+          description: Number of users who favorited the article (exact, also under concurrent favorites).
+        author: { $ref: "#/components/schemas/Profile" }
+    ArticleResponse:
+      type: object
+      required: [article]
+      properties:
+        article: { $ref: "#/components/schemas/Article" }
+    ArticleList:
+      type: object
+      required: [articles, articlesCount]
+      properties:
+        articles:
+          type: array
+          description: At most `limit` articles, newest first.
+          items: { $ref: "#/components/schemas/Article" }
+        articlesCount:
+          type: integer
+          minimum: 0
+          description: Total number of articles matching the filter (all pages).
+    TagList:
+      type: array
+      maxItems: 10
+      items: { type: string, minLength: 1, maxLength: 30 }
+    Comment:
+      type: object
+      required: [id, createdAt, updatedAt, body, author]
+      properties:
+        id: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        body: { type: string }
+        author: { $ref: "#/components/schemas/Profile" }
+paths:
+  /healthz:
+    get:
+      security: []
+      responses:
+        "200": { description: OK }
+  /api/users/login:
+    post:
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user]
+              properties:
+                user:
+                  type: object
+                  required: [email, password]
+                  properties:
+                    email: { $ref: "#/components/schemas/Email" }
+                    password: { type: string, minLength: 1, maxLength: 72 }
+      responses:
+        "200":
+          description: Logged in (a new session token)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/users:
+    post:
+      summary: Register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user]
+              properties:
+                user:
+                  type: object
+                  required: [username, email, password]
+                  properties:
+                    username: { $ref: "#/components/schemas/Username" }
+                    email: { $ref: "#/components/schemas/Email" }
+                    password: { $ref: "#/components/schemas/Password" }
+      responses:
+        "201":
+          description: Registered (and signed in)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/user:
+    get:
+      summary: Current user
+      responses:
+        "200":
+          description: The current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    put:
+      summary: Update the current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user]
+              properties:
+                user:
+                  type: object
+                  properties:
+                    username: { $ref: "#/components/schemas/Username" }
+                    email: { $ref: "#/components/schemas/Email" }
+                    password: { $ref: "#/components/schemas/Password" }
+                    bio: { type: [string, "null"], maxLength: 1000 }
+                    image: { type: [string, "null"], maxLength: 2048 }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/profiles/{username}:
+    get:
+      summary: A profile (anonymous or signed in)
+      security: [{}, { bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Username"
+      responses:
+        "200":
+          description: The profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/profiles/{username}/follow:
+    post:
+      summary: Follow a user (idempotent)
+      parameters:
+        - $ref: "#/components/parameters/Username"
+      responses:
+        "200":
+          description: The profile, following = true
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Unfollow a user (idempotent)
+      parameters:
+        - $ref: "#/components/parameters/Username"
+      responses:
+        "200":
+          description: The profile, following = false
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/articles:
+    get:
+      summary: List articles, newest first (anonymous or signed in)
+      security: [{}, { bearer: [] }]
+      parameters:
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: author, in: query, schema: { type: string } }
+        - { name: favorited, in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: One page of articles
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      summary: Create an article
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [article]
+              properties:
+                article:
+                  type: object
+                  required: [title, description, body]
+                  properties:
+                    title: { type: string, minLength: 1, maxLength: 120 }
+                    description: { type: string, minLength: 1, maxLength: 255 }
+                    body: { type: string, minLength: 1, maxLength: 20000 }
+                    tagList: { $ref: "#/components/schemas/TagList" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/articles/feed:
+    get:
+      summary: Articles by followed authors, newest first
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: One page of the feed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/articles/{slug}:
+    get:
+      summary: One article (anonymous or signed in)
+      security: [{}, { bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "200":
+          description: The article
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Update an article (author only)
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [article]
+              properties:
+                article:
+                  type: object
+                  properties:
+                    title: { type: string, minLength: 1, maxLength: 120 }
+                    description: { type: string, minLength: 1, maxLength: 255 }
+                    body: { type: string, minLength: 1, maxLength: 20000 }
+                    tagList: { $ref: "#/components/schemas/TagList" }
+      responses:
+        "200":
+          description: Updated (a new title gives a new slug)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      summary: Delete an article (author only)
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/articles/{slug}/favorite:
+    post:
+      summary: Favorite an article (idempotent per user)
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "200":
+          description: The article, favorited = true
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Unfavorite an article (idempotent per user)
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "200":
+          description: The article, favorited = false
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/articles/{slug}/comments:
+    get:
+      summary: Comments of an article, oldest first (anonymous or signed in)
+      security: [{}, { bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "200":
+          description: The comments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [comments]
+                properties:
+                  comments: { type: array, items: { $ref: "#/components/schemas/Comment" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Add a comment
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comment]
+              properties:
+                comment:
+                  type: object
+                  required: [body]
+                  properties:
+                    body: { type: string, minLength: 1, maxLength: 5000 }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [comment]
+                properties:
+                  comment: { $ref: "#/components/schemas/Comment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/articles/{slug}/comments/{id}:
+    delete:
+      summary: Delete a comment (comment author only)
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/tags:
+    get:
+      summary: All tags in use
+      security: []
+      responses:
+        "200":
+          description: The tags
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tags]
+                properties:
+                  tags: { type: array, items: { type: string } }

@@ -1,0 +1,146 @@
+{
+  "$comment": "Ground truth for SECOND WORLD recall/precision on conduit-api (docs/12-testing-and-quality.md §3). Same format as examples/shop-express/expected-findings.json: location.line = the line after the SEEDED-DEFECT marker (refresh with `node examples/_tools/sync-expected-findings.mjs examples/conduit-api`); detectedBy = the CLI commands that find the defect with exactly this folder's sw.config.ts (finding ruleId + operation, title fragment or location); detectableFromConfig: false (+ reason) marks defects no engine finds from the config today. `observations` = documented findings that are not defects. Checked by tests/system/conduit.test.ts.",
+  "schemaVersion": 1,
+  "app": "conduit-api",
+  "framework": "node:http + node:sqlite",
+  "defects": [
+    {
+      "id": "pagination-off-by-one",
+      "engine": "bugs",
+      "alsoDetectableBy": [],
+      "category": "correctness",
+      "ruleId": "bugs/invariant-violated",
+      "severity": "high",
+      "title": "Off-by-one in pagination: GET /api/articles returns limit + 1 articles",
+      "endpoint": "GET /api/articles",
+      "reproduction": "GET /api/articles?limit=5 -> 6 articles (default limit 20 -> 21)",
+      "fix": "Drop the look-ahead row: rows.slice(0, limit) (or LIMIT ? with limit)",
+      "location": {
+        "file": "src/repositories/articles.ts",
+        "line": 99,
+        "symbol": "ArticleRepository.list"
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/invariant-violated",
+          "operation": "GET /api/articles",
+          "titleIncludes": "page-size"
+        }
+      ]
+    },
+    {
+      "id": "n-plus-one-article-list",
+      "engine": "architecture",
+      "alsoDetectableBy": ["performance"],
+      "category": "performance",
+      "ruleId": "perf/n-plus-one",
+      "severity": "medium",
+      "title": "N+1 queries in GET /api/articles: author, tags and favorited are loaded per article",
+      "endpoint": "GET /api/articles",
+      "reproduction": "GET /api/articles?limit=20 runs 2 + 3 x 21 queries (see GET /__test/stats); the feed with the same page size runs 6",
+      "fix": "Assemble the page with the batched ArticleRepository.views() the feed uses (WHERE article_id IN (...))",
+      "location": {
+        "file": "src/routes/articles.ts",
+        "line": 62,
+        "symbol": "articleRoutes",
+        "handler": "GET /api/articles"
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw inspect",
+          "ruleId": "ARCH005",
+          "location": true
+        }
+      ]
+    },
+    {
+      "id": "slug-header-500",
+      "engine": "bugs",
+      "alsoDetectableBy": [],
+      "category": "bug",
+      "ruleId": "bugs/server-error",
+      "severity": "high",
+      "title": "500 on GET /api/articles/{slug} when the slug has characters outside Latin-1 (e.g. emoji)",
+      "endpoint": "GET /api/articles/{slug}",
+      "reproduction": "GET /api/articles/%F0%9F%98%80 -> 500 (contract: 404); setHeader throws ERR_INVALID_CHAR",
+      "fix": "Do not echo raw input in headers (encodeURIComponent the slug, or drop Content-Location)",
+      "location": {
+        "file": "src/routes/articles.ts",
+        "line": 102,
+        "symbol": "articleRoutes",
+        "handler": "GET /api/articles/:slug"
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/server-error",
+          "operation": "GET /api/articles/{slug}"
+        }
+      ]
+    },
+    {
+      "id": "delete-article-no-ownership",
+      "engine": "bugs",
+      "alsoDetectableBy": [],
+      "category": "security",
+      "ruleId": "bugs/bola",
+      "severity": "critical",
+      "title": "Missing ownership check: any signed-in user can delete another user's article",
+      "endpoint": "DELETE /api/articles/{slug}",
+      "reproduction": "alice creates an article; bob DELETEs /api/articles/<alice's slug> -> 204 (contract: 403)",
+      "fix": "Return 403 unless article.author_id === current user (as PUT does)",
+      "location": {
+        "file": "src/routes/articles.ts",
+        "line": 125,
+        "symbol": "articleRoutes",
+        "handler": "DELETE /api/articles/:slug"
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/bola",
+          "operation": "DELETE /api/articles/{slug}"
+        }
+      ],
+      "description": "Found by sw bugs (auth technique, BOLA on DELETE) since the wave-7 fix in src/engines/bugs/generate.ts (BOLA cases per secured operation; before it, a public read operation skipped the whole resource)."
+    },
+    {
+      "id": "favorites-count-race",
+      "engine": "bugs",
+      "alsoDetectableBy": [],
+      "category": "bug",
+      "ruleId": "bugs/race-lost-update",
+      "severity": "high",
+      "title": "Lost update on favoritesCount: read-modify-write across awaits without a transaction",
+      "endpoint": "POST /api/articles/{slug}/favorite",
+      "reproduction": "5 users favorite welcome-to-conduit concurrently -> favoritesCount 1 (expected 5)",
+      "fix": "INSERT OR IGNORE the favorite and UPDATE favorites_count = favorites_count + 1 in one transaction (as unfavorite does)",
+      "location": {
+        "file": "src/repositories/articles.ts",
+        "line": 256,
+        "symbol": "ArticleRepository.favorite"
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/race-lost-update",
+          "operation": "GET /api/articles/{slug}",
+          "titleIncludes": "favorites counter"
+        }
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "command": "sw reliability run",
+      "ruleId": "reliability/experiment",
+      "reason": "Per-run experiment summary (info). Not a defect."
+    }
+  ]
+}
