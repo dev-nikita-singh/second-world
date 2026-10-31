@@ -192,3 +192,12 @@ FINAL wave 5 (main): full suite 185 files, 1649 passed / 1 skipped / 0 failed; t
 |---|---|---|---|
 | sw-exit6 | DONE (d2cc1d7) | src/engines/stress/**, src/engines/experiments/{worktree,git,evolution}.ts, tests/unit/stress/**, tests/unit/experiments/** (new files) | Exit 70 → correct code: (a) stress where every stage errors for a non-unreachable reason; (b) evolve git worktree / gitOk failures |
 | sw-bugs6 | DONE (8d9bb95) | src/cli/commands/bugs.ts, src/engines/bugs/har.ts (+ minimal engine.ts wiring), tests/unit/bugs/**, tests/unit/cli/** (new files), docs/03-engines/api-bug-hunter.md | `--mix` CLI flag for concurrency tests; HAR send/wait/receive (+ connect/dns) phase timings |
+
+## Wave 7 (2026-11-01, branch `wave-7`; master = wave-6). Plan + rules: .agents/PLAN-wave7.md
+| Agent | Status | Owns | Task |
+|---|---|---|---|
+| sw-race7 | RUNNING | src/engines/history/**, src/core/world.ts, src/cli/run-common.ts, src/shared/util/fs*.ts (new fs helpers ok), src/engines/experiments/{worktree,sandbox,app}.ts (lifecycle only), tests/unit/concurrency/**, tests/integration/concurrency/**, docs/02-architecture.md | Plan §A: races/leaks/crash-consistency inside the tool |
+| sw-design7 | RUNNING | docs/16-system-design.md, src/adapters/**, src/core/{config,errors.ts,log}/**, tests/unit/design/** (import rules, API snapshot, schema freeze, startup budget) | Plan §B: system design doc + enforcement tests + resilience |
+| sw-real7 | RUNNING | examples/conduit-api/**, tests/system/conduit*.test.ts (+ helpers in tests/system/conduit/**) | Plan §C: realistic app + packed-tarball user journey |
+| sw-ship7 | RUNNING | .github/**, action.yml, Dockerfile, .dockerignore, CHANGELOG.md, SECURITY.md, CONTRIBUTING.md, README.md, docs/quickstart.md, src/cli/commands/{doctor,init}.ts, src/core/probe/** | Plan §D: CI, Action, Docker, release docs, first-run UX (repo-wide lint pass only when main says go) |
+Shared files nobody owns (src/index.ts, src/cli/main.ts, package.json, engines not listed): message main.
