@@ -31,6 +31,7 @@ import {
 import { numericBounds, sampleValid } from "../../bugs/generators/sample.js";
 import type { RequestTemplate } from "../../bugs/http.js";
 import { getPointer, isObject, type JsonSchema, normalize, primaryType } from "../../bugs/json-schema.js";
+import type { ResourceSpec } from "../../bugs/schema.js";
 import type { ArchHint, HistoryItem } from "../context.js";
 import type { ScenarioInput, Step } from "../scenario.js";
 import type { AgentTechnique } from "../schema.js";
@@ -45,6 +46,8 @@ export interface HeuristicOptions {
   hints?: ArchHint[];
   maxCopies: number;
   slowMs: number;
+  /** Configured resources (agent `resources`); absent → derived from the contract. */
+  resources?: ResourceSpec[];
 }
 
 type NumericField = {
@@ -115,7 +118,7 @@ export class HeuristicPlanner implements Planner {
   private readonly opsByKey: Map<string, Operation>;
 
   constructor(private readonly o: HeuristicOptions) {
-    this.resources = deriveResources(o.g.contract).filter(
+    this.resources = deriveResources(o.g.contract, o.resources).filter(
       (r) => o.ops.some((x) => x.key === r.create.key) && o.ops.some((x) => x.key === r.read.key),
     );
     this.opsByKey = new Map(o.ops.map((x) => [x.key, x]));
@@ -143,7 +146,8 @@ export class HeuristicPlanner implements Planner {
       if (op.method === "POST" && !/\{[^}]+\}/.test(op.path) && op.body) add("concurrency", op.key);
     }
     for (const r of this.resources) {
-      if (roles.owner && roles.attacker && roles.owner !== roles.attacker) add("ownership", r.read.key);
+      if (roles.owner && roles.attacker && roles.owner !== roles.attacker)
+        for (const op of this.ownershipOps(r)) add("ownership", op.key);
       add("lifecycle", r.read.key);
     }
     for (const h of this.o.history ?? []) if (this.opsByKey.has(h.operation)) add("history", h.operation);
@@ -448,15 +452,31 @@ export class HeuristicPlanner implements Planner {
     return toStep(tpl, label);
   }
 
+  /**
+   * Item operations of a resource that are ownership-checked: only secured ones. A public read
+   * (blogs, Conduit) is readable by anyone by design; its owner-only update/delete are probed
+   * instead (same rule as the Bug Hunter's BOLA cases, bugs/generate.ts).
+   */
+  private ownershipOps(r: DerivedResource): Operation[] {
+    return [r.read, r.update, r.delete].filter(
+      (op): op is Operation => op?.secured === true && this.opsByKey.has(op.key),
+    );
+  }
+
   private ownership(op: Operation): unknown[] {
-    const r = this.resourceFor(op);
+    const r = this.resources.find((x) => this.ownershipOps(x).some((o) => o.key === op.key));
     const { owner, attacker } = this.o.g.roles;
     if (!r || !owner || !attacker || owner === attacker) return [];
+    const access = this.base(op);
+    access.pathParams[r.idParam] = "{{rid}}";
+    access.role = attacker;
+    if (op === r.update && r.body !== undefined) access.body = { kind: "json", value: r.body };
+    const verb = op === r.read ? "read" : op === r.delete ? "delete" : "update";
     return [
       scenario(
-        `Cross-account read on ${op.key}`,
-        `A ${r.name} created by test account "${owner}" is not readable by test account "${attacker}"`,
-        [this.readStep(r, attacker, `${attacker} reads ${owner}'s ${r.name}`)],
+        `Cross-account ${verb} on ${op.key}`,
+        `A ${r.name} created by test account "${owner}" cannot be ${verb === "read" ? "read" : `${verb}d`} by test account "${attacker}"`,
+        [toStep(access, `${attacker} ${op.method} ${owner}'s ${r.name}`)],
         [{ kind: "status-class", step: 0, class: "not-2xx", rule: "bugs/bola" }],
         {
           setup: [

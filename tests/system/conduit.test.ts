@@ -130,13 +130,14 @@ describe("conduit-api: sw from source with the example's sw.config.ts", () => {
     for (const f of rep.findings) expect(f.classification, f.title).toBe("reproduced-defect");
   }, 300_000);
 
-  it("sw agent reports no false positives", async () => {
+  it("sw agent finds the missing ownership check (from bugs.stateful.resources) and nothing else", async () => {
     await fetch(`${app.url}/__test/reset`, { method: "POST" });
     const r = await sw(["agent", "--json"], 180_000);
-    expect(r.exitCode, r.stderr.slice(-2000)).toBe(0);
+    expect(r.exitCode, r.stderr.slice(-2000)).toBe(1);
     const rep = engineResult(r.stdout, "agent");
     const s = score("sw agent", rep);
     process.stderr.write(`${describeScore("sw agent", s, rep)}\n`);
+    expect(s.matched).toEqual(["delete-article-no-ownership"]);
     expect(s.falsePositives).toEqual([]);
   }, 200_000);
 
@@ -269,7 +270,7 @@ describe.skipIf(!PACK)("conduit-api: packed tarball user journey (SW_SYSTEM_PACK
 
     await fetch(`${app.url}/__test/reset`, { method: "POST" });
     const steps: [string[], number[]][] = [
-      [["agent"], [0]],
+      [["agent"], [1]],
       [["perf", "--duration", "3s"], [0]],
       [["stress"], [0]],
       [["--approve-disruptive", "reliability", "run", "dependency-latency"], [0]],

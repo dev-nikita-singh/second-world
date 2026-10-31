@@ -8,6 +8,26 @@
 |---|---|
 | **Heuristic** (the only planner) | Coverage gaps (untested status codes, params, state transitions), mutation of previous failures, architecture risks (e.g. ARCH001 → slow-dependency test), idempotency keys detected in the contract |
 
+**Ownership and lifecycle use resources.** A resource is a create operation, its item read and
+optionally update/delete, plus the JSON pointer of the id in the create response. The agent takes
+them from `resources` (same shape as the Bug Hunter's `stateful.resources`; in `sw.config.ts`,
+`bugs.stateful.resources` is forwarded unless `agent.resources` is set). Without them, resources
+are derived from the contract (`POST /x` + `GET /x/{id}`, id at `/id`), which cannot bind ids of
+wrapped responses such as `{ "article": { "slug": ... } }` (set `idPointer: "/article/slug"`).
+
+```ts
+agent: {
+  resources: [{ name: "article", create: "POST /api/articles", read: "GET /api/articles/{slug}",
+                update: "PUT /api/articles/{slug}", delete: "DELETE /api/articles/{slug}",
+                idPointer: "/article/slug", body: { article: { title: "probe", body: "x" } } }],
+}
+```
+
+Ownership probes only **secured** item operations: the owner creates the resource, the other
+test account calls the read, update or delete and must be refused. A public read (blogs, Conduit)
+is never an ownership violation; its owner-only update/delete are probed instead (DELETE needs
+`allowDestructive`). Lifecycle creates and reads back with the owner.
+
 The planner produces `ScenarioProposal` objects as data (DSL, validated by a Zod schema), never code. Given the same seed and inputs, it proposes the same scenarios.
 
 ## 2. Bounded loop

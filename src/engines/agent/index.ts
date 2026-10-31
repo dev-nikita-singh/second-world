@@ -2,6 +2,8 @@
  * Adversarial Test Agent public entry — docs/03-engines/adversarial-test-agent.md.
  * A bounded, safety-validated QA test-case generator over the Bug Hunter's session machinery.
  */
+
+import { zodIssueLines } from "../../core/config/loader.js";
 import { type CreateEngineContextOptions, createEngineContext } from "../../core/context.js";
 import { ConfigError } from "../../core/errors.js";
 import type { EngineResult } from "../../core/evidence/schemas.js";
@@ -41,13 +43,15 @@ export const agentEngine: Engine<AgentInput, AgentData> = {
 export function parseAgentInput(input: AgentInputLoose | unknown): AgentInput {
   const r = AgentInputSchema.safeParse(input);
   if (!r.success) {
-    const issues = r.error.issues.map(
-      (i) => `${i.path.length > 0 ? i.path.join(".") : "(root)"}: ${i.message}`,
+    const issues = zodIssueLines(r.error, { prefix: ["agent"], schema: AgentInputSchema });
+    throw new ConfigError(
+      "SW_CONFIG_AGENT",
+      `Invalid agent input: ${issues.map((i) => `${i.path}: ${i.message}`).join("; ")}`,
+      {
+        hint: "See docs/03-engines/adversarial-test-agent.md for the input fields",
+        details: { issues },
+      },
     );
-    throw new ConfigError("SW_CONFIG_AGENT", `Invalid agent input: ${issues.join("; ")}`, {
-      hint: "See docs/03-engines/adversarial-test-agent.md for the input fields",
-      details: { issues },
-    });
   }
   return r.data;
 }

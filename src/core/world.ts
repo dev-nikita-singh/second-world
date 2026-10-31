@@ -488,6 +488,9 @@ export function buildAgentInput(
   const bugsBase = buildBugsInput(cfg, {}, opts);
   const base: Obj = { cwd: bugsBase.cwd };
   for (const k of AGENT_FROM_BUGS) if (bugsBase[k] !== undefined) base[k] = bugsBase[k];
+  // Resources (create/read/update/delete + idPointer) from bugs.stateful; agent.resources overrides.
+  if (isObj(bugsBase.stateful) && (bugsBase.stateful as Obj).resources !== undefined)
+    base.resources = (bugsBase.stateful as Obj).resources;
   const sec = isObj(cfg.config.agent) ? { ...(cfg.config.agent as Obj) } : {};
   if (sec.contract !== undefined && sec.openapi === undefined) sec.openapi = sec.contract;
   delete sec.contract;

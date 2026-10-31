@@ -60,6 +60,22 @@ sw bugs --concurrency-test "POST /orders" --burst 20 --invariant "./invariants/s
 sw replay F-01JB8Z...   # re-run a saved failing case
 ```
 
+### Known values (`values`) and harvested values
+
+`values` maps a parameter or body property name to known-good values (`productId: [1, 2]`,
+`slug: ["welcome"]`). Configured values fill **both** path/query parameters and body properties
+of that name, so do not configure a name that a create body must keep unique (a configured
+`username` also fills the registration body, which then answers 409).
+
+The Bug Hunter also harvests values from 2xx GET/POST responses (at most 20 per name):
+- `id` of the response's own resources (top level, arrays, `items`/`data`/`results`/`content`,
+  or a key named after the resource such as `article`/`articles`) → `<resource>Id`
+  (`/products` → `productId`), used for parameters and body properties;
+- every field named like a path parameter the contract uses (`slug`, `username`, `articleId`, …;
+  not generic `id`), anywhere up to depth 3, e.g. `{ "article": { "slug": … } }` or
+  `{ "articles": [ … ] }`. These fill only path parameters of that name (`/articles/{slug}`), never
+  body properties, so a harvested `username` does not end up in a registration body.
+
 ### Mixed-operation concurrency tests (config and `--mix`)
 
 A concurrency test can interleave other operations with the burst, so lost updates show up even when every write succeeds. Each `mix` entry says what the request does on the sequential spec model (`as`: `take`, `read`, `inc`, `dec`, `write`, `add`, `remove`, `has`), where the value is (`pointer`, a JSON pointer into the response or request body) and when it runs (`phase`: `before`, `during` (inside the barrier burst) or `after`). The burst plus the concurrent mix requests are capped at 64. The history is checked for linearizability against the stock, counter, register or set model. Responses with an unknown effect (5xx, timeouts, 401/403/408/429) may or may not have happened.
@@ -105,7 +121,7 @@ Form: `"<METHOD> <path>[:<count>] [key=value ...]"`, tokens separated by spaces:
 
 A malformed `--mix`, or `--mix` without `--concurrency-test`, fails with `SW_CONFIG_FLAG` (exit 2) and prints the expected form. The 64-request cap (burst + `during` copies) is checked like a config file.
 
-A failing check lists the history in call order (e.g. `take→ok(201) · read→99`) in the finding. The curl reproduction and `sw replay` include the mixed requests.
+When the test's main operation is a read (a burst of GETs observing a counter) and the `mix` has a mutating operation, the `bugs/race-lost-update` finding is reported on the first mutating mix operation (e.g. `POST /articles/{slug}/favorite`), where the update is lost. A failing check lists the history in call order (e.g. `take→ok(201) · read→99`) in the finding. The curl reproduction and `sw replay` include the mixed requests.
 
 ## 7. Output
 

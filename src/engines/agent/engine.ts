@@ -332,6 +332,7 @@ export async function executeAgent(
     hints,
     maxCopies: input.maxCopies,
     slowMs: input.slowMs,
+    ...(input.resources === undefined ? {} : { resources: input.resources }),
   });
   const planner: Planner = deps.planner
     ? await deps.planner({ input, ctx, session: s, ops, heuristic, limitations })

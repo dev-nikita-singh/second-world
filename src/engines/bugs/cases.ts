@@ -16,7 +16,7 @@ import {
   mediaTypeMatches,
   type Operation,
 } from "./contract.js";
-import type { Dictionary } from "./dictionary.js";
+import { type Dictionary, pathParamNames } from "./dictionary.js";
 import { type BugsHttp, type Exchange, jsonAt, type RequestTemplate, substitute } from "./http.js";
 import {
   type BuiltinInvariant,
@@ -565,7 +565,7 @@ export async function runCase(c0: BugCase, env: EvalEnv): Promise<CaseRun> {
       ex.json !== undefined &&
       (tpl.method === "GET" || tpl.method === "POST")
     ) {
-      env.dict.harvest(op?.path ?? tpl.path, ex.json);
+      env.dict.harvest(op?.path ?? tpl.path, ex.json, env.contract ? pathParamNames(env.contract) : []);
     }
     for (const [name, ptr] of Object.entries(step.extract ?? {})) {
       const v = jsonAt(ex, ptr);
@@ -698,6 +698,23 @@ export async function runCase(c0: BugCase, env: EvalEnv): Promise<CaseRun> {
   return result(false);
 }
 
+const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const methodOf = (key: string): string => (key.trim().split(/\s+/)[0] ?? "").toUpperCase();
+
+/**
+ * Operation a lost-update finding is attributed to: the test's main operation, unless that is a
+ * read (a burst of GETs observing a counter) and the `mix` holds a mutating operation; then the
+ * first mutating mix operation, where the lost update happens (conduit: POST …/favorite).
+ */
+function raceOperation(main: string, test: ConcurrencyTest, env: EvalEnv): string {
+  if (!READ_METHODS.has(methodOf(main))) return main;
+  for (const m of test.mix) {
+    const key = env.opsByKey.get(normalizeOpKey(m.operation))?.key ?? m.operation.trim();
+    if (!READ_METHODS.has(methodOf(key))) return key;
+  }
+  return main;
+}
+
 async function evalConcurrency(
   c: BugCase,
   env: EvalEnv,
@@ -715,6 +732,7 @@ async function evalConcurrency(
   const summary = `statuses [${statuses.join(", ")}]`;
   const inv = test.invariant;
   const name = test.name ?? `${c.operation} x${burst.length}`;
+  const raceOp = raceOperation(c.operation, test, env);
   if (inv !== undefined && typeof inv === "object" && "kind" in inv) {
     const r =
       mixed && inv.kind === "linearizable"
@@ -724,7 +742,7 @@ async function evalConcurrency(
       out.push(
         mkFailure(
           "bugs/race-lost-update",
-          c.operation,
+          raceOp,
           `concurrency:${name}`,
           inv.kind,
           `${r.message}; ${summary}`,
@@ -773,7 +791,7 @@ async function evalConcurrency(
         out.push(
           mkFailure(
             "bugs/race-lost-update",
-            c.operation,
+            raceOp,
             `concurrency:${name}`,
             "invariant",
             `${fn.name}: ${msg}; ${summary}`,
@@ -814,7 +832,7 @@ async function evalConcurrency(
       out.push(
         mkFailure(
           "bugs/race-lost-update",
-          c.operation,
+          raceOp,
           `post-state:${ps.pointer}`,
           "post-state",
           `post-state ${ps.pointer}=${preview(v)} violates ${ps.op} ${ps.value}; ${summary}`,

@@ -105,6 +105,11 @@
           "command": "sw bugs",
           "ruleId": "bugs/bola",
           "operation": "DELETE /api/articles/{slug}"
+        },
+        {
+          "command": "sw agent",
+          "ruleId": "bugs/bola",
+          "operation": "DELETE /api/articles/{slug}"
         }
       ],
       "description": "Found by sw bugs (auth technique, BOLA on DELETE) since the wave-7 fix in src/engines/bugs/generate.ts (BOLA cases per secured operation; before it, a public read operation skipped the whole resource)."
@@ -130,7 +135,7 @@
         {
           "command": "sw bugs",
           "ruleId": "bugs/race-lost-update",
-          "operation": "GET /api/articles/{slug}",
+          "operation": "POST /api/articles/{slug}/favorite",
           "titleIncludes": "favorites counter"
         }
       ]

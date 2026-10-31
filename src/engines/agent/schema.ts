@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 import { parseDuration } from "../../core/config/units.js";
-import { AuthSchema, HookSchema } from "../bugs/schema.js";
+import { AuthSchema, HookSchema, ResourceSchema } from "../bugs/schema.js";
 
 export const AGENT_TECHNIQUES = [
   "status-gap",
@@ -43,6 +43,12 @@ export const AgentInputSchema = z
     auth: AuthSchema.default({ roles: {}, invalidToken: "sw-invalid-token-0000", privileged: [] }),
     hooks: z.object({ setup: HookSchema.optional(), reset: HookSchema.optional() }).strict().default({}),
     values: z.record(z.string(), z.array(z.unknown())).default({}),
+    /**
+     * Resources for the ownership / lifecycle techniques, same shape as the Bug Hunter's
+     * `stateful.resources` (config: forwarded from `bugs.stateful.resources` unless `agent.resources`
+     * is set). Absent → derived from the contract (POST /x + GET /x/{id}, id at "/id").
+     */
+    resources: z.array(ResourceSchema).optional(),
     allowMutations: z.boolean().optional(),
     /** Approval for destructive operations (DELETE, mutating admin/purge/reset paths, `destructive` patterns). */
     allowDestructive: z.boolean().default(false),
