@@ -6,9 +6,10 @@
  * project imports, and missing relative imports) still has the same hash. Written atomically
  * (tmp + rename, retry on EPERM/EBUSY for Windows).
  */
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { sha256 } from "../../shared/index.js";
+import { writeFileAtomic } from "../../shared/util/atomic-write.js";
 import type { FileFacts } from "./types.js";
 
 export const CACHE_FORMAT = 1;
@@ -94,21 +95,6 @@ export class FactsCache {
   async save(): Promise<void> {
     await mkdir(this.dir, { recursive: true });
     const body: CacheFile = { format: CACHE_FORMAT, namespace: this.namespace, files: this.entries };
-    const tmp = `${this.file}.${process.pid}.tmp`;
-    await writeFile(tmp, JSON.stringify(body));
-    for (let i = 0; ; i++) {
-      try {
-        await rename(tmp, this.file);
-        return;
-      } catch (e) {
-        const code = (e as NodeJS.ErrnoException).code;
-        if ((code === "EPERM" || code === "EBUSY" || code === "EACCES") && i < 5) {
-          await new Promise((r) => setTimeout(r, 20 * (i + 1)));
-          continue;
-        }
-        await rm(tmp, { force: true });
-        throw e;
-      }
-    }
+    await writeFileAtomic(this.file, JSON.stringify(body));
   }
 }

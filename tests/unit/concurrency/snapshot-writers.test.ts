@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 describe("concurrent snapshot/cache writers in one process", () => {
-  it.fails("8 parallel model snapshots: all succeed, latest.json complete, no temp files", async () => {
+  it("8 parallel model snapshots: all succeed, latest.json complete, no temp files", async () => {
     const models = Array.from({ length: 8 }, (_, i) => ({
       schemaVersion: 1,
       builtAt: `2026-01-01T00:00:0${i}.000Z`,
@@ -37,7 +37,7 @@ describe("concurrent snapshot/cache writers in one process", () => {
     expect((await readdir(tmp.path)).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 
-  it.fails("8 parallel saves of one architecture facts cache: all succeed", async () => {
+  it("8 parallel saves of one architecture facts cache: all succeed", async () => {
     const caches = Array.from({ length: 8 }, () => new FactsCache(tmp.path, "ns"));
     const results = await Promise.allSettled(caches.map((c) => c.save()));
     expect(results.filter((r) => r.status === "rejected")).toEqual([]);

@@ -2,8 +2,9 @@
  * Model snapshots on disk (canonical JSON) — docs/03-engines/system-model.md §3 ("models are versioned"),
  * docs/03-engines/evidence-and-history.md (architecture snapshots). Default dir: <cwd>/.second-world/model.
  */
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { writeFileAtomic } from "../../shared/util/atomic-write.js";
 import { sha256 } from "../../shared/util/hash.js";
 import { toCanonicalJson } from "./export.js";
 import { withGraph } from "./graph.js";
@@ -20,11 +21,8 @@ export async function saveModelSnapshot(
   const stamp = model.builtAt.replace(/[:.]/g, "-");
   const file = path.join(dir, `${opts.name ?? `model-${stamp}-${hash}`}.json`);
   const latest = path.join(dir, "latest.json");
-  for (const target of [file, latest]) {
-    const tmp = `${target}.${process.pid}.tmp`;
-    await writeFile(tmp, text, "utf8");
-    await rename(tmp, target);
-  }
+  // Unique temp names + rename retry: concurrent saves (same process or not) never collide.
+  for (const target of [file, latest]) await writeFileAtomic(target, text);
   return { path: file, latest, hash };
 }
 
