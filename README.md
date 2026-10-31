@@ -21,20 +21,95 @@ analysis or code, and the same inputs and seed give the same results.
 | Summary | `sw analyze` | Deterministic summary across earlier reports: counts by severity and classification, top findings, invalidating limitations |
 | Experiment History | `sw history` | JSONL run store, baselines, diffs with statistics, trends |
 
-Status: `0.1.0-dev`, run from source. The full specification is in [`docs/`](docs/README.md).
+Status: `0.1.0-dev`, not yet published to npm (see [Install](#install)). The full specification is in [`docs/`](docs/README.md).
 
 ## Install
 
 Requirements: **Node.js ≥ 22.19** (`engines` in package.json), git. Windows, macOS and Linux are supported.
+`typescript` is an optional peer dependency: install `typescript@6` (5.x also works) next to SECOND WORLD to use
+`sw inspect` and the static part of `sw model build`. Without it those commands exit 4 with an install hint and
+everything else works; `sw doctor` tells you which case you are in.
+
+SECOND WORLD is **not on the npm registry yet**. Build the package tarball once from a clone
+(`npm pack` builds `dist/` first):
 
 ```bash
 git clone <this repo> second-world && cd second-world
-npm install
+npm ci
+npm pack                         # → second-world-0.1.0-dev.tgz
 ```
 
-Installing it as a package (`npm pack` → `npm i -D ./second-world-*.tgz`) gives `npx sw`. `typescript` is an optional peer dependency: install `typescript@6` (5.x also works) next to it to use `sw inspect` and the static part of `sw model build`. Without it, those commands exit 4 with an install hint, and everything else works.
+Then pick one way to install it (paths below are relative to wherever you put the tarball):
 
-SECOND WORLD is not published yet, so run the CLI from source with a `sw` shortcut:
+| How | Command | Run it as |
+|---|---|---|
+| Project devDependency (recommended) | `npm i -D ./second-world-0.1.0-dev.tgz` | `npx sw doctor` |
+| Global | `npm i -g ./second-world-0.1.0-dev.tgz` | `sw doctor` |
+| One-off, no install | `npx --yes --package ./second-world-0.1.0-dev.tgz sw doctor` | — |
+| Docker | `docker build -t second-world .` (in the clone) | `docker run --rm second-world doctor` |
+| GitHub Actions | `uses: <owner>/second-world@<ref>` ([below](#github-actions)) | — |
+
+Once a release is published to npm, the same commands work with the package name: `npm i -D second-world`,
+`npm i -g second-world`, `npx second-world doctor`.
+
+A first run in a new project:
+
+```bash
+npx sw doctor          # Node, CPUs, git/docker, config found?, typescript installed?
+npx sw init            # writes sw.config.ts (local-only safety defaults) and ignores .second-world/
+npx sw perf            # load-tests targets.api from sw.config.ts (start your service first)
+```
+
+### Docker
+
+The image (`Dockerfile`: multi-stage, `node:22-bookworm-slim`, runs as the non-root `node` user, contains only
+`dist/`, production dependencies and `typescript`) has `sw` as its entrypoint and `/work` as its working directory.
+Mount your project there to use its `sw.config.ts`:
+
+```bash
+docker build -t second-world .
+docker run --rm second-world --version
+docker run --rm -v "$PWD:/work" second-world inspect
+```
+
+Inside a container, `127.0.0.1` is the container itself. To test an app running on your machine:
+
+- **Docker Desktop (Windows, macOS):** use `http://host.docker.internal:<port>`, and add that host to the
+  Safety Guard allow-list — it is a private host, so without it the run is refused with exit 3:
+  `docker run --rm second-world --set 'safety.allowHosts=["host.docker.internal"]' perf http://host.docker.internal:3000`
+  (or put `"host.docker.internal"` in `safety.allowHosts` in your config).
+- **Linux:** `docker run --rm --network host second-world perf http://127.0.0.1:3000` shares the host network,
+  so loopback works with the default allow-list. Add `--user "$(id -u):$(id -g)"` when you mount a project, so
+  reports in `.second-world/` are written as your user.
+
+### GitHub Actions
+
+`action.yml` is a composite action: it sets up Node, runs one `sw` command (the project's installed `sw`, or
+`npx --package <package> sw`), always writes `report.json` and `report.sarif`, optionally uploads the SARIF to
+code scanning, and then fails the step with sw's exit code. Start your service in an earlier step.
+
+```yaml
+permissions:
+  contents: read
+  security-events: write          # only needed for upload-sarif
+steps:
+  - uses: actions/checkout@v4
+  - run: npm ci
+  - run: npm start &                    # your service; make sure it is ready before the next step
+  - uses: <owner>/second-world@<ref>
+    with:
+      command: bugs                       # perf, stress, inspect, "reliability run <scenario>", ...
+      config: sw.config.ts                # optional; default: auto-discover
+      target: http://127.0.0.1:3000       # optional; passed as --target
+      args: --fail-on high --no-history   # optional extra arguments (split on spaces)
+      upload-sarif: "true"
+```
+
+Other inputs: `sarif-category`, `out-dir` (default `.second-world/action-report`), `working-directory`,
+`package` (npm spec or `.tgz` used when the project does not have second-world installed), `node-version`
+(default `24.x`). Outputs: `exit-code`, `report-dir`, `sarif-file`.
+
+### From source
 
 ```bash
 # bash / zsh

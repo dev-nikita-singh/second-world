@@ -1,0 +1,14 @@
+# Only package.json, package-lock.json, tsconfig.json, tsdown.config.ts and src/ are needed (see Dockerfile).
+.git
+.github
+.agents
+.second-world
+node_modules
+dist
+coverage
+docs
+examples
+tests
+*.log
+*.tgz
+SecondWorld_plan.txt

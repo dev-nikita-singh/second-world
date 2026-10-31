@@ -14,11 +14,16 @@ export interface ProbeOptions {
   env?: NodeJS.ProcessEnv;
   /** Injected for tests. */
   stdout?: { isTTY?: boolean; columns?: number };
-  /** Injected tool runner for tests: returns stdout or null. */
-  runTool?: (cmd: string) => Promise<string | null>;
+  /**
+   * Injected tool runner for tests: returns stdout or null. `args` defaults to `["--version"]`; the
+   * docker daemon check calls it with `["version", "--format", "{{.Server.Version}}"]`.
+   */
+  runTool?: (cmd: string, args?: string[]) => Promise<string | null>;
 }
 
 type ToolName = "git" | "docker" | "toxiproxy" | "k6";
+/** CapabilityStatus.reason when the docker CLI exists but its daemon does not answer. */
+const DOCKER_DAEMON_DOWN = "docker CLI found but the daemon is not reachable";
 const TOOLS: ToolName[] = ["git", "docker", "toxiproxy", "k6"];
 
 function safe<T>(fn: () => T, fallback: T): T {
@@ -227,10 +232,12 @@ function probeNetwork(env: NodeJS.ProcessEnv): EnvironmentReport["network"] {
   return out;
 }
 
-async function defaultRunTool(cmd: string): Promise<string | null> {
+async function defaultRunTool(cmd: string, args: string[] = ["--version"]): Promise<string | null> {
   try {
     const { execa } = await import("execa");
-    const r = await execa(cmd, ["--version"], { timeout: 2000, reject: false, stdin: "ignore" });
+    // The daemon round-trip (docker version) can be slower than a local --version.
+    const timeout = args[0] === "--version" ? 2000 : 4000;
+    const r = await execa(cmd, args, { timeout, reject: false, stdin: "ignore", windowsHide: true });
     if (r.exitCode !== 0 || r.failed) return null;
     return String(r.stdout || r.stderr || "").trim() || null;
   } catch {
@@ -243,18 +250,34 @@ function extractVersion(s: string): string {
   return m ? (m[1] as string) : (s.split(/\r?\n/)[0]?.slice(0, 60) ?? s);
 }
 
-async function probeTools(
-  full: boolean,
-  run: (cmd: string) => Promise<string | null>,
-): Promise<EnvironmentReport["tools"]> {
-  if (!full) return {};
-  const results = await Promise.all(TOOLS.map(async (t) => [t, await run(t).catch(() => null)] as const));
-  const out: EnvironmentReport["tools"] = {};
-  for (const [t, v] of results) if (v) out[t] = extractVersion(v);
-  return out;
+interface ToolProbe {
+  tools: EnvironmentReport["tools"];
+  /**
+   * Docker server (daemon) version; null = the docker CLI is installed but the daemon did not answer
+   * (`docker --version` only checks the client). Undefined when not probed or no docker CLI.
+   */
+  dockerServer?: string | null;
 }
 
-function capabilities(r: Omit<EnvironmentReport, "capabilities">, full: boolean, env: NodeJS.ProcessEnv) {
+async function probeTools(
+  full: boolean,
+  run: (cmd: string, args?: string[]) => Promise<string | null>,
+): Promise<ToolProbe> {
+  if (!full) return { tools: {} };
+  const results = await Promise.all(TOOLS.map(async (t) => [t, await run(t).catch(() => null)] as const));
+  const tools: EnvironmentReport["tools"] = {};
+  for (const [t, v] of results) if (v) tools[t] = extractVersion(v);
+  if (!tools.docker) return { tools };
+  const server = await run("docker", ["version", "--format", "{{.Server.Version}}"]).catch(() => null);
+  return { tools, dockerServer: server ? extractVersion(server) : null };
+}
+
+function capabilities(
+  r: Omit<EnvironmentReport, "capabilities">,
+  full: boolean,
+  env: NodeJS.ProcessEnv,
+  dockerServer: string | null | undefined,
+) {
   const caps: Partial<Record<CapabilityId, CapabilityStatus>> = {};
   caps["network.target"] = { available: true };
   caps["fs.read"] = { available: true };
@@ -282,10 +305,17 @@ function capabilities(r: Omit<EnvironmentReport, "capabilities">, full: boolean,
     "git",
     "Install git (https://git-scm.com); Evolution and commit metadata are disabled without it",
   );
-  caps.docker = toolCap(
-    "docker",
-    "Install/start Docker; Reliability Lab falls back to the built-in proxy, Evolution sandbox disabled",
-  );
+  caps.docker =
+    r.tools.docker && dockerServer === null
+      ? {
+          available: false,
+          reason: DOCKER_DAEMON_DOWN,
+          fix: "Start Docker Desktop or the docker service (`docker info` must succeed); until then the Reliability Lab uses the built-in proxy and the Evolution docker sandbox is unavailable",
+        }
+      : toolCap(
+          "docker",
+          "Install/start Docker; Reliability Lab falls back to the built-in proxy, Evolution sandbox disabled",
+        );
   caps["telemetry.otlp"] = env.OTEL_EXPORTER_OTLP_ENDPOINT
     ? { available: true }
     : {
@@ -326,11 +356,12 @@ export async function probeEnvironment(opts: ProbeOptions = {}): Promise<Environ
   try {
     const env = opts.env ?? process.env;
     const full = opts.full === true;
-    const [runtime, ci, tools] = await Promise.all([
+    const [runtime, ci, probed] = await Promise.all([
       probeRuntime().catch(() => fallbackReport().runtime),
       probeCi(env).catch(() => ({ inside: false })),
-      probeTools(full, opts.runTool ?? defaultRunTool).catch(() => ({})),
+      probeTools(full, opts.runTool ?? defaultRunTool).catch((): ToolProbe => ({ tools: {} })),
     ]);
+    const tools = probed.tools;
     const base: Omit<EnvironmentReport, "capabilities"> = {
       os: safe(() => probeOs(env), fallbackReport().os),
       runtime,
@@ -341,7 +372,7 @@ export async function probeEnvironment(opts: ProbeOptions = {}): Promise<Environ
       network: safe(() => probeNetwork(env), { extraCA: false }),
       tools,
     };
-    return { ...base, capabilities: safe(() => capabilities(base, full, env), {}) };
+    return { ...base, capabilities: safe(() => capabilities(base, full, env, probed.dockerServer), {}) };
   } catch {
     return fallbackReport();
   }
@@ -371,10 +402,11 @@ export function doctorChecks(r: EnvironmentReport): DoctorCheck[] {
     label: `${r.runtime.name === "node" ? "Node" : r.runtime.name} ${r.runtime.version}`,
     ...(nodeOk ? {} : { fix: "Upgrade to Node.js >= 22.19 (24 LTS recommended)" }),
   });
+  // A container on Docker Desktop shares the WSL2 kernel string, but the process is not in WSL.
   out.push({
     id: "os",
     status: "info",
-    label: `${r.os.platform} ${r.os.arch} ${r.os.release}${r.os.libc ? ` (${r.os.libc})` : ""}${r.os.wsl ? " WSL" : ""}`,
+    label: `${r.os.platform} ${r.os.arch} ${r.os.release}${r.os.libc ? ` (${r.os.libc})` : ""}${r.os.wsl && !r.container.inside ? " WSL" : ""}`,
   });
   out.push({
     id: "worker_threads",
@@ -425,7 +457,16 @@ export function doctorChecks(r: EnvironmentReport): DoctorCheck[] {
   const probed = !(r.capabilities.git?.reason ?? "").startsWith("not probed");
   for (const t of ["git", "docker", "toxiproxy", "k6"] as const) {
     const v = r.tools[t];
-    if (v) out.push({ id: `tool.${t}`, status: "ok", label: `${t} ${v}` });
+    const daemonDown = t === "docker" && r.capabilities.docker?.reason === DOCKER_DAEMON_DOWN;
+    if (v && daemonDown) {
+      const fix = r.capabilities.docker?.fix;
+      out.push({
+        id: "tool.docker",
+        status: "warn",
+        label: `docker ${v} (client) — daemon not reachable`,
+        ...(fix ? { fix } : {}),
+      });
+    } else if (v) out.push({ id: `tool.${t}`, status: "ok", label: `${t} ${v}` });
     else if (!probed)
       out.push({ id: `tool.${t}`, status: "info", label: `${t} not probed (run \`sw doctor\`)` });
     else {

@@ -1,13 +1,19 @@
 /**
  * `sw doctor` — environment & capability checklist. See docs/06-environments-and-portability.md §3.
  */
+import { resolve } from "node:path";
 import { doctorChecks, probeEnvironment } from "../../core/probe/probe.js";
+import { projectChecks } from "../../core/probe/project.js";
 import type { GlobalOptions } from "../main.js";
 import { colorEnabled, out, style } from "../output.js";
 
 export async function doctorCommand(o: { json?: boolean; quick?: boolean }, g: GlobalOptions): Promise<void> {
-  const report = await probeEnvironment({ full: !o.quick });
-  const checks = doctorChecks(report);
+  const cwd = process.cwd();
+  const [report, project] = await Promise.all([
+    probeEnvironment({ full: !o.quick }),
+    projectChecks({ cwd, ...(g.config ? { configPath: resolve(cwd, g.config) } : {}) }),
+  ]);
+  const checks = [...doctorChecks(report), ...project];
   if (o.json) {
     out(JSON.stringify({ ...report, checks }, null, 2));
     process.exitCode = 0;

@@ -15,7 +15,8 @@ All output below was captured on Windows 11 / Node 24 and trimmed (`…`). Your 
 
 - Node.js **≥ 22.19** (`node --version`), git.
 - A clone of this repository with its dependencies installed (`npm install` in the repo root).
-- SECOND WORLD runs from source for now. Define a `sw` shortcut that points at the CLI entry:
+- This walkthrough runs SECOND WORLD from source. (Outside the repo, install the packed tarball instead and use
+  `npx sw`: see [Install](../README.md#install).) Define a `sw` shortcut that points at the CLI entry:
 
 ```bash
 # bash / zsh (adjust the path)
