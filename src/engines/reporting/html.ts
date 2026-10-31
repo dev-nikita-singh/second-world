@@ -6,15 +6,10 @@
  * - Every piece of report content goes through `htmlEscape`.
  * - Light and dark themes via `prefers-color-scheme`.
  */
-import { dataBlocks } from "./dispatch.js";
+
 import type { EngineResult } from "../../core/evidence/schemas.js";
-import {
-  type Block,
-  type CellLike,
-  cellText,
-  cellTone,
-  perfBlocks,
-} from "./blocks.js";
+import { type Block, type CellLike, cellText, cellTone, perfBlocks } from "./blocks.js";
+import { dataBlocks } from "./dispatch.js";
 import { methodsOf } from "./markdown.js";
 import {
   type CombinedReport,
@@ -157,7 +152,9 @@ export function renderBlocksHtml(blocks: readonly Block[]): string {
 function engineSection(r: EngineResult, failOn: CombinedReport["failOn"]): string {
   const out: string[] = [];
   const dur = fmtDuration(Date.parse(r.endedAt) - Date.parse(r.startedAt));
-  out.push(`<section class="engine"><h2>${e(r.engine)} <span class="meta">${e(r.status)} · ${e(dur)}</span></h2>`);
+  out.push(
+    `<section class="engine"><h2>${e(r.engine)} <span class="meta">${e(r.status)} · ${e(dur)}</span></h2>`,
+  );
   if (isPerformanceData(r.data)) out.push(renderBlocksHtml(perfBlocks(r.data)));
   else {
     const blocks = dataBlocks(r);
@@ -170,7 +167,11 @@ function engineSection(r: EngineResult, failOn: CombinedReport["failOn"]): strin
     out.push(
       htmlTable(
         ["result", "threshold", "actual"],
-        ths.map((t) => [t.passed ? { text: "pass", tone: "good" } : { text: "FAIL", tone: "bad" }, t.expression, fmtThresholdValue(t.actual, t.unit)]),
+        ths.map((t) => [
+          t.passed ? { text: "pass", tone: "good" } : { text: "FAIL", tone: "bad" },
+          t.expression,
+          fmtThresholdValue(t.actual, t.unit),
+        ]),
         ["l", "l", "r"],
       ),
     );
@@ -182,7 +183,15 @@ function engineSection(r: EngineResult, failOn: CombinedReport["failOn"]): strin
         ["", "severity", "class", "finding", "where"],
         sortFindings(r.findings).map((f) => [
           isFailingFinding(f, failOn) ? { text: "FAIL", tone: "bad" } : "",
-          { text: f.severity, tone: f.severity === "critical" || f.severity === "high" ? "bad" : f.severity === "medium" ? "warn" : "muted" },
+          {
+            text: f.severity,
+            tone:
+              f.severity === "critical" || f.severity === "high"
+                ? "bad"
+                : f.severity === "medium"
+                  ? "warn"
+                  : "muted",
+          },
           f.classification,
           f.recommendation ? `${f.title} — fix: ${f.recommendation}` : f.title,
           locationOf(f),
@@ -194,7 +203,9 @@ function engineSection(r: EngineResult, failOn: CombinedReport["failOn"]): strin
     out.push("<h3>Limitations</h3><ul>");
     for (const l of r.limitations) {
       const tone = l.impact === "invalidates" ? "bad" : l.impact === "reduces-confidence" ? "warn" : "muted";
-      out.push(`<li>${e(l.message)} <code>${e(l.code)}</code> <span class="${tone}">${e(l.impact)}</span></li>`);
+      out.push(
+        `<li>${e(l.message)} <code>${e(l.code)}</code> <span class="${tone}">${e(l.impact)}</span></li>`,
+      );
     }
     out.push("</ul>");
   }
@@ -206,7 +217,9 @@ export function renderHtml(report: CombinedReport): string {
   const v = report.verdict;
   const title = `SECOND WORLD report ${report.runId}`;
   const body: string[] = [];
-  body.push(`<h1>SECOND WORLD <span class="verdict ${v.passed ? "pass" : "fail"}">${v.passed ? "PASS" : "FAIL"}</span></h1>`);
+  body.push(
+    `<h1>SECOND WORLD <span class="verdict ${v.passed ? "pass" : "fail"}">${v.passed ? "PASS" : "FAIL"}</span></h1>`,
+  );
   body.push(
     `<p class="meta">run <code>${e(report.runId)}</code> · ${e(report.status)} · ${e(fmtDuration(report.durationMs))} · exit ${v.exitCode} · fail-on ${e(report.failOn)} · version ${e(report.toolVersion)}${report.startedAt ? ` · started ${e(report.startedAt)}` : ""}</p>`,
   );
@@ -217,7 +230,11 @@ export function renderHtml(report: CombinedReport): string {
     body.push("<details><summary>Methods &amp; reproduction</summary>");
     if (report.command) body.push(`<p>Reproduce: <code>${e(report.command)}</code></p>`);
     for (const m of methods) {
-      body.push(`<ul>${Object.entries(m).map(([k, val]) => `<li><strong>${e(k)}</strong>: ${e(String(val))}</li>`).join("")}</ul>`);
+      body.push(
+        `<ul>${Object.entries(m)
+          .map(([k, val]) => `<li><strong>${e(k)}</strong>: ${e(String(val))}</li>`)
+          .join("")}</ul>`,
+      );
     }
     body.push("</details>");
   }

@@ -14,12 +14,16 @@ import { parseSeed } from "./config.js";
 export function int(name: string, v: unknown): number | undefined {
   if (v === undefined) return undefined;
   const n = Number(v);
-  if (!Number.isInteger(n) || n <= 0) throw new ConfigError("SW_CONFIG_FLAG", `--${name} must be a positive integer, got "${String(v)}"`);
+  if (!Number.isInteger(n) || n <= 0)
+    throw new ConfigError("SW_CONFIG_FLAG", `--${name} must be a positive integer, got "${String(v)}"`);
   return n;
 }
 
 /** Maps perf flags to a (loose) performance input. */
-export function perfInputFromFlags(target: string | undefined, o: Record<string, unknown>): Record<string, unknown> {
+export function perfInputFromFlags(
+  target: string | undefined,
+  o: Record<string, unknown>,
+): Record<string, unknown> {
   const input: Record<string, unknown> = {};
   const t = (o.target as string | undefined) ?? target;
   if (t) input.target = t;
@@ -46,7 +50,11 @@ export function perfInputFromFlags(target: string | undefined, o: Record<string,
   return input;
 }
 
-export async function perfCommand(target: string | undefined, o: Record<string, unknown>, g: GlobalOptions): Promise<void> {
+export async function perfCommand(
+  target: string | undefined,
+  o: Record<string, unknown>,
+  g: GlobalOptions,
+): Promise<void> {
   const s = style(colorEnabled(g));
   const seed = parseSeed(g);
   const world = await worldFromGlobals(g);
@@ -65,7 +73,13 @@ export async function perfCommand(target: string | undefined, o: Record<string, 
     if (g.dryRun) {
       const { parsePerformanceInput } = await import("../../engines/performance/index.js");
       const parsed = parsePerformanceInput(plan);
-      const payload = { dryRun: true, target: plan.target, safety: "allowed", input: parsed, environment: { cpus: world.env.resources.cpus } };
+      const payload = {
+        dryRun: true,
+        target: plan.target,
+        safety: "allowed",
+        input: parsed,
+        environment: { cpus: world.env.resources.cpus },
+      };
       if (o.json) out(JSON.stringify(world.redactor.redactObject(payload), null, 2));
       else {
         out(`${s.ok} config valid, ${s.ok} safety check passed for ${plan.target}`);
@@ -77,7 +91,11 @@ export async function perfCommand(target: string | undefined, o: Record<string, 
     }
     attachProgress(world, g, { json: o.json === true });
     const result = (await world.performance.run(flags)) as EngineResult;
-    await finishRun(world, result, g, { json: o.json === true, history: o.history as boolean | undefined, label: "perf" });
+    await finishRun(world, result, g, {
+      json: o.json === true,
+      history: o.history as boolean | undefined,
+      label: "perf",
+    });
   } finally {
     removeSignals();
     await world.close();

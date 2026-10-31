@@ -3,12 +3,12 @@
  * hand-tuned tty/markdown layout and is not handled here (html uses perfBlocks directly).
  */
 import type { EngineResult } from "../../core/evidence/schemas.js";
+import { agentBlocks, isAgentData } from "./agent.js";
 import { type Block, comparisonBlocks, isRunComparison, isStressData, stressBlocks } from "./blocks.js";
 import { bugsBlocks, isBugsData } from "./bugs.js";
 import { evolutionBlocks, experimentBlocks, isEvolutionData, isExperimentData } from "./experiments.js";
-import { isReliabilityData, reliabilityBlocks } from "./reliability.js";
 import { isModelData, isModelDiff, modelBlocks, modelDiffBlocks } from "./model-render.js";
-import { agentBlocks, isAgentData } from "./agent.js";
+import { isReliabilityData, reliabilityBlocks } from "./reliability.js";
 
 export function dataBlocks(r: EngineResult): Block[] | undefined {
   const d = r.data;

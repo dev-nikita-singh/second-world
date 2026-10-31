@@ -1,18 +1,23 @@
 /**
  * Public API of `second-world`. See docs/09-cli-and-api.md §2 and §3 (stability policy).
  */
-export * from "./core/errors.js";
-export * from "./core/evidence/schemas.js";
-export type * from "./core/types.js";
 
+export { createFakeClock, type FakeClock, systemClock } from "./core/clock.js";
 export {
-  formatBytes,
-  formatDuration,
-  parseBytes,
-  parseDuration,
-  parsePercent,
-  parseRate,
-} from "./core/config/units.js";
+  collectSecretValues,
+  type LoadConfigOptions,
+  loadConfig,
+  type ResolvedConfig,
+  resolveSecret,
+} from "./core/config/loader.js";
+export {
+  type Config,
+  type ConfigInput,
+  ConfigSchema,
+  configJsonSchema,
+  defineConfig,
+  type SecretRef,
+} from "./core/config/schema.js";
 export {
   evaluateThreshold,
   formatThreshold,
@@ -25,19 +30,22 @@ export {
   type ThresholdSpec,
   type ThresholdUnit,
 } from "./core/config/thresholds.js";
-export { createFakeClock, type FakeClock, systemClock } from "./core/clock.js";
-export { createRng } from "./core/rng.js";
-export { createLogger, createMemoryLogger, type LoggerOptions, silentLogger } from "./core/log/logger.js";
 export {
-  createRedactor,
-  DEFAULT_REDACT_HEADERS,
-  type RedactPattern,
-  type Redactor,
-  type RedactorOptions,
-  redactionMarker,
-  shannonEntropy,
-} from "./core/log/redact.js";
+  formatBytes,
+  formatDuration,
+  parseBytes,
+  parseDuration,
+  parsePercent,
+  parseRate,
+} from "./core/config/units.js";
+export {
+  type CreateEngineContextOptions,
+  createEngineContext,
+  stubEnvironmentReport,
+} from "./core/context.js";
+export * from "./core/errors.js";
 export { createEventBus, type TypedEventBus } from "./core/events.js";
+export * from "./core/evidence/schemas.js";
 export {
   type CreateFindingInput,
   createEvidenceStore,
@@ -45,6 +53,20 @@ export {
   defaultFingerprint,
   type EvidenceStoreEx,
 } from "./core/evidence/store.js";
+export { createLogger, createMemoryLogger, type LoggerOptions, silentLogger } from "./core/log/logger.js";
+export {
+  createRedactor,
+  DEFAULT_REDACT_HEADERS,
+  type Redactor,
+  type RedactorOptions,
+  type RedactPattern,
+  redactionMarker,
+  shannonEntropy,
+} from "./core/log/redact.js";
+export { planWorkflow, runWorkflow, type WorkflowResult, type WorkflowStep } from "./core/orchestrator.js";
+export { type DoctorCheck, doctorChecks, type ProbeOptions, probeEnvironment } from "./core/probe/probe.js";
+export { createRegistry, type EngineLoader, type EngineRegistry } from "./core/registry.js";
+export { createRng } from "./core/rng.js";
 export { Gcra, type GcraDecision, type GcraOptions } from "./core/safety/gcra.js";
 export {
   type AuditEntry,
@@ -59,25 +81,7 @@ export {
   type TargetClass,
   verifyAuditLog,
 } from "./core/safety/guard.js";
-export { type CreateEngineContextOptions, createEngineContext, stubEnvironmentReport } from "./core/context.js";
-export {
-  type Config,
-  type ConfigInput,
-  ConfigSchema,
-  configJsonSchema,
-  defineConfig,
-  type SecretRef,
-} from "./core/config/schema.js";
-export {
-  collectSecretValues,
-  type LoadConfigOptions,
-  loadConfig,
-  type ResolvedConfig,
-  resolveSecret,
-} from "./core/config/loader.js";
-export { type DoctorCheck, doctorChecks, type ProbeOptions, probeEnvironment } from "./core/probe/probe.js";
-export { createRegistry, type EngineLoader, type EngineRegistry } from "./core/registry.js";
-export { planWorkflow, runWorkflow, type WorkflowResult, type WorkflowStep } from "./core/orchestrator.js";
+export type * from "./core/types.js";
 export {
   buildPerformanceInput,
   type CreateWorldOptions,

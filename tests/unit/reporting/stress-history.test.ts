@@ -3,7 +3,13 @@ import { isRunComparison, isStressData } from "../../../src/engines/reporting/bl
 import { htmlEscape } from "../../../src/engines/reporting/html.js";
 import { renderComparison, renderReport } from "../../../src/engines/reporting/index.js";
 import { mdEscape } from "../../../src/engines/reporting/markdown.js";
-import { CAPACITY_STATEMENT, makeComparison, makePerfData, makeResult, makeStressData } from "../../fixtures/reports.js";
+import {
+  CAPACITY_STATEMENT,
+  makeComparison,
+  makePerfData,
+  makeResult,
+  makeStressData,
+} from "../../fixtures/reports.js";
 
 const stressResult = (over = {}) =>
   makeResult({ engine: "stress", status: "failed", data: makeStressData(over) });
@@ -22,7 +28,17 @@ describe("StressData rendering", () => {
   const tty = renderReport([stressResult()], "tty", { color: false });
 
   it("stage table has the required columns and rows", () => {
-    for (const col of ["level", "status", "throughput", "p50", "p95", "p99", "error rate", "breach reasons", "invalid"]) {
+    for (const col of [
+      "level",
+      "status",
+      "throughput",
+      "p50",
+      "p95",
+      "p99",
+      "error rate",
+      "breach reasons",
+      "invalid",
+    ]) {
       expect(tty).toContain(col);
     }
     expect(tty).toContain("│ 200/s │");
@@ -61,7 +77,26 @@ describe("StressData rendering", () => {
   });
 
   it("refused USL is shown as refused; absent USL has no Estimates section", () => {
-    const refused = renderReport([stressResult({ usl: { kind: "estimate", lambda: null, sigma: null, kappa: null, r2: null, peakN: null, peakThroughput: null, basis: "vus", points: 2, refused: "fewer than 4 valid stages" } })], "tty", { color: false });
+    const refused = renderReport(
+      [
+        stressResult({
+          usl: {
+            kind: "estimate",
+            lambda: null,
+            sigma: null,
+            kappa: null,
+            r2: null,
+            peakN: null,
+            peakThroughput: null,
+            basis: "vus",
+            points: 2,
+            refused: "fewer than 4 valid stages",
+          },
+        }),
+      ],
+      "tty",
+      { color: false },
+    );
     expect(refused).toContain("USL estimate refused: fewer than 4 valid stages");
     const none = renderReport([stressResult({ usl: undefined })], "tty", { color: false });
     expect(none).not.toContain("Estimates");
@@ -74,18 +109,35 @@ describe("StressData rendering", () => {
           mode: "breakpoint",
           breakpoint: { lastPass: 250, firstFail: 275, minStep: 25, bisectionStages: 3, converged: true },
           spike: { baselineP95: 20, peakP95: 900, recoveryTimeS: 4.5, recovered: true, toleranceMs: 10 },
-          soak: { windowMs: 10_000, points: 30, p95SlopeMsPerHour: 12.5, ci95: [8, 17], drift: true, changePoints: [{ t: 120, direction: "up" }] },
+          soak: {
+            windowMs: 10_000,
+            points: 30,
+            p95SlopeMsPerHour: 12.5,
+            ci95: [8, 17],
+            drift: true,
+            changePoints: [{ t: 120, direction: "up" }],
+          },
         }),
       ],
       "tty",
       { color: false },
     );
-    expect(s).toContain("last pass 250/s, first fail 275/s, converged (min step 25.00), 3 bisection stage(s)");
+    expect(s).toContain(
+      "last pass 250/s, first fail 275/s, converged (min step 25.00), 3 bisection stage(s)",
+    );
     expect(s).toContain("4.50 s back to baseline p95");
     expect(s).toContain("drift detected: p95 +12.50 ms/h");
     expect(s).toContain("[8.00, 17.00] ms/h");
     expect(s).toContain("120.0s up");
-    const notRecovered = renderReport([stressResult({ spike: { baselineP95: 20, peakP95: 900, recoveryTimeS: null, recovered: false, toleranceMs: 10 } })], "tty", { color: false });
+    const notRecovered = renderReport(
+      [
+        stressResult({
+          spike: { baselineP95: 20, peakP95: 900, recoveryTimeS: null, recovered: false, toleranceMs: 10 },
+        }),
+      ],
+      "tty",
+      { color: false },
+    );
     expect(notRecovered).toContain("not recovered");
   });
 
@@ -100,13 +152,15 @@ describe("StressData rendering", () => {
   it("markdown and html carry the same content", () => {
     const md = renderReport([stressResult()], "md");
     expect(md).toContain(`**Capacity**\n\n> ${mdEscape(CAPACITY_STATEMENT)}`);
-    expect(md).toContain("| # | level | status | throughput | p50 | p95 | p99 | error rate | breach reasons | invalid |");
+    expect(md).toContain(
+      "| # | level | status | throughput | p50 | p95 | p99 | error rate | breach reasons | invalid |",
+    );
     expect(md).toContain("#### Estimates (model fit, not measured)");
     expect(md).toContain("- **usl**: nonlinear least squares");
     const html = renderReport([stressResult()], "html");
     expect(html).toContain(`<blockquote class="statement">${htmlEscape(CAPACITY_STATEMENT)}</blockquote>`);
     expect(html).toMatch(/<section class="estimate">\s*<h4>Estimates \(model fit, not measured\)<\/h4>/);
-    expect(html).toContain("<svg class=\"spark\"");
+    expect(html).toContain('<svg class="spark"');
   });
 });
 
@@ -130,7 +184,8 @@ describe("history comparison rendering", () => {
     expect(s).toMatch(/findings fixed\s+1/);
     expect(s).toMatch(/findings regressed\s+1/);
     expect(s).toMatch(/findings unchanged\s+1/);
-    for (const t of ["BOLA on orders", "N+1 on products", "Stock race", "Schema drift"]) expect(s).toContain(t);
+    for (const t of ["BOLA on orders", "N+1 on products", "Stock race", "Schema drift"])
+      expect(s).toContain(t);
     expect(s.indexOf("BOLA on orders")).toBeLessThan(s.indexOf("Schema drift")); // new before unchanged
     expect(s).toContain("Regressions: performance.http.rps regressed (-10%)");
   });
@@ -139,8 +194,12 @@ describe("history comparison rendering", () => {
     const cmp = makeComparison();
     expect(JSON.parse(renderComparison(cmp, "json"))).toEqual(cmp);
     const md = renderComparison(cmp, "md");
-    expect(md).toContain("| performance.http.p95 | single-run | 100.0 | 130.0 | +30.0% | worse (no statistics) | - | - |");
-    expect(md).toContain("| performance.http.rps | statistical | 200.0 | 180.0 | -10.0% | regressed | \\[-30.00, -10.00\\] | 0.00800 |");
+    expect(md).toContain(
+      "| performance.http.p95 | single-run | 100.0 | 130.0 | +30.0% | worse (no statistics) | - | - |",
+    );
+    expect(md).toContain(
+      "| performance.http.rps | statistical | 200.0 | 180.0 | -10.0% | regressed | \\[-30.00, -10.00\\] | 0.00800 |",
+    );
     const html = renderComparison(cmp, "html");
     expect(html).toContain("worse (no statistics)");
     expect(html).not.toMatch(/<script/i);

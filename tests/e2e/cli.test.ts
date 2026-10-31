@@ -64,7 +64,17 @@ describe.skipIf(!cliExists)("sw CLI e2e", () => {
   });
 
   it("sw perf against the calibrated server → JSON report on stdout, exit 0", async () => {
-    const r = await sw(["perf", `${srv.url}/fixed/5`, "--rate", "50", "--duration", "2s", "--warmup", "0s", "--json"]);
+    const r = await sw([
+      "perf",
+      `${srv.url}/fixed/5`,
+      "--rate",
+      "50",
+      "--duration",
+      "2s",
+      "--warmup",
+      "0s",
+      "--json",
+    ]);
     expect(r.exitCode, r.stderr).toBe(0);
     const rep = parseJson(r.stdout);
     expect(rep.kind).toBe("second-world-report");
@@ -82,7 +92,20 @@ describe.skipIf(!cliExists)("sw CLI e2e", () => {
   });
 
   it("writes json, md and junit report files with -f/-o", async () => {
-    const r = await sw(["perf", `${srv.url}/fixed/1`, "--rate", "20", "--duration", "1s", "--warmup", "0s", "-f", "json,md,junit", "-o", "out"]);
+    const r = await sw([
+      "perf",
+      `${srv.url}/fixed/1`,
+      "--rate",
+      "20",
+      "--duration",
+      "1s",
+      "--warmup",
+      "0s",
+      "-f",
+      "json,md,junit",
+      "-o",
+      "out",
+    ]);
     expect(r.exitCode, r.stderr).toBe(0);
     const out = tmp.join("out");
     const rep = parseJson(readFileSync(path.join(out, "report.json"), "utf8"));
@@ -112,12 +135,30 @@ describe.skipIf(!cliExists)("sw CLI e2e", () => {
     const rep = parseJson(readFileSync(tmp.join("out", "report.json"), "utf8"));
     expect(rep.verdict.passed).toBe(false);
     expect(rep.results[0].data.thresholds.some((t: { passed: boolean }) => !t.passed)).toBe(true);
-    expect(rep.results[0].findings.some((f: { classification: string }) => f.classification === "threshold-breach")).toBe(true);
+    expect(
+      rep.results[0].findings.some(
+        (f: { classification: string }) => f.classification === "threshold-breach",
+      ),
+    ).toBe(true);
     expect(readFileSync(tmp.join("out", "report.junit.xml"), "utf8")).toMatch(/<failure /);
   });
 
   it("--fail-on never turns a breach into exit 0", async () => {
-    const r = await sw(["perf", `${srv.url}/fixed/20`, "--rate", "10", "--duration", "1s", "--warmup", "0s", "--threshold", "p95<1ms", "--fail-on", "never", "--json"]);
+    const r = await sw([
+      "perf",
+      `${srv.url}/fixed/20`,
+      "--rate",
+      "10",
+      "--duration",
+      "1s",
+      "--warmup",
+      "0s",
+      "--threshold",
+      "p95<1ms",
+      "--fail-on",
+      "never",
+      "--json",
+    ]);
     expect(r.exitCode, r.stderr).toBe(0);
     expect(parseJson(r.stdout).verdict.passed).toBe(true);
   });
@@ -160,7 +201,16 @@ describe.skipIf(!cliExists)("sw CLI e2e", () => {
 
   it("--dry-run sends nothing", async () => {
     const before = srv.stats().requests;
-    const r = await sw(["--dry-run", "perf", `${srv.url}/fixed/1`, "--rate", "100", "--duration", "5s", "--json"]);
+    const r = await sw([
+      "--dry-run",
+      "perf",
+      `${srv.url}/fixed/1`,
+      "--rate",
+      "100",
+      "--duration",
+      "5s",
+      "--json",
+    ]);
     expect(r.exitCode, r.stderr).toBe(0);
     expect(parseJson(r.stdout).dryRun).toBe(true);
     expect(srv.stats().requests).toBe(before);
@@ -170,24 +220,31 @@ describe.skipIf(!cliExists)("sw CLI e2e", () => {
   // subprocess.kill("SIGINT") terminates it forcefully without running handlers, and
   // GenerateConsoleCtrlEvent needs a shared console). The graceful-stop path is covered
   // on macOS/Linux CI; on Windows it is exercised manually with Ctrl+C.
-  it.skipIf(process.platform === "win32")("Ctrl+C (SIGINT) → graceful stop, cancelled report, exit 130", async () => {
-    const child = spawnCli(["perf", `${srv.url}/fixed/5`, "--rate", "50", "--duration", "30s", "--warmup", "0s", "--json"], {
-      cwd: tmp.path,
-      env: { SW_USER_CONFIG_DIR: userCfg.path },
-      timeoutMs: 30_000,
-    });
-    const t0 = performance.now();
-    // wait until load is actually flowing, then interrupt
-    while (srv.stats().inFlight === 0 && performance.now() - t0 < 15_000) await new Promise((r) => setTimeout(r, 50));
-    await new Promise((r) => setTimeout(r, 500));
-    child.kill("SIGINT");
-    const r = await child;
-    expect(r.exitCode).toBe(130);
-    expect(performance.now() - t0).toBeLessThan(20_000);
-    const stdout = String(r.stdout ?? "");
-    if (stdout.trim().startsWith("{")) {
-      const rep = JSON.parse(stdout);
-      expect(rep.results[0].status).toBe("cancelled");
-    }
-  });
+  it.skipIf(process.platform === "win32")(
+    "Ctrl+C (SIGINT) → graceful stop, cancelled report, exit 130",
+    async () => {
+      const child = spawnCli(
+        ["perf", `${srv.url}/fixed/5`, "--rate", "50", "--duration", "30s", "--warmup", "0s", "--json"],
+        {
+          cwd: tmp.path,
+          env: { SW_USER_CONFIG_DIR: userCfg.path },
+          timeoutMs: 30_000,
+        },
+      );
+      const t0 = performance.now();
+      // wait until load is actually flowing, then interrupt
+      while (srv.stats().inFlight === 0 && performance.now() - t0 < 15_000)
+        await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 500));
+      child.kill("SIGINT");
+      const r = await child;
+      expect(r.exitCode).toBe(130);
+      expect(performance.now() - t0).toBeLessThan(20_000);
+      const stdout = String(r.stdout ?? "");
+      if (stdout.trim().startsWith("{")) {
+        const rep = JSON.parse(stdout);
+        expect(rep.results[0].status).toBe("cancelled");
+      }
+    },
+  );
 });

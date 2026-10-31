@@ -124,7 +124,8 @@ describe("sw reliability run (subprocess, built-in proxy)", () => {
     // the token never appears in stdout or any written report
     expect(r.stdout).not.toContain("alice-token");
     const repDir = join(dir, ".second-world", "reports");
-    for (const f of readdirSync(repDir)) expect(readFileSync(join(repDir, f), "utf8"), f).not.toContain("alice-token");
+    for (const f of readdirSync(repDir))
+      expect(readFileSync(join(repDir, f), "utf8"), f).not.toContain("alice-token");
     // the engine closed its proxy: nothing is left listening on the dependency port
     expect(await refuses(proxyPort)).toBe(true);
     const list = await runCli(["history", "list", "--json"], { cwd: dir, env });

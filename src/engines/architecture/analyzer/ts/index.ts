@@ -6,9 +6,9 @@
  */
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { CapabilityError } from "../../../../core/errors.js";
 import path from "node:path";
 import type * as ts from "typescript";
+import { CapabilityError } from "../../../../core/errors.js";
 import { parseSuppressions } from "../../suppress.js";
 import type { FileFacts } from "../../types.js";
 import type { AnalyzeRequest, AnalyzeResult, SourceAnalyzer } from "../source-analyzer.js";
@@ -44,10 +44,14 @@ export function loadTypeScript(): Promise<TsModule> {
     (e: unknown) => {
       tsPromise = undefined;
       // typescript is an optional peer dependency (docs/07-libraries.md): absent → capability error.
-      throw new CapabilityError("SW_CAP_TYPESCRIPT", "The Architecture Inspector needs the `typescript` package (5.x or 6.x)", {
-        hint: "Install it next to second-world: npm i -D typescript@6",
-        cause: e,
-      });
+      throw new CapabilityError(
+        "SW_CAP_TYPESCRIPT",
+        "The Architecture Inspector needs the `typescript` package (5.x or 6.x)",
+        {
+          hint: "Install it next to second-world: npm i -D typescript@6",
+          cause: e,
+        },
+      );
     },
   );
   return tsPromise;

@@ -21,7 +21,8 @@ export const DEFAULT_REDACT_HEADERS = [
 ];
 
 /** Object keys whose (string) values are always redacted. */
-const SENSITIVE_KEY = /^(?:.*[_-])?(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|client[_-]?secret|authorization|auth|credentials?|cookie|session[_-]?id)$/i;
+const SENSITIVE_KEY =
+  /^(?:.*[_-])?(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|client[_-]?secret|authorization|auth|credentials?|cookie|session[_-]?id)$/i;
 /** camelCase → snake for key matching: accessToken → access_Token, so the keyword is its own word. */
 function isSensitiveKey(key: string): boolean {
   return SENSITIVE_KEY.test(key.replace(/([a-z0-9])([A-Z])/g, "$1_$2"));
@@ -180,7 +181,11 @@ export function createRedactor(opts: RedactorOptions = {}): Redactor {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(h ?? {})) {
       if (headerSet.has(k.toLowerCase())) {
-        out[k] = Array.isArray(v) ? v.map((x) => redactionMarker(String(x))) : v == null ? v : redactionMarker(String(v));
+        out[k] = Array.isArray(v)
+          ? v.map((x) => redactionMarker(String(x)))
+          : v == null
+            ? v
+            : redactionMarker(String(v));
       } else if (typeof v === "string") out[k] = redactString(v);
       else if (Array.isArray(v)) out[k] = v.map((x) => (typeof x === "string" ? redactString(x) : x));
       else out[k] = v;
@@ -195,17 +200,14 @@ export function createRedactor(opts: RedactorOptions = {}): Redactor {
     const mkContainer = (src: object): Record<string, unknown> | unknown[] => (Array.isArray(src) ? [] : {});
     const out = mkContainer(root as object);
     seen.set(root as object, out);
-    const stack: Array<{ src: object; dst: Record<string, unknown> | unknown[] }> = [{ src: root as object, dst: out }];
+    const stack: Array<{ src: object; dst: Record<string, unknown> | unknown[] }> = [
+      { src: root as object, dst: out },
+    ];
     while (stack.length > 0) {
       const { src, dst } = stack.pop() as { src: object; dst: Record<string, unknown> | unknown[] };
       const entries: Array<[string, unknown]> =
         src instanceof Error
-          ? [
-              ["name", src.name],
-              ["message", src.message],
-              ["stack", src.stack],
-              ...Object.entries(src),
-            ]
+          ? [["name", src.name], ["message", src.message], ["stack", src.stack], ...Object.entries(src)]
           : Object.entries(src);
       for (const [k, v] of entries) {
         let nv: unknown;
@@ -216,7 +218,8 @@ export function createRedactor(opts: RedactorOptions = {}): Redactor {
           if (seen.has(v)) nv = "[Circular]";
           else if (v instanceof Date) nv = v.toISOString();
           else if (v instanceof URL) nv = redactString(v.href);
-          else if (Buffer.isBuffer(v) || ArrayBuffer.isView(v)) nv = `[binary ${(v as Uint8Array).byteLength} bytes]`;
+          else if (Buffer.isBuffer(v) || ArrayBuffer.isView(v))
+            nv = `[binary ${(v as Uint8Array).byteLength} bytes]`;
           else {
             const c = mkContainer(v);
             seen.set(v, c);

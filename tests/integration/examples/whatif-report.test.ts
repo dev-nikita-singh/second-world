@@ -8,7 +8,10 @@ import { runExperiment } from "../../../src/engines/experiments/index.js";
 import type { ExperimentData } from "../../../src/engines/experiments/types.js";
 import { isExperimentData } from "../../../src/engines/reporting/experiments.js";
 import { REPORT_FORMATS, renderReport, writeReports } from "../../../src/engines/reporting/index.js";
-import { type ChildCalibratedServer, startCalibratedServerInChild } from "../../fixtures/servers/calibrated-child.js";
+import {
+  type ChildCalibratedServer,
+  startCalibratedServerInChild,
+} from "../../fixtures/servers/calibrated-child.js";
 import { makeTmpDir, type TmpDir } from "../../helpers/tmp.js";
 
 let srv: ChildCalibratedServer;
@@ -22,7 +25,12 @@ beforeAll(async () => {
     name: "aa-render",
     mode: "aa",
     baseline: { target: srv.url },
-    workload: { vus: 2, duration: "600ms", warmup: "200ms", scenarios: [{ name: "f", steps: [{ path: "/fixed/5" }] }] },
+    workload: {
+      vus: 2,
+      duration: "600ms",
+      warmup: "200ms",
+      scenarios: [{ name: "f", steps: [{ path: "/fixed/5" }] }],
+    },
     metrics: ["p50", "p95"],
     design: { repetitions: 2, order: "randomized-blocks", seed: 3 },
   });

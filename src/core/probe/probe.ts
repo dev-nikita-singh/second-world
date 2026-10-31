@@ -38,7 +38,11 @@ function readText(path: string): string | null {
 }
 
 /** cgroup v2 `cpu.max` ("max 100000" | "200000 100000") or v1 cfs quota/period → cores. */
-export function parseCpuQuota(v2: string | null, v1Quota: string | null, v1Period: string | null): number | undefined {
+export function parseCpuQuota(
+  v2: string | null,
+  v1Quota: string | null,
+  v1Period: string | null,
+): number | undefined {
   if (v2) {
     const [q, p] = v2.trim().split(/\s+/);
     if (q && q !== "max" && p) {
@@ -83,7 +87,8 @@ function probeOs(env: NodeJS.ProcessEnv): EnvironmentReport["os"] {
   };
   if (platform === "linux") {
     const header = safe(
-      () => (process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined)?.header,
+      () =>
+        (process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined)?.header,
       undefined,
     );
     out.libc = header?.glibcVersionRuntime ? "glibc" : "musl";
@@ -95,7 +100,12 @@ function probeOs(env: NodeJS.ProcessEnv): EnvironmentReport["os"] {
 async function probeRuntime(): Promise<EnvironmentReport["runtime"]> {
   const g = globalThis as { Bun?: unknown; Deno?: { version?: { deno?: string } } };
   const name: "node" | "bun" | "deno" = process.versions.bun ? "bun" : g.Deno ? "deno" : "node";
-  const version = name === "bun" ? String(process.versions.bun) : name === "deno" ? String(g.Deno?.version?.deno ?? "") : process.versions.node;
+  const version =
+    name === "bun"
+      ? String(process.versions.bun)
+      : name === "deno"
+        ? String(g.Deno?.version?.deno ?? "")
+        : process.versions.node;
   let workerThreads = false;
   try {
     const wt = await import("node:worker_threads");
@@ -107,7 +117,10 @@ async function probeRuntime(): Promise<EnvironmentReport["runtime"]> {
   let sqlite = false;
   let compileCache = false;
   try {
-    const m = (await import("node:module")) as { enableCompileCache?: unknown; isBuiltin?: (s: string) => boolean };
+    const m = (await import("node:module")) as {
+      enableCompileCache?: unknown;
+      isBuiltin?: (s: string) => boolean;
+    };
     compileCache = typeof m.enableCompileCache === "function";
     sqlite = typeof m.isBuiltin === "function" && m.isBuiltin("node:sqlite");
   } catch {
@@ -117,7 +130,11 @@ async function probeRuntime(): Promise<EnvironmentReport["runtime"]> {
 }
 
 function probeResources(): EnvironmentReport["resources"] {
-  const cpus = safe(() => os.availableParallelism(), safe(() => os.cpus().length, 1)) || 1;
+  const cpus =
+    safe(
+      () => os.availableParallelism(),
+      safe(() => os.cpus().length, 1),
+    ) || 1;
   const out: EnvironmentReport["resources"] = { cpus, memTotal: safe(() => os.totalmem(), 0) };
   if (process.platform === "linux") {
     const quota = parseCpuQuota(
@@ -151,7 +168,11 @@ function probeContainer(env: NodeJS.ProcessEnv): EnvironmentReport["container"] 
 async function probeCi(env: NodeJS.ProcessEnv): Promise<EnvironmentReport["ci"]> {
   try {
     if (env === process.env) {
-      const ci = (await import("ci-info")) as unknown as { isCI: boolean; name: string | null; default?: { isCI: boolean; name: string | null } };
+      const ci = (await import("ci-info")) as unknown as {
+        isCI: boolean;
+        name: string | null;
+        default?: { isCI: boolean; name: string | null };
+      };
       const c = ci.default ?? ci;
       return c.isCI ? { inside: true, ...(c.name ? { provider: c.name } : {}) } : { inside: false };
     }
@@ -219,10 +240,13 @@ async function defaultRunTool(cmd: string): Promise<string | null> {
 
 function extractVersion(s: string): string {
   const m = /(\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?)/.exec(s);
-  return m ? (m[1] as string) : s.split(/\r?\n/)[0]?.slice(0, 60) ?? s;
+  return m ? (m[1] as string) : (s.split(/\r?\n/)[0]?.slice(0, 60) ?? s);
 }
 
-async function probeTools(full: boolean, run: (cmd: string) => Promise<string | null>): Promise<EnvironmentReport["tools"]> {
+async function probeTools(
+  full: boolean,
+  run: (cmd: string) => Promise<string | null>,
+): Promise<EnvironmentReport["tools"]> {
   if (!full) return {};
   const results = await Promise.all(TOOLS.map(async (t) => [t, await run(t).catch(() => null)] as const));
   const out: EnvironmentReport["tools"] = {};
@@ -236,20 +260,46 @@ function capabilities(r: Omit<EnvironmentReport, "capabilities">, full: boolean,
   caps["fs.read"] = { available: true };
   caps.worker_threads = r.runtime.features.workerThreads
     ? { available: true }
-    : { available: false, reason: "worker_threads unavailable in this runtime", fix: "Use Node.js >= 22.19; generator runs single-threaded" };
+    : {
+        available: false,
+        reason: "worker_threads unavailable in this runtime",
+        fix: "Use Node.js >= 22.19; generator runs single-threaded",
+      };
   caps.sqlite = r.runtime.features.sqlite
     ? { available: true }
-    : { available: false, reason: "node:sqlite not available", fix: "History uses JSONL (no action needed); Node 24+ ships node:sqlite" };
+    : {
+        available: false,
+        reason: "node:sqlite not available",
+        fix: "History uses JSONL (no action needed); Node 24+ ships node:sqlite",
+      };
   const toolCap = (t: ToolName, fix: string): CapabilityStatus =>
-    r.tools[t] ? { available: true } : full ? { available: false, reason: `${t} not found on PATH`, fix } : { available: false, reason: "not probed (run `sw doctor`)" };
-  caps.git = toolCap("git", "Install git (https://git-scm.com); Evolution and commit metadata are disabled without it");
-  caps.docker = toolCap("docker", "Install/start Docker; Reliability Lab falls back to the built-in proxy, Evolution sandbox disabled");
+    r.tools[t]
+      ? { available: true }
+      : full
+        ? { available: false, reason: `${t} not found on PATH`, fix }
+        : { available: false, reason: "not probed (run `sw doctor`)" };
+  caps.git = toolCap(
+    "git",
+    "Install git (https://git-scm.com); Evolution and commit metadata are disabled without it",
+  );
+  caps.docker = toolCap(
+    "docker",
+    "Install/start Docker; Reliability Lab falls back to the built-in proxy, Evolution sandbox disabled",
+  );
   caps["telemetry.otlp"] = env.OTEL_EXPORTER_OTLP_ENDPOINT
     ? { available: true }
-    : { available: false, reason: "no OTLP endpoint configured", fix: "Set OTEL_EXPORTER_OTLP_ENDPOINT to read server-side metrics" };
+    : {
+        available: false,
+        reason: "no OTLP endpoint configured",
+        fix: "Set OTEL_EXPORTER_OTLP_ENDPOINT to read server-side metrics",
+      };
   caps.tty = r.terminal.tty
     ? { available: true }
-    : { available: false, reason: "stdout is not a TTY", fix: "Live dashboard disabled; line-based progress is used" };
+    : {
+        available: false,
+        reason: "stdout is not a TTY",
+        fix: "Live dashboard disabled; line-based progress is used",
+      };
   return caps;
 }
 
@@ -257,7 +307,11 @@ function capabilities(r: Omit<EnvironmentReport, "capabilities">, full: boolean,
 function fallbackReport(): EnvironmentReport {
   return {
     os: { platform: process.platform, release: "", arch: process.arch },
-    runtime: { name: "node", version: process.versions.node ?? "", features: { workerThreads: false, sqlite: false, compileCache: false } },
+    runtime: {
+      name: "node",
+      version: process.versions.node ?? "",
+      features: { workerThreads: false, sqlite: false, compileCache: false },
+    },
     resources: { cpus: 1, memTotal: 0 },
     container: { inside: false },
     ci: { inside: false },
@@ -317,22 +371,40 @@ export function doctorChecks(r: EnvironmentReport): DoctorCheck[] {
     label: `${r.runtime.name === "node" ? "Node" : r.runtime.name} ${r.runtime.version}`,
     ...(nodeOk ? {} : { fix: "Upgrade to Node.js >= 22.19 (24 LTS recommended)" }),
   });
-  out.push({ id: "os", status: "info", label: `${r.os.platform} ${r.os.arch} ${r.os.release}${r.os.libc ? ` (${r.os.libc})` : ""}${r.os.wsl ? " WSL" : ""}` });
+  out.push({
+    id: "os",
+    status: "info",
+    label: `${r.os.platform} ${r.os.arch} ${r.os.release}${r.os.libc ? ` (${r.os.libc})` : ""}${r.os.wsl ? " WSL" : ""}`,
+  });
   out.push({
     id: "worker_threads",
     status: r.runtime.features.workerThreads ? "ok" : "warn",
     label: "worker_threads",
-    ...(r.capabilities.worker_threads?.fix && !r.runtime.features.workerThreads ? { fix: r.capabilities.worker_threads.fix } : {}),
+    ...(r.capabilities.worker_threads?.fix && !r.runtime.features.workerThreads
+      ? { fix: r.capabilities.worker_threads.fix }
+      : {}),
   });
   out.push({
     id: "sqlite",
     status: r.runtime.features.sqlite ? "ok" : "info",
     label: r.runtime.features.sqlite ? "node:sqlite" : "node:sqlite unavailable (JSONL history)",
   });
-  const quota = r.resources.cpuQuota !== undefined ? ` (cgroup quota: ${r.resources.cpuQuota.toFixed(1)})` : "";
-  out.push({ id: "cpus", status: r.resources.cpus >= 2 ? "ok" : "warn", label: `${r.resources.cpus} CPUs${quota}`, ...(r.resources.cpus < 2 ? { fix: "Load generation shares 1 CPU with the target; results may be generator-bound" } : {}) });
+  const quota =
+    r.resources.cpuQuota !== undefined ? ` (cgroup quota: ${r.resources.cpuQuota.toFixed(1)})` : "";
+  out.push({
+    id: "cpus",
+    status: r.resources.cpus >= 2 ? "ok" : "warn",
+    label: `${r.resources.cpus} CPUs${quota}`,
+    ...(r.resources.cpus < 2
+      ? { fix: "Load generation shares 1 CPU with the target; results may be generator-bound" }
+      : {}),
+  });
   const mem = r.resources.memLimit ?? r.resources.memTotal;
-  out.push({ id: "memory", status: mem >= GiB ? "ok" : "warn", label: `${(mem / GiB).toFixed(1)} GiB memory${r.resources.memLimit ? " (cgroup limit)" : ""}` });
+  out.push({
+    id: "memory",
+    status: mem >= GiB ? "ok" : "warn",
+    label: `${(mem / GiB).toFixed(1)} GiB memory${r.resources.memLimit ? " (cgroup limit)" : ""}`,
+  });
   if (r.resources.fdLimit !== undefined) {
     const low = r.resources.fdLimit < 4096;
     out.push({
@@ -342,14 +414,20 @@ export function doctorChecks(r: EnvironmentReport): DoctorCheck[] {
       ...(low ? { fix: "ulimit -n 65535" } : {}),
     });
   }
-  if (r.container.inside) out.push({ id: "container", status: "info", label: `inside container (${r.container.runtime ?? "unknown"})` });
+  if (r.container.inside)
+    out.push({
+      id: "container",
+      status: "info",
+      label: `inside container (${r.container.runtime ?? "unknown"})`,
+    });
   if (r.ci.inside) out.push({ id: "ci", status: "info", label: `CI: ${r.ci.provider ?? "detected"}` });
   // Quick mode skips `<tool> --version`: a missing version then means "not probed", not "not found".
   const probed = !(r.capabilities.git?.reason ?? "").startsWith("not probed");
   for (const t of ["git", "docker", "toxiproxy", "k6"] as const) {
     const v = r.tools[t];
     if (v) out.push({ id: `tool.${t}`, status: "ok", label: `${t} ${v}` });
-    else if (!probed) out.push({ id: `tool.${t}`, status: "info", label: `${t} not probed (run \`sw doctor\`)` });
+    else if (!probed)
+      out.push({ id: `tool.${t}`, status: "info", label: `${t} not probed (run \`sw doctor\`)` });
     else {
       const cap = t === "git" || t === "docker" ? r.capabilities[t] : undefined;
       out.push({
@@ -372,7 +450,9 @@ export function doctorChecks(r: EnvironmentReport): DoctorCheck[] {
   out.push({
     id: "tty",
     status: "info",
-    label: r.terminal.tty ? `TTY ${r.terminal.width} cols${r.terminal.color ? ", color" : ""}${r.terminal.unicode ? ", unicode" : ""}` : "non-TTY output (line-based progress)",
+    label: r.terminal.tty
+      ? `TTY ${r.terminal.width} cols${r.terminal.color ? ", color" : ""}${r.terminal.unicode ? ", unicode" : ""}`
+      : "non-TTY output (line-based progress)",
   });
   return out;
 }

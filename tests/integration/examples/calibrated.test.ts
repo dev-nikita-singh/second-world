@@ -218,7 +218,9 @@ describe("calibrated server", () => {
     srv = await startCalibratedServer();
     const burst = async (k: number): Promise<number[]> => {
       const rs = await Promise.all(
-        Array.from({ length: k }, () => fetch(`${srv!.url}/capacity/4?ms=100`).then((r) => r.json() as Promise<{ queuedMs: number }>)),
+        Array.from({ length: k }, () =>
+          fetch(`${srv!.url}/capacity/4?ms=100`).then((r) => r.json() as Promise<{ queuedMs: number }>),
+        ),
       );
       return rs.map((r) => r.queuedMs).sort((a, b) => a - b);
     };
@@ -233,14 +235,18 @@ describe("calibrated server", () => {
 
   it("/capacity/:n?maxQueue sheds load with 503", async () => {
     srv = await startCalibratedServer();
-    const rs = await Promise.all(Array.from({ length: 6 }, () => fetch(`${srv!.url}/capacity/2?ms=80&maxQueue=2`).then((r) => r.status)));
+    const rs = await Promise.all(
+      Array.from({ length: 6 }, () => fetch(`${srv!.url}/capacity/2?ms=80&maxQueue=2`).then((r) => r.status)),
+    );
     expect(rs.filter((s) => s === 200)).toHaveLength(4);
     expect(rs.filter((s) => s === 503)).toHaveLength(2);
   });
 
   it("close() releases queued /capacity requests", async () => {
     srv = await startCalibratedServer();
-    const pending = Array.from({ length: 5 }, () => fetch(`${srv!.url}/capacity/1?ms=5000`).catch(() => "reset"));
+    const pending = Array.from({ length: 5 }, () =>
+      fetch(`${srv!.url}/capacity/1?ms=5000`).catch(() => "reset"),
+    );
     await new Promise((r) => setTimeout(r, 50));
     const t0 = performance.now();
     await srv.close();

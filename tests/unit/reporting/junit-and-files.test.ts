@@ -21,7 +21,8 @@ function assertWellFormedXml(xml: string): void {
     const text = body.slice(last, m.index);
     expect(text, "raw < in text").not.toContain("<");
     expect(/&(?!(amp|lt|gt|quot|apos);)/.test(text), `bare & in: ${text}`).toBe(false);
-    for (const a of (m[3] ?? "").matchAll(/="([^"]*)"/g)) expect(/&(?!(amp|lt|gt|quot|apos);)/.test(a[1] ?? "")).toBe(false);
+    for (const a of (m[3] ?? "").matchAll(/="([^"]*)"/g))
+      expect(/&(?!(amp|lt|gt|quot|apos);)/.test(a[1] ?? "")).toBe(false);
     const [, close, name, , selfClose] = m;
     if (close) expect(stack.pop(), `unbalanced </${name}>`).toBe(name);
     else if (!selfClose) stack.push(name ?? "");
@@ -33,21 +34,30 @@ function assertWellFormedXml(xml: string): void {
   expect(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(xml)).toBe(false);
 }
 
-const nasty = 'quote" apos\' amp& lt< gt> ctrl\u0001\u0008 ok';
+const nasty = "quote\" apos' amp& lt< gt> ctrl\u0001\u0008 ok";
 
 describe("junit renderer", () => {
   it("thresholds become test cases; failures counted; XML well-formed", () => {
     const r = makeResult({
       status: "failed",
-      data: makePerfData({ thresholds: [makeThreshold({ passed: false, actual: 412 }), makeThreshold({ expression: "http.error_rate < 1%", unit: "ratio", actual: 0.001 })] }),
+      data: makePerfData({
+        thresholds: [
+          makeThreshold({ passed: false, actual: 412 }),
+          makeThreshold({ expression: "http.error_rate < 1%", unit: "ratio", actual: 0.001 }),
+        ],
+      }),
       findings: [makeFinding({ classification: "threshold-breach", severity: "high" })],
     });
     const xml = renderReport([r], "junit");
     assertWellFormedXml(xml);
-    expect(xml).toContain('<testsuites name="second-world run-1" tests="2" failures="1" errors="0" skipped="0" time="12.500">');
+    expect(xml).toContain(
+      '<testsuites name="second-world run-1" tests="2" failures="1" errors="0" skipped="0" time="12.500">',
+    );
     expect(xml).toContain('<testsuite name="second-world.performance" tests="2" failures="1"');
     expect(xml).toContain('<testcase name="http.p95 &lt; 300ms" classname="performance.thresholds">');
-    expect(xml).toContain('<failure message="http.p95 &lt; 300ms failed: actual 412ms" type="threshold-breach">');
+    expect(xml).toContain(
+      '<failure message="http.p95 &lt; 300ms failed: actual 412ms" type="threshold-breach">',
+    );
     expect(xml).toContain("<system-out>actual: 0.10%</system-out>");
   });
 
@@ -55,7 +65,14 @@ describe("junit renderer", () => {
     const r = makeResult({
       engine: "bugs",
       findings: [
-        makeFinding({ id: "a", severity: "critical", classification: "reproduced-defect", title: nasty, description: nasty, locations: [{ file: "src/x.ts", line: 4 }] }),
+        makeFinding({
+          id: "a",
+          severity: "critical",
+          classification: "reproduced-defect",
+          title: nasty,
+          description: nasty,
+          locations: [{ file: "src/x.ts", line: 4 }],
+        }),
         makeFinding({ id: "b", severity: "low", classification: "reproduced-defect", title: "minor" }),
       ],
     });
@@ -69,7 +86,11 @@ describe("junit renderer", () => {
 
   it("error / cancelled / empty results", () => {
     const xml = renderReport(
-      [makeResult({ engine: "stress", status: "error" }), makeResult({ engine: "agent", status: "cancelled" }), makeResult({ engine: "architecture" })],
+      [
+        makeResult({ engine: "stress", status: "error" }),
+        makeResult({ engine: "agent", status: "cancelled" }),
+        makeResult({ engine: "architecture" }),
+      ],
       "junit",
     );
     assertWellFormedXml(xml);
@@ -136,7 +157,9 @@ describe("writeReports / writeFileAtomic", () => {
     const fail = (code: string) => async () => {
       throw Object.assign(new Error(code), { code });
     };
-    await expect(writeFileAtomic(f, "x", { retries: 3, retryDelayMs: 1, renameImpl: fail("EBUSY") })).rejects.toThrow("EBUSY");
+    await expect(
+      writeFileAtomic(f, "x", { retries: 3, retryDelayMs: 1, renameImpl: fail("EBUSY") }),
+    ).rejects.toThrow("EBUSY");
     await expect(writeFileAtomic(f, "x", { renameImpl: fail("ENOSPC") })).rejects.toThrow("ENOSPC");
     expect(existsSync(f)).toBe(false);
     expect(readdirSync(tmp.path)).toEqual([]);

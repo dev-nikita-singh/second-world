@@ -73,7 +73,7 @@ describe("helpers", () => {
     expect(sources["safety.maxRps"]).toBe("env SW_SAFETY__MAX_RPS");
   });
   it("parseSetArgs", () => {
-    expect(parseSetArgs(["performance.rate=200", "safety.allowHosts=[\"a\"]"])).toEqual({
+    expect(parseSetArgs(["performance.rate=200", 'safety.allowHosts=["a"]'])).toEqual({
       performance: { rate: 200 },
       safety: { allowHosts: ["a"] },
     });
@@ -92,7 +92,10 @@ describe("loadConfig", () => {
   });
 
   it("discovers YAML walking up to the git root", async () => {
-    const dir = tmp({ "sw.config.yaml": "environment: staging\nsafety:\n  maxRps: 100\n", "pkg/sub/.keep": "" });
+    const dir = tmp({
+      "sw.config.yaml": "environment: staging\nsafety:\n  maxRps: 100\n",
+      "pkg/sub/.keep": "",
+    });
     const sub = join(dir, "pkg", "sub");
     expect(discoverConfigFile(sub)).toBe(join(dir, "sw.config.yaml"));
     const r = await loadConfig({ ...base, cwd: sub });
@@ -113,7 +116,8 @@ describe("loadConfig", () => {
 
   it("loads a TS config through c12", async () => {
     const dir = tmp({
-      "sw.config.ts": "const rate: number = 123;\nexport default { performance: { rate }, safety: { maxDuration: '10m' } };\n",
+      "sw.config.ts":
+        "const rate: number = 123;\nexport default { performance: { rate }, safety: { maxDuration: '10m' } };\n",
     });
     const r = await loadConfig({ ...base, cwd: dir });
     expect(r.config.performance).toEqual({ rate: 123 });

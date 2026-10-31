@@ -27,11 +27,20 @@ describe("parseThreshold", () => {
     expect({ ...a, source: "" }).toEqual({ ...b, source: "" });
   });
   it("p(99.9) and p999", () => {
-    expect(parseThreshold("p(99.9) <= 1s")).toMatchObject({ stat: "p99.9", percentile: 99.9, op: "<=", value: 1000 });
+    expect(parseThreshold("p(99.9) <= 1s")).toMatchObject({
+      stat: "p99.9",
+      percentile: 99.9,
+      op: "<=",
+      value: 1000,
+    });
     expect(parseThreshold("p999 < 2s")).toMatchObject({ stat: "p99.9", percentile: 99.9 });
   });
   it("error_rate < 1%", () => {
-    expect(parseThreshold("error_rate < 1%")).toMatchObject({ stat: "error_rate", value: 0.01, unit: "ratio" });
+    expect(parseThreshold("error_rate < 1%")).toMatchObject({
+      stat: "error_rate",
+      value: 0.01,
+      unit: "ratio",
+    });
   });
   it("rps > 200", () => {
     expect(parseThreshold("rps > 200")).toMatchObject({ stat: "rps", op: ">", value: 200, unit: "per_s" });
@@ -107,12 +116,23 @@ describe("parseThresholdEntry / parseThresholds", () => {
   });
   it("object form with abortOnFail and delayAbortEval", () => {
     expect(
-      parseThresholdEntry("scenario.checkout.p99", { expr: "< 800ms", abortOnFail: true, delayAbortEval: "30s" }),
-    ).toMatchObject({ metric: "scenario.checkout.p99", value: 800, abortOnFail: true, delayAbortEvalMs: 30_000 });
+      parseThresholdEntry("scenario.checkout.p99", {
+        expr: "< 800ms",
+        abortOnFail: true,
+        delayAbortEval: "30s",
+      }),
+    ).toMatchObject({
+      metric: "scenario.checkout.p99",
+      value: 800,
+      abortOnFail: true,
+      delayAbortEvalMs: 30_000,
+    });
   });
   it("k6-style: key is a scope, value a full expression", () => {
     expect(parseThresholdEntry("http", "p(95) < 300ms")).toMatchObject({ metric: "http.p95" });
-    expect(parseThresholdEntry("scenario.browse", "p99 < 1s")).toMatchObject({ metric: "scenario.browse.p99" });
+    expect(parseThresholdEntry("scenario.browse", "p99 < 1s")).toMatchObject({
+      metric: "scenario.browse.p99",
+    });
   });
   it("parseThresholds handles arrays and reports key path", () => {
     const list = parseThresholds({ http: ["p95 < 300ms", "p99 < 1s"], "http.error_rate": "< 1%" });

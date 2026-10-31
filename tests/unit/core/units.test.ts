@@ -1,6 +1,12 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { formatDuration, parseBytes, parseDuration, parsePercent, parseRate } from "../../../src/core/config/units.js";
+import {
+  formatDuration,
+  parseBytes,
+  parseDuration,
+  parsePercent,
+  parseRate,
+} from "../../../src/core/config/units.js";
 import { ConfigError } from "../../../src/core/errors.js";
 
 describe("parseDuration", () => {
@@ -76,7 +82,9 @@ describe("parseBytes", () => {
     ["2gb", 2e9],
     ["100", 100],
   ])("%s -> %d", (s, b) => expect(parseBytes(s)).toBe(b));
-  it.each(["", "10XB", "KB", "10 KB B"])("rejects %j", (s) => expect(() => parseBytes(s)).toThrow(ConfigError));
+  it.each(["", "10XB", "KB", "10 KB B"])("rejects %j", (s) =>
+    expect(() => parseBytes(s)).toThrow(ConfigError),
+  );
 });
 
 describe("parseRate", () => {

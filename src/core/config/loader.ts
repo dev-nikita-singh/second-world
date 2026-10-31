@@ -72,7 +72,13 @@ function isPlainObject(v: unknown): v is Obj {
 }
 
 /** Deep merge `src` into `dst` (mutating). Arrays and scalars replace. Records leaf origins. */
-export function mergeLayer(dst: Obj, src: Obj, label: string, origins: Record<string, string>, prefix = ""): Obj {
+export function mergeLayer(
+  dst: Obj,
+  src: Obj,
+  label: string,
+  origins: Record<string, string>,
+  prefix = "",
+): Obj {
   const stack: Array<{ d: Obj; s: Obj; p: string }> = [{ d: dst, s: src, p: prefix }];
   while (stack.length > 0) {
     const { d, s, p } = stack.pop() as { d: Obj; s: Obj; p: string };
@@ -103,7 +109,9 @@ function clearOrigins(origins: Record<string, string>, path: string): void {
 function isSecretRef(v: unknown): v is SecretRef {
   if (!isPlainObject(v)) return false;
   const keys = Object.keys(v);
-  return keys.length === 1 && (keys[0] === "env" || keys[0] === "file") && typeof v[keys[0] as string] === "string";
+  return (
+    keys.length === 1 && (keys[0] === "env" || keys[0] === "file") && typeof v[keys[0] as string] === "string"
+  );
 }
 
 /** Coerces env/--set string values: booleans, numbers, JSON arrays/objects, else string. */
@@ -127,7 +135,11 @@ function camel(seg: string): string {
   return seg.toLowerCase().replace(/_([a-z0-9])/g, (_m, c: string) => c.toUpperCase());
 }
 
-const ENV_SECTION_ALIASES: Record<string, string> = { PERF: "performance", ARCH: "architecture", ENV: "environment" };
+const ENV_SECTION_ALIASES: Record<string, string> = {
+  PERF: "performance",
+  ARCH: "architecture",
+  ENV: "environment",
+};
 const ENV_IGNORED = new Set(["SW_CONFIG", "SW_PROFILE", "SW_NO_CONFIG_CODE", "SW_LOG_LEVEL"]);
 
 /** Builds the env overlay: `SW_REPORT__FAIL_ON` → report.failOn, `SW_PERF_RATE` → performance.rate, `SW_TARGET` → performance.target. */
@@ -186,11 +198,15 @@ export function parseSetArgs(sets: string[]): Obj {
   for (const s of sets) {
     const eq = s.indexOf("=");
     if (eq <= 0) {
-      throw new ConfigError("SW_CONFIG_SET", `Invalid --set "${s}": expected key=value`, { hint: "Example: --set performance.rate=200" });
+      throw new ConfigError("SW_CONFIG_SET", `Invalid --set "${s}": expected key=value`, {
+        hint: "Example: --set performance.rate=200",
+      });
     }
     const key = s.slice(0, eq).trim();
     if (!/^[A-Za-z0-9_$-]+(\.[A-Za-z0-9_$-]+)*$/.test(key)) {
-      throw new ConfigError("SW_CONFIG_SET", `Invalid --set key "${key}"`, { hint: "Use dotted keys, e.g. safety.maxRps" });
+      throw new ConfigError("SW_CONFIG_SET", `Invalid --set key "${key}"`, {
+        hint: "Use dotted keys, e.g. safety.maxRps",
+      });
     }
     setPath(layer, key.split("."), coerceValue(s.slice(eq + 1)));
   }
@@ -271,7 +287,8 @@ async function loadDataChain(file: string, depth = 0): Promise<Array<{ data: Obj
   const layers: Array<{ data: Obj; file: string }> = [];
   const list = ext === undefined ? [] : Array.isArray(ext) ? ext : [ext];
   for (const e of list) {
-    if (typeof e !== "string") throw new ConfigError("SW_CONFIG_EXTENDS", `extends must be a string or string[] in ${file}`);
+    if (typeof e !== "string")
+      throw new ConfigError("SW_CONFIG_EXTENDS", `extends must be a string or string[] in ${file}`);
     if (!e.startsWith(".") && !isAbsolute(e)) {
       throw new ConfigError("SW_CONFIG_EXTENDS", `extends "${e}": package presets require a TS/JS config`, {
         hint: "Use a relative path in JSON/YAML configs, or switch to sw.config.ts",
@@ -336,13 +353,20 @@ async function loadUserConfig(env: NodeJS.ProcessEnv): Promise<{ data: Obj; file
  * Loads a standalone object file (experiment definitions, presets): TS/JS via c12/jiti (default
  * export), JSON/YAML parsed directly. `noConfigCode` refuses code files (SW_CONFIG_CODE_DISABLED).
  */
-export async function loadObjectFile(file: string, opts: { noConfigCode?: boolean } = {}): Promise<Record<string, unknown>> {
+export async function loadObjectFile(
+  file: string,
+  opts: { noConfigCode?: boolean } = {},
+): Promise<Record<string, unknown>> {
   if (!existsSync(file)) throw new ConfigError("SW_CONFIG_NOT_FOUND", `File not found: ${file}`);
   if (CODE_EXT.has(extname(file))) {
     if (opts.noConfigCode) {
-      throw new ConfigError("SW_CONFIG_CODE_DISABLED", `Refusing to execute ${basename(file)}: --no-config-code is set`, {
-        hint: "Use a JSON/YAML file instead",
-      });
+      throw new ConfigError(
+        "SW_CONFIG_CODE_DISABLED",
+        `Refusing to execute ${basename(file)}: --no-config-code is set`,
+        {
+          hint: "Use a JSON/YAML file instead",
+        },
+      );
     }
     return loadCodeFile(file);
   }
@@ -357,18 +381,26 @@ function secretWarnings(data: Obj, label: string): string[] {
   while (stack.length > 0) {
     const { v, p } = stack.pop() as { v: unknown; p: string };
     if (typeof v === "string") {
-      const keyLooksSecret = /(password|secret|token|apikey|api_key|clientsecret)$/i.test(p.split(".").pop() ?? "");
+      const keyLooksSecret = /(password|secret|token|apikey|api_key|clientsecret)$/i.test(
+        p.split(".").pop() ?? "",
+      );
       if (r.redactString(v) !== v || (keyLooksSecret && v.length >= 8)) {
-        out.push(`${p}: value in ${label} looks like a secret; use { env: "NAME" } or { file: "path" } instead`);
+        out.push(
+          `${p}: value in ${label} looks like a secret; use { env: "NAME" } or { file: "path" } instead`,
+        );
       }
     } else if (Array.isArray(v)) v.forEach((x, i) => stack.push({ v: x, p: `${p}[${i}]` }));
-    else if (isPlainObject(v)) for (const [k, x] of Object.entries(v)) stack.push({ v: x, p: p ? `${p}.${k}` : k });
+    else if (isPlainObject(v))
+      for (const [k, x] of Object.entries(v)) stack.push({ v: x, p: p ? `${p}.${k}` : k });
   }
   return out;
 }
 
 function issuePath(path: ReadonlyArray<PropertyKey>): string {
-  return path.map((p) => (typeof p === "number" ? `[${p}]` : String(p))).join(".").replace(/\.\[/g, "[");
+  return path
+    .map((p) => (typeof p === "number" ? `[${p}]` : String(p)))
+    .join(".")
+    .replace(/\.\[/g, "[");
 }
 
 /** Converts a ZodError into a ConfigError with key paths and their sources. */
@@ -382,7 +414,8 @@ export function zodToConfigError(err: z.ZodError, origins: Record<string, string
       origin = parent ? origins[parent] : Object.entries(origins).find(([k]) => k.startsWith(`${p}.`))?.[1];
     }
     let msg = i.message;
-    if (i.code === "unrecognized_keys") msg = `Unknown key(s): ${(i as { keys?: string[] }).keys?.join(", ")}`;
+    if (i.code === "unrecognized_keys")
+      msg = `Unknown key(s): ${(i as { keys?: string[] }).keys?.join(", ")}`;
     return `  ${p || "(root)"}: ${msg}${origin ? `   ← from ${origin}` : ""}`;
   });
   return new ConfigError("SW_CONFIG_INVALID", `Config error\n${lines.join("\n")}`, {
@@ -426,9 +459,13 @@ export async function loadConfig(opts: LoadConfigOptions = {}): Promise<Resolved
       const label = basename(configFile);
       if (CODE_EXT.has(ext)) {
         if (opts.noConfigCode) {
-          throw new ConfigError("SW_CONFIG_CODE_DISABLED", `Refusing to execute ${label}: --no-config-code is set`, {
-            hint: "Provide sw.config.json or sw.config.yaml, or drop --no-config-code for trusted repositories",
-          });
+          throw new ConfigError(
+            "SW_CONFIG_CODE_DISABLED",
+            `Refusing to execute ${label}: --no-config-code is set`,
+            {
+              hint: "Provide sw.config.json or sw.config.yaml, or drop --no-config-code for trusted repositories",
+            },
+          );
         }
         const data = await loadCodeFile(configFile);
         warnings.push(...secretWarnings(data, label));
@@ -450,7 +487,9 @@ export async function loadConfig(opts: LoadConfigOptions = {}): Promise<Resolved
     if (!isPlainObject(p)) {
       const avail = Object.keys(profiles);
       throw new ConfigError("SW_CONFIG_PROFILE", `Unknown profile "${opts.profile}"`, {
-        hint: avail.length ? `Available profiles: ${avail.join(", ")}` : "No profiles are defined in the config",
+        hint: avail.length
+          ? `Available profiles: ${avail.join(", ")}`
+          : "No profiles are defined in the config",
       });
     }
     mergeLayer(merged, p, `profile ${opts.profile}`, origins);
@@ -494,7 +533,9 @@ export function resolveSecret(ref: SecretRef, opts: { env?: NodeJS.ProcessEnv; c
   if ("env" in ref) {
     const v = (opts.env ?? process.env)[ref.env];
     if (v === undefined || v === "") {
-      throw new ConfigError("SW_CONFIG_SECRET", `Secret env var ${ref.env} is not set`, { hint: `export ${ref.env}=...` });
+      throw new ConfigError("SW_CONFIG_SECRET", `Secret env var ${ref.env} is not set`, {
+        hint: `export ${ref.env}=...`,
+      });
     }
     return v;
   }
@@ -506,7 +547,10 @@ export function resolveSecret(ref: SecretRef, opts: { env?: NodeJS.ProcessEnv; c
 }
 
 /** Resolves every `{env}`/`{file}` ref that is available and returns the values (for the redactor deny-set). */
-export function collectSecretValues(config: unknown, opts: { env?: NodeJS.ProcessEnv; cwd?: string } = {}): string[] {
+export function collectSecretValues(
+  config: unknown,
+  opts: { env?: NodeJS.ProcessEnv; cwd?: string } = {},
+): string[] {
   const out: string[] = [];
   const stack: unknown[] = [config];
   while (stack.length > 0) {

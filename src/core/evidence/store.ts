@@ -104,7 +104,10 @@ export function defaultFingerprint(
     f.engine,
     f.ruleId ?? "",
     f.category,
-    f.title.trim().toLowerCase().replace(/\d+(\.\d+)?/g, "#"),
+    f.title
+      .trim()
+      .toLowerCase()
+      .replace(/\d+(\.\d+)?/g, "#"),
     ...[...(f.affected ?? [])].sort(),
   ];
   return createHash("sha256").update(parts.join("\u001f")).digest("hex").slice(0, 16);

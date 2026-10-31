@@ -18,8 +18,13 @@ describe("agent flag parsing", () => {
       maxDuration: 120_000,
       patience: 30,
     });
-    expect(parseBudget("rps=20,concurrency=4,duration=30s")).toEqual({ maxRps: 20, maxConcurrency: 4, maxDuration: 30_000 });
-    for (const bad of ["requests", "requests=0", "requests=x", "speed=3", "time=soon"]) expect(() => parseBudget(bad), bad).toThrow();
+    expect(parseBudget("rps=20,concurrency=4,duration=30s")).toEqual({
+      maxRps: 20,
+      maxConcurrency: 4,
+      maxDuration: 30_000,
+    });
+    for (const bad of ["requests", "requests=0", "requests=x", "speed=3", "time=soon"])
+      expect(() => parseBudget(bad), bad).toThrow();
   });
 
   it("agentInputFromFlags", () => {
@@ -49,7 +54,9 @@ describe("agent flag parsing", () => {
 
   it("exportSuggestedTests writes basenames only", () => {
     const dir = mkdtempSync(join(tmpdir(), "sw-agent-exp-"));
-    const files = exportSuggestedTests(dir, [{ filename: "../../evil/agent-bola-get.test.ts", vitest: "export {};\n" }]);
+    const files = exportSuggestedTests(dir, [
+      { filename: "../../evil/agent-bola-get.test.ts", vitest: "export {};\n" },
+    ]);
     expect(files).toEqual([join(dir, "agent-bola-get.test.ts")]);
     expect(readFileSync(files[0] as string, "utf8")).toBe("export {};\n");
   });
@@ -64,11 +71,24 @@ describe("buildAgentInput", () => {
         targets: { api: { url: "http://127.0.0.1:3000" } },
         auth: { user: { type: "bearer", token: { env: "TOK" } }, other: { type: "bearer", token: "bob" } },
         hooks: { reset: { http: { method: "POST", url: "http://127.0.0.1:3000/__reset" } } },
-        bugs: { contract: "./openapi.yaml", values: { sku: ["A"] }, headers: { "x-test": "1" }, propertyRuns: 9 },
-        agent: { planner: "heuristic", budget: { maxRequests: 100 }, auth: { roles: { admin: { type: "bearer", token: { env: "ADM" } } } } },
+        bugs: {
+          contract: "./openapi.yaml",
+          values: { sku: ["A"] },
+          headers: { "x-test": "1" },
+          propertyRuns: 9,
+        },
+        agent: {
+          planner: "heuristic",
+          budget: { maxRequests: 100 },
+          auth: { roles: { admin: { type: "bearer", token: { env: "ADM" } } } },
+        },
       },
     });
-    const input = buildAgentInput(cfg, { budget: { maxIterations: 5 } }, { seed: 4, env: { TOK: "alice", ADM: "root" } });
+    const input = buildAgentInput(
+      cfg,
+      { budget: { maxIterations: 5 } },
+      { seed: 4, env: { TOK: "alice", ADM: "root" } },
+    );
     expect(input).toMatchObject({
       target: "http://127.0.0.1:3000",
       openapi: "./openapi.yaml",

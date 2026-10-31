@@ -17,7 +17,10 @@ export function isFailOn(x: unknown): x is FailOn {
 }
 
 /** Exit code for a set of engine results at the given `--fail-on` level. */
-export function computeExitCode(results: readonly EngineResult[], failOn: FailOn = DEFAULT_FAIL_ON): ExitCode {
+export function computeExitCode(
+  results: readonly EngineResult[],
+  failOn: FailOn = DEFAULT_FAIL_ON,
+): ExitCode {
   return computeVerdict(results, failOn).exitCode;
 }
 

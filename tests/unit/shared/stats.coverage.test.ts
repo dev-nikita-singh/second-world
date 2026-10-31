@@ -8,7 +8,14 @@ import { cusum, mad, madOutliers, madZ } from "../../../src/shared/stats/anomaly
 import { LatencyHistogram } from "../../../src/shared/stats/hdr.js";
 import { kneedle } from "../../../src/shared/stats/knee.js";
 import { wilson } from "../../../src/shared/stats/proportion.js";
-import { mean, median, normalCdf, normalQuantile, quantile, sortedCopy } from "../../../src/shared/stats/quantile.js";
+import {
+  mean,
+  median,
+  normalCdf,
+  normalQuantile,
+  quantile,
+  sortedCopy,
+} from "../../../src/shared/stats/quantile.js";
 import { theilSen } from "../../../src/shared/stats/regression.js";
 import { Reservoir } from "../../../src/shared/stats/reservoir.js";
 import { Welford } from "../../../src/shared/stats/welford.js";
@@ -19,18 +26,23 @@ const sample = fc.array(finite, { minLength: 1, maxLength: 60 });
 describe("quantile", () => {
   it("property: within [min, max], monotone in q, nearest-rank returns a sample element", () => {
     fc.assert(
-      fc.property(sample, fc.double({ min: 0, max: 1, noNaN: true }), fc.double({ min: 0, max: 1, noNaN: true }), (xs, q1, q2) => {
-        const s = sortedCopy(xs);
-        const [lo, hi] = q1 <= q2 ? [q1, q2] : [q2, q1];
-        for (const m of ["type7", "nearest-rank"] as const) {
-          const a = quantile(s, lo, m);
-          const b = quantile(s, hi, m);
-          expect(a).toBeLessThanOrEqual(b + 1e-9);
-          expect(a).toBeGreaterThanOrEqual((s[0] as number) - 1e-9);
-          expect(b).toBeLessThanOrEqual((s[s.length - 1] as number) + 1e-9);
-        }
-        expect(Array.from(s)).toContain(quantile(s, q1, "nearest-rank"));
-      }),
+      fc.property(
+        sample,
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        (xs, q1, q2) => {
+          const s = sortedCopy(xs);
+          const [lo, hi] = q1 <= q2 ? [q1, q2] : [q2, q1];
+          for (const m of ["type7", "nearest-rank"] as const) {
+            const a = quantile(s, lo, m);
+            const b = quantile(s, hi, m);
+            expect(a).toBeLessThanOrEqual(b + 1e-9);
+            expect(a).toBeGreaterThanOrEqual((s[0] as number) - 1e-9);
+            expect(b).toBeLessThanOrEqual((s[s.length - 1] as number) + 1e-9);
+          }
+          expect(Array.from(s)).toContain(quantile(s, q1, "nearest-rank"));
+        },
+      ),
     );
   });
 
@@ -63,8 +75,8 @@ describe("Welford", () => {
         const all = new Welford();
         const wa = new Welford();
         const wb = new Welford();
-        for (const x of a) (all.push(x), wa.push(x));
-        for (const x of b) (all.push(x), wb.push(x));
+        for (const x of a) all.push(x), wa.push(x);
+        for (const x of b) all.push(x), wb.push(x);
         wa.merge(wb);
         const xs = [...a, ...b];
         expect(wa.count).toBe(xs.length);
@@ -74,7 +86,10 @@ describe("Welford", () => {
           expect(wa.min).toBe(Math.min(...xs));
           expect(wa.max).toBe(Math.max(...xs));
           const m = xs.reduce((s, x) => s + x, 0) / xs.length;
-          expect(all.populationVariance).toBeCloseTo(xs.reduce((s, x) => s + (x - m) ** 2, 0) / xs.length, -2);
+          expect(all.populationVariance).toBeCloseTo(
+            xs.reduce((s, x) => s + (x - m) ** 2, 0) / xs.length,
+            -2,
+          );
         }
       }),
     );
@@ -97,13 +112,18 @@ describe("Welford", () => {
 describe("Reservoir", () => {
   it("property: never more than k items, all items come from the stream, seen counts every offer", () => {
     fc.assert(
-      fc.property(fc.nat(10), fc.array(fc.integer(), { maxLength: 100 }), fc.double({ min: 0, max: 0.999999, noNaN: true }), (k, xs, r) => {
-        const res = new Reservoir<number>(k, () => r);
-        for (const x of xs) res.offer(x);
-        expect(res.size).toBe(Math.min(k, xs.length));
-        expect(res.seen).toBe(xs.length);
-        for (const it of res.items) expect(xs).toContain(it);
-      }),
+      fc.property(
+        fc.nat(10),
+        fc.array(fc.integer(), { maxLength: 100 }),
+        fc.double({ min: 0, max: 0.999999, noNaN: true }),
+        (k, xs, r) => {
+          const res = new Reservoir<number>(k, () => r);
+          for (const x of xs) res.offer(x);
+          expect(res.size).toBe(Math.min(k, xs.length));
+          expect(res.seen).toBe(xs.length);
+          for (const it of res.items) expect(xs).toContain(it);
+        },
+      ),
     );
     expect(() => new Reservoir(-1, Math.random)).toThrow(RangeError);
     expect(() => new Reservoir(1.5, Math.random)).toThrow(RangeError);
@@ -117,38 +137,53 @@ describe("Reservoir", () => {
 describe("LatencyHistogram", () => {
   it("property: percentiles are within the configured relative error of the exact nearest-rank value", () => {
     fc.assert(
-      fc.property(fc.array(fc.integer({ min: 1, max: 10_000_000 }), { minLength: 1, maxLength: 200 }), fc.integer({ min: 1, max: 100 }), (xs, q) => {
-        const h = new LatencyHistogram({ digits: 3 });
-        for (const x of xs) h.record(x);
-        const exact = quantile(sortedCopy(xs), q / 100, "nearest-rank");
-        expect(Math.abs(h.percentile(q) - exact)).toBeLessThanOrEqual(exact * 1e-3 + 1);
-      }),
+      fc.property(
+        fc.array(fc.integer({ min: 1, max: 10_000_000 }), { minLength: 1, maxLength: 200 }),
+        fc.integer({ min: 1, max: 100 }),
+        (xs, q) => {
+          const h = new LatencyHistogram({ digits: 3 });
+          for (const x of xs) h.record(x);
+          const exact = quantile(sortedCopy(xs), q / 100, "nearest-rank");
+          expect(Math.abs(h.percentile(q) - exact)).toBeLessThanOrEqual(exact * 1e-3 + 1);
+        },
+      ),
       { numRuns: 100 },
     );
   });
 
   it("property: encode/decode and add are lossless", () => {
     fc.assert(
-      fc.property(fc.array(fc.integer({ min: 0, max: 5_000_000 }), { maxLength: 100 }), fc.array(fc.integer({ min: 0, max: 5_000_000 }), { maxLength: 100 }), (a, b) => {
-        const ha = new LatencyHistogram();
-        const hb = new LatencyHistogram();
-        const hall = new LatencyHistogram();
-        for (const x of a) (ha.record(x), hall.record(x));
-        for (const x of b) (hb.record(x), hall.record(x));
-        ha.add(hb);
-        // Bucket-wise merges keep counts and percentiles exact; max/mean may move to the
-        // bucket's highest-equivalent value (HdrHistogram add semantics), i.e. within 0.1 %.
-        const same = (x: LatencyHistogram) => {
-          const s = x.summary();
-          const t = hall.summary();
-          expect([s.count, s.min, s.p50, s.p90, s.p99, s.p999]).toEqual([t.count, t.min, t.p50, t.p90, t.p99, t.p999]);
-          expect(Math.abs(s.max - t.max)).toBeLessThanOrEqual(t.max * 1e-3 + 1);
-          expect(Math.abs(s.mean - t.mean)).toBeLessThanOrEqual(t.mean * 1e-3 + 1);
-        };
-        same(ha);
-        same(LatencyHistogram.decode(hall.encode()));
-        same(hall.clone());
-      }),
+      fc.property(
+        fc.array(fc.integer({ min: 0, max: 5_000_000 }), { maxLength: 100 }),
+        fc.array(fc.integer({ min: 0, max: 5_000_000 }), { maxLength: 100 }),
+        (a, b) => {
+          const ha = new LatencyHistogram();
+          const hb = new LatencyHistogram();
+          const hall = new LatencyHistogram();
+          for (const x of a) ha.record(x), hall.record(x);
+          for (const x of b) hb.record(x), hall.record(x);
+          ha.add(hb);
+          // Bucket-wise merges keep counts and percentiles exact; max/mean may move to the
+          // bucket's highest-equivalent value (HdrHistogram add semantics), i.e. within 0.1 %.
+          const same = (x: LatencyHistogram) => {
+            const s = x.summary();
+            const t = hall.summary();
+            expect([s.count, s.min, s.p50, s.p90, s.p99, s.p999]).toEqual([
+              t.count,
+              t.min,
+              t.p50,
+              t.p90,
+              t.p99,
+              t.p999,
+            ]);
+            expect(Math.abs(s.max - t.max)).toBeLessThanOrEqual(t.max * 1e-3 + 1);
+            expect(Math.abs(s.mean - t.mean)).toBeLessThanOrEqual(t.mean * 1e-3 + 1);
+          };
+          same(ha);
+          same(LatencyHistogram.decode(hall.encode()));
+          same(hall.clone());
+        },
+      ),
       { numRuns: 50 },
     );
   });
@@ -232,19 +267,30 @@ describe("robust statistics", () => {
 
   it("property: Theil–Sen recovers an exact line and resists one outlier", () => {
     fc.assert(
-      fc.property(fc.integer({ min: -50, max: 50 }), fc.integer({ min: -100, max: 100 }), fc.integer({ min: 5, max: 40 }), (m, b, n) => {
-        const xs = Array.from({ length: n }, (_, i) => i);
-        const ys = xs.map((x) => m * x + b);
-        ys[n - 1] = 1e9;
-        const r = theilSen(xs, ys);
-        expect(r.slope).toBeCloseTo(m, 6);
-      }),
+      fc.property(
+        fc.integer({ min: -50, max: 50 }),
+        fc.integer({ min: -100, max: 100 }),
+        fc.integer({ min: 5, max: 40 }),
+        (m, b, n) => {
+          const xs = Array.from({ length: n }, (_, i) => i);
+          const ys = xs.map((x) => m * x + b);
+          ys[n - 1] = 1e9;
+          const r = theilSen(xs, ys);
+          expect(r.slope).toBeCloseTo(m, 6);
+        },
+      ),
     );
     expect(() => theilSen([1], [1, 2])).toThrow(RangeError);
     expect(theilSen([1], [7])).toMatchObject({ intercept: 7, n: 1 });
     expect(theilSen([], []).intercept).toBeNaN();
     const big = Array.from({ length: 5000 }, (_, i) => i);
-    expect(theilSen(big, big.map((x) => 2 * x), { maxPoints: 100 }).slope).toBeCloseTo(2, 6);
+    expect(
+      theilSen(
+        big,
+        big.map((x) => 2 * x),
+        { maxPoints: 100 },
+      ).slope,
+    ).toBeCloseTo(2, 6);
   });
 
   it("kneedle: finds the knee of a hockey stick, none for short/flat input, validates lengths", () => {
@@ -254,9 +300,18 @@ describe("robust statistics", () => {
     expect(r.knee).not.toBeNull();
     expect(r.knee?.x).toBeGreaterThanOrEqual(8);
     expect(kneedle([1, 2], [1, 2]).knee).toBeNull();
-    expect(kneedle(xs, xs.map(() => 3)).knee).toBeNull();
+    expect(
+      kneedle(
+        xs,
+        xs.map(() => 3),
+      ).knee,
+    ).toBeNull();
     expect(() => kneedle([1, 2, 3], [1, 2])).toThrow(RangeError);
-    const dec = kneedle(xs, ys.map((y) => -y), { direction: "decreasing", curve: "concave" });
+    const dec = kneedle(
+      xs,
+      ys.map((y) => -y),
+      { direction: "decreasing", curve: "concave" },
+    );
     expect(dec.difference).toHaveLength(20);
   });
 });

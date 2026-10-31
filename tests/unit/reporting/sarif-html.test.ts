@@ -1,11 +1,17 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { REPORT_FORMATS, renderReport, writeReports } from "../../../src/engines/reporting/index.js";
 import { htmlEscape, svgSparkline } from "../../../src/engines/reporting/html.js";
+import { REPORT_FORMATS, renderReport, writeReports } from "../../../src/engines/reporting/index.js";
 import { combineResults } from "../../../src/engines/reporting/model.js";
 import { buildSarif, sarifLevel, toUri } from "../../../src/engines/reporting/sarif.js";
-import { makeComparison, makeFinding, makePerfData, makeResult, makeStressData } from "../../fixtures/reports.js";
+import {
+  makeComparison,
+  makeFinding,
+  makePerfData,
+  makeResult,
+  makeStressData,
+} from "../../fixtures/reports.js";
 import { makeTmpDir, type TmpDir } from "../../helpers/tmp.js";
 
 const XSS = `<script>alert("x")</script> & 'q'`;
@@ -33,7 +39,13 @@ const secFinding = makeFinding({
   title: "BOLA on GET /orders/{id}",
   affected: ["GET /orders/{id}"],
 });
-const perfFinding = makeFinding({ id: "p1", fingerprint: "fp-p", severity: "high", classification: "threshold-breach", title: "p95 breached" });
+const perfFinding = makeFinding({
+  id: "p1",
+  fingerprint: "fp-p",
+  severity: "high",
+  classification: "threshold-breach",
+  title: "p95 breached",
+});
 
 /**
  * Structural SARIF 2.1.0 validation of the parts consumers (GitHub code scanning,
@@ -68,7 +80,10 @@ function validateSarif(doc: any): string[] {
         if (pl) {
           const uri: string = pl.artifactLocation?.uri;
           req(typeof uri === "string" && uri.length > 0, "artifactLocation.uri");
-          req(!uri.includes("\\") && !/^[A-Za-z]:/.test(uri) && !uri.startsWith("/"), `uri relative POSIX: ${uri}`);
+          req(
+            !uri.includes("\\") && !/^[A-Za-z]:/.test(uri) && !uri.startsWith("/"),
+            `uri relative POSIX: ${uri}`,
+          );
           req(Number.isInteger(pl.region?.startLine) && pl.region.startLine >= 1, "region.startLine >= 1");
         }
       }
@@ -91,7 +106,11 @@ describe("SARIF 2.1.0", () => {
   it("is structurally valid", () => {
     expect(validateSarif(sarif)).toEqual([]);
     expect(sarif.runs).toHaveLength(1);
-    expect(sarif.runs[0].tool.driver).toMatchObject({ name: "SECOND WORLD", version: "0.1.0", semanticVersion: "0.1.0" });
+    expect(sarif.runs[0].tool.driver).toMatchObject({
+      name: "SECOND WORLD",
+      version: "0.1.0",
+      semanticVersion: "0.1.0",
+    });
     expect(sarif.runs[0].automationDetails.id).toBe("second-world/S1");
   });
 
@@ -110,7 +129,11 @@ describe("SARIF 2.1.0", () => {
   it("non-code findings → logicalLocations; security rules get security-severity; fallback ruleId", () => {
     const r = sarif.runs[0].results.find((x: any) => x.ruleId === "bugs/bola");
     expect(r.level).toBe("error");
-    expect(r.locations[0].logicalLocations[0]).toEqual({ name: "GET /orders/{id}", fullyQualifiedName: "GET /orders/{id}", kind: "resource" });
+    expect(r.locations[0].logicalLocations[0]).toEqual({
+      name: "GET /orders/{id}",
+      fullyQualifiedName: "GET /orders/{id}",
+      kind: "resource",
+    });
     const rule = sarif.runs[0].tool.driver.rules.find((x: any) => x.id === "bugs/bola");
     expect(rule.properties["security-severity"]).toBe("9.5");
     expect(rule.properties.tags).toContain("security");
@@ -122,7 +145,13 @@ describe("SARIF 2.1.0", () => {
   });
 
   it("level mapping and uri normalisation", () => {
-    expect(["critical", "high", "medium", "low", "info"].map((s) => sarifLevel(s as never))).toEqual(["error", "error", "warning", "note", "note"]);
+    expect(["critical", "high", "medium", "low", "info"].map((s) => sarifLevel(s as never))).toEqual([
+      "error",
+      "error",
+      "warning",
+      "note",
+      "note",
+    ]);
     expect(toUri("./src/a b/c#d.ts")).toBe("src/a%20b/c%23d.ts");
     expect(toUri("src\\x\\y.ts")).toBe("src/x/y.ts");
   });
@@ -139,9 +168,27 @@ describe("HTML", () => {
     [
       makeResult({
         data: makePerfData({
-          series: [1, 2, 3, 4].map((t) => ({ t, requests: 100, ok: 100, failed: 0, rps: 100 + t, bytesIn: 0, p50: 10, p95: 20 + t * 5, p99: 40, max: 50 })),
+          series: [1, 2, 3, 4].map((t) => ({
+            t,
+            requests: 100,
+            ok: 100,
+            failed: 0,
+            rps: 100 + t,
+            bytesIn: 0,
+            p50: 10,
+            p95: 20 + t * 5,
+            p99: 40,
+            max: 50,
+          })),
         }),
-        findings: [makeFinding({ title: XSS, severity: "high", classification: "reproduced-defect", recommendation: "fix <it>" })],
+        findings: [
+          makeFinding({
+            title: XSS,
+            severity: "high",
+            classification: "reproduced-defect",
+            recommendation: "fix <it>",
+          }),
+        ],
         limitations: [{ code: "x<y", message: XSS, impact: "invalidates" }],
       }),
       makeResult({ engine: "stress", data: makeStressData() }),

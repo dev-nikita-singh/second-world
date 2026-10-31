@@ -86,12 +86,16 @@ describe("registry", () => {
 
 describe("orchestrator", () => {
   it("plans in topological order and rejects cycles / unknown deps", () => {
-    expect(planWorkflow({ c: { engine: "x", after: ["a", "b"] }, a: { engine: "x" }, b: { engine: "x", after: ["a"] } })).toEqual([
-      "a",
-      "b",
-      "c",
-    ]);
-    expect(() => planWorkflow({ a: { engine: "x", after: ["b"] }, b: { engine: "x", after: ["a"] } })).toThrow(/cycle/);
+    expect(
+      planWorkflow({
+        c: { engine: "x", after: ["a", "b"] },
+        a: { engine: "x" },
+        b: { engine: "x", after: ["a"] },
+      }),
+    ).toEqual(["a", "b", "c"]);
+    expect(() =>
+      planWorkflow({ a: { engine: "x", after: ["b"] }, b: { engine: "x", after: ["a"] } }),
+    ).toThrow(/cycle/);
     expect(() => planWorkflow({ a: { engine: "x", after: ["zz"] } })).toThrow(ConfigError);
   });
   it("runs in parallel with a limit, passes upstream results, skips dependants of failures", async () => {
@@ -152,7 +156,11 @@ describe("world", () => {
 
   it("runs workflows from config", async () => {
     const world = await createWorld({
-      config: { workflows: { w: { steps: { one: { engine: "bugs" }, two: { engine: "bugs", after: ["one"], input: { n: 5 } } } } } },
+      config: {
+        workflows: {
+          w: { steps: { one: { engine: "bugs" }, two: { engine: "bugs", after: ["one"], input: { n: 5 } } } },
+        },
+      },
       env: {},
       probe: false,
       engines: { bugs: async () => fakeEngine },
@@ -173,7 +181,11 @@ describe("world", () => {
       env: { TOK: "tok-123456" },
       probe: false,
     });
-    const input = buildPerformanceInput(world.config, { auth: "user" }, { seed: 7, env: { TOK: "tok-123456" } });
+    const input = buildPerformanceInput(
+      world.config,
+      { auth: "user" },
+      { seed: 7, env: { TOK: "tok-123456" } },
+    );
     expect(input).toMatchObject({
       target: "http://127.0.0.1:3000",
       rate: 2,

@@ -65,14 +65,26 @@ describe("CleanupStack", () => {
     const changes: number[] = [];
     const s = new CleanupStack(() => changes.push(s.size));
     const ran: string[] = [];
-    const un = s.push("a", () => void ran.push("async-a"), () => ran.push("sync-a"));
+    const un = s.push(
+      "a",
+      () => void ran.push("async-a"),
+      () => ran.push("sync-a"),
+    );
     un();
     un();
-    s.push("b", () => void ran.push("async-b"), () => {
-      throw new Error("sync boom");
-    });
+    s.push(
+      "b",
+      () => void ran.push("async-b"),
+      () => {
+        throw new Error("sync boom");
+      },
+    );
     s.push("c", () => void ran.push("async-c"));
-    s.push("d", () => void ran.push("async-d"), () => ran.push("sync-d"));
+    s.push(
+      "d",
+      () => void ran.push("async-d"),
+      () => ran.push("sync-d"),
+    );
     expect(s.names()).toEqual(["b", "c", "d"]);
     expect(() => s.runAllSync()).not.toThrow();
     expect(ran).toEqual(["sync-d"]);
@@ -158,7 +170,11 @@ describe("ledger", () => {
     const old = new Date(Date.now() - 60_000);
     utimesSync(lock, old, old);
     ledgerAdd(entry("b", []), ledger);
-    expect(readLedger(ledger).map((e) => e.id).sort()).toEqual(["a", "b"]);
+    expect(
+      readLedger(ledger)
+        .map((e) => e.id)
+        .sort(),
+    ).toEqual(["a", "b"]);
     expect(existsSync(lock)).toBe(false);
   });
 });
@@ -168,7 +184,9 @@ describe("revert actions", () => {
     await runRevertAction({ kind: "http", method: "POST", url: `${base}/toxics`, body: { enabled: false } });
     expect(bodies[0]).toBe('POST /toxics application/json {"enabled":false}');
     await runRevertAction({ kind: "http", method: "DELETE", url: `${base}/gone` });
-    await expect(runRevertAction({ kind: "http", method: "DELETE", url: `${base}/fail` })).rejects.toThrow(/DELETE .*\/fail → HTTP 500/);
+    await expect(runRevertAction({ kind: "http", method: "DELETE", url: `${base}/fail` })).rejects.toThrow(
+      /DELETE .*\/fail → HTTP 500/,
+    );
   });
 
   it("http: unreachable endpoint and timeout reject", async () => {
@@ -176,7 +194,9 @@ describe("revert actions", () => {
     await new Promise<void>((r) => hang.listen(0, "127.0.0.1", r));
     const port = (hang.address() as AddressInfo).port;
     try {
-      await expect(runRevertAction({ kind: "http", method: "DELETE", url: `http://127.0.0.1:${port}/x` }, 100)).rejects.toThrow();
+      await expect(
+        runRevertAction({ kind: "http", method: "DELETE", url: `http://127.0.0.1:${port}/x` }, 100),
+      ).rejects.toThrow();
     } finally {
       hang.closeAllConnections();
       await new Promise<void>((r) => hang.close(() => r()));
@@ -185,12 +205,23 @@ describe("revert actions", () => {
 
   it("exec: failure without alreadyDone match throws; sync variant ignores http and runs exec", async () => {
     await expect(
-      runRevertAction({ kind: "exec", file: process.execPath, args: ["-e", "process.stderr.write('other'); process.exit(2)"], alreadyDone: "is not paused" }),
+      runRevertAction({
+        kind: "exec",
+        file: process.execPath,
+        args: ["-e", "process.stderr.write('other'); process.exit(2)"],
+        alreadyDone: "is not paused",
+      }),
     ).rejects.toThrow();
-    await expect(runRevertAction({ kind: "exec", file: process.execPath, args: ["-e", "process.exit(2)"] })).rejects.toThrow();
+    await expect(
+      runRevertAction({ kind: "exec", file: process.execPath, args: ["-e", "process.exit(2)"] }),
+    ).rejects.toThrow();
     const marker = join(dir, "sync-ran");
     runRevertActionSync({ kind: "http", method: "DELETE", url: `${base}/never` });
-    runRevertActionSync({ kind: "exec", file: process.execPath, args: ["-e", `require('fs').writeFileSync(${JSON.stringify(marker)}, '1')`] });
+    runRevertActionSync({
+      kind: "exec",
+      file: process.execPath,
+      args: ["-e", `require('fs').writeFileSync(${JSON.stringify(marker)}, '1')`],
+    });
     expect(existsSync(marker)).toBe(true);
     expect(bodies).toEqual([]);
   });

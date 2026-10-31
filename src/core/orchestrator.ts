@@ -45,9 +45,13 @@ export function planWorkflow(steps: Record<string, WorkflowStep>): string[] {
   for (const [id, s] of Object.entries(steps)) {
     for (const dep of s.after ?? []) {
       if (!(dep in steps)) {
-        throw new ConfigError("SW_CONFIG_WORKFLOW", `Workflow step "${id}" depends on unknown step "${dep}"`, {
-          hint: `Known steps: ${Object.keys(steps).join(", ")}`,
-        });
+        throw new ConfigError(
+          "SW_CONFIG_WORKFLOW",
+          `Workflow step "${id}" depends on unknown step "${dep}"`,
+          {
+            hint: `Known steps: ${Object.keys(steps).join(", ")}`,
+          },
+        );
       }
       g.addEdge(dep, id);
     }
@@ -56,9 +60,13 @@ export function planWorkflow(steps: Record<string, WorkflowStep>): string[] {
     return topoSort(g);
   } catch (e) {
     if (e instanceof CycleError) {
-      throw new ConfigError("SW_CONFIG_WORKFLOW", `Workflow has a dependency cycle: ${[...e.cycle, e.cycle[0]].join(" -> ")}`, {
-        hint: "Remove one of the `after` edges in the cycle",
-      });
+      throw new ConfigError(
+        "SW_CONFIG_WORKFLOW",
+        `Workflow has a dependency cycle: ${[...e.cycle, e.cycle[0]].join(" -> ")}`,
+        {
+          hint: "Remove one of the `after` edges in the cycle",
+        },
+      );
     }
     throw e;
   }
@@ -127,7 +135,12 @@ export async function runWorkflow(
           .then(() => run(id, step, upstream, signal))
           .then(
             (result) =>
-              complete(id, FAILED_STATUS.has(result.status) ? { status: "failed", error: new Error(`status ${result.status}`), result } : { status: "ok", result }),
+              complete(
+                id,
+                FAILED_STATUS.has(result.status)
+                  ? { status: "failed", error: new Error(`status ${result.status}`), result }
+                  : { status: "ok", result },
+              ),
             (error: unknown) => complete(id, { status: "failed", error }),
           )
           .finally(() => {

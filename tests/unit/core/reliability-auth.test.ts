@@ -21,7 +21,13 @@ async function cfg() {
         dependencies: { payments: { injector: "builtin", upstream: "http://127.0.0.1:4010", listen: 0 } },
         workload: {
           routes: [
-            { name: "orders", method: "POST", path: "/orders", auth: "user", headers: { "content-type": "application/json" } },
+            {
+              name: "orders",
+              method: "POST",
+              path: "/orders",
+              auth: "user",
+              headers: { "content-type": "application/json" },
+            },
             { name: "admin", path: "/admin", auth: "ops" },
             { name: "svc", path: "/svc", auth: "svc" },
             { name: "explicit", path: "/x", auth: "user", headers: { Authorization: "Bearer explicit" } },
@@ -40,7 +46,9 @@ describe("reliability route auth roles", () => {
   it("authHeadersFor: bearer ({env}), basic, header; unsupported/missing → undefined", async () => {
     const c = await cfg();
     expect(authHeadersFor(c, "user", { TOK: "alice" })).toEqual({ authorization: "Bearer alice" });
-    expect(authHeadersFor(c, "ops")).toEqual({ authorization: `Basic ${Buffer.from("ops:pw-123").toString("base64")}` });
+    expect(authHeadersFor(c, "ops")).toEqual({
+      authorization: `Basic ${Buffer.from("ops:pw-123").toString("base64")}`,
+    });
     expect(authHeadersFor(c, "svc")).toEqual({ "x-api-key": "key-9" });
     expect(authHeadersFor(c, "sso")).toBeUndefined();
     expect(authHeadersFor(c, "ghost")).toBeUndefined();
@@ -49,7 +57,11 @@ describe("reliability route auth roles", () => {
 
   it("buildReliabilityInput resolves roles into headers; explicit headers win; unresolved roles stay (engine adds a limitation)", async () => {
     const c = await cfg();
-    const input = buildReliabilityInput(c, { scenario: "dependency-latency", dependency: "payments" }, { env: { TOK: "alice" } });
+    const input = buildReliabilityInput(
+      c,
+      { scenario: "dependency-latency", dependency: "payments" },
+      { env: { TOK: "alice" } },
+    );
     const routes = (input.workload as { routes: Array<Record<string, unknown>> }).routes;
     const by = (n: string) => routes.find((r) => r.name === n) as Record<string, unknown>;
     expect(by("orders")).toEqual({

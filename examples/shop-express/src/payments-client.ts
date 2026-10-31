@@ -11,7 +11,12 @@ export interface Charge {
  * Charge an order. `stop` only exists so tests can shut the app down cleanly;
  * it does not bound the retries during normal operation.
  */
-export async function charge(baseUrl: string, orderId: string, amount: number, stop?: AbortSignal): Promise<Charge> {
+export async function charge(
+  baseUrl: string,
+  orderId: string,
+  amount: number,
+  stop?: AbortSignal,
+): Promise<Charge> {
   let attempts = 0;
   // SEEDED-DEFECT:unbounded-retry — retries forever, immediately, with no backoff/jitter and no attempt cap. SEEDED-DEFECT:no-circuit-breaker — DISCOVERED (not planted) by sw reliability: no breaker either.
   while (true) {

@@ -6,8 +6,8 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createSafetyGuard } from "../../../src/core/safety/guard.js";
 import { createUndiciExecutor, MAX_REDIRECTS } from "../../../src/adapters/http/undici-executor.js";
+import { createSafetyGuard } from "../../../src/core/safety/guard.js";
 
 interface Seen {
   method: string;
@@ -63,12 +63,23 @@ describe("redirects", () => {
       const r0 = await ex.execute({ origin: a.origin, method: "GET", path: `/r302/${enc("/done")}` });
       expect(r0.status).toBe(302);
       expect(r0.redirects).toBeUndefined();
-      const r1 = await ex.execute({ origin: a.origin, method: "GET", path: `/r301/${enc("/done?q=1")}`, followRedirects: true, readBody: true });
+      const r1 = await ex.execute({
+        origin: a.origin,
+        method: "GET",
+        path: `/r301/${enc("/done?q=1")}`,
+        followRedirects: true,
+        readBody: true,
+      });
       expect(r1.status).toBe(200);
       expect(r1.redirects).toBe(1);
       expect(r1.finalUrl).toBe(`${a.origin}/done?q=1`);
       expect(r1.body?.toString()).toBe("final GET /done?q=1");
-      const r2 = await ex.execute({ origin: a.origin, method: "GET", path: "/empty-location", followRedirects: true });
+      const r2 = await ex.execute({
+        origin: a.origin,
+        method: "GET",
+        path: "/empty-location",
+        followRedirects: true,
+      });
       expect(r2.status).toBe(302);
     } finally {
       await ex.close();
@@ -105,11 +116,29 @@ describe("redirects", () => {
       expect(hop.body).toBe("");
       expect(hop.headers["content-type"]).toBeUndefined();
       expect(hop.headers["x-keep"]).toBe("1");
-      await ex.execute({ origin: a.origin, method: "POST", path: `/r302/${enc("/p")}`, headers: { "Content-Type": "text/plain" }, body: "x", followRedirects: true });
+      await ex.execute({
+        origin: a.origin,
+        method: "POST",
+        path: `/r302/${enc("/p")}`,
+        headers: { "Content-Type": "text/plain" },
+        body: "x",
+        followRedirects: true,
+      });
       expect(a.seen.at(-1)?.method).toBe("GET");
-      await ex.execute({ origin: a.origin, method: "HEAD", path: `/r303/${enc("/h")}`, followRedirects: true });
+      await ex.execute({
+        origin: a.origin,
+        method: "HEAD",
+        path: `/r303/${enc("/h")}`,
+        followRedirects: true,
+      });
       expect(a.seen.at(-1)?.method).toBe("HEAD");
-      await ex.execute({ origin: a.origin, method: "POST", path: `/r307/${enc("/keep")}`, body: "payload", followRedirects: true });
+      await ex.execute({
+        origin: a.origin,
+        method: "POST",
+        path: `/r307/${enc("/keep")}`,
+        body: "payload",
+        followRedirects: true,
+      });
       expect(a.seen.at(-1)).toMatchObject({ method: "POST", url: "/keep", body: "payload" });
     } finally {
       await ex.close();
@@ -118,12 +147,30 @@ describe("redirects", () => {
 
   it("cross-origin hops strip Authorization, Cookie and Proxy-Authorization; same-origin hops keep them", async () => {
     const ex = createUndiciExecutor();
-    const creds = { authorization: "Bearer s3cret", cookie: "sid=1", "proxy-authorization": "Basic x", "x-trace": "t" };
+    const creds = {
+      authorization: "Bearer s3cret",
+      cookie: "sid=1",
+      "proxy-authorization": "Basic x",
+      "x-trace": "t",
+    };
     try {
-      await ex.execute({ origin: a.origin, method: "GET", path: `/r302/${enc("/same")}`, headers: creds, followRedirects: true });
+      await ex.execute({
+        origin: a.origin,
+        method: "GET",
+        path: `/r302/${enc("/same")}`,
+        headers: creds,
+        followRedirects: true,
+      });
       expect(a.seen.at(-1)?.headers.authorization).toBe("Bearer s3cret");
       b.seen.length = 0;
-      const r = await ex.execute({ origin: a.origin, method: "GET", path: `/r302/${enc(`${b.origin}/x`)}`, headers: creds, followRedirects: true, readBody: true });
+      const r = await ex.execute({
+        origin: a.origin,
+        method: "GET",
+        path: `/r302/${enc(`${b.origin}/x`)}`,
+        headers: creds,
+        followRedirects: true,
+        readBody: true,
+      });
       expect(r.body?.toString()).toBe("other GET /x");
       const h = b.seen[0]?.headers ?? {};
       expect(h.authorization).toBeUndefined();
@@ -137,12 +184,26 @@ describe("redirects", () => {
 
   it("cross-origin hops also strip custom credential headers (x-api-key, x-auth-token, x-session-id, …)", async () => {
     const ex = createUndiciExecutor();
-    const creds = { "x-api-key": "k", "x-auth-token": "t", "x-session-id": "s", "x-signature": "g", "x-trace": "keep", accept: "application/json" };
+    const creds = {
+      "x-api-key": "k",
+      "x-auth-token": "t",
+      "x-session-id": "s",
+      "x-signature": "g",
+      "x-trace": "keep",
+      accept: "application/json",
+    };
     try {
       b.seen.length = 0;
-      await ex.execute({ origin: a.origin, method: "GET", path: `/r302/${enc(`${b.origin}/x`)}`, headers: creds, followRedirects: true });
+      await ex.execute({
+        origin: a.origin,
+        method: "GET",
+        path: `/r302/${enc(`${b.origin}/x`)}`,
+        headers: creds,
+        followRedirects: true,
+      });
       const h = b.seen[0]?.headers ?? {};
-      for (const k of ["x-api-key", "x-auth-token", "x-session-id", "x-signature"]) expect(h[k], k).toBeUndefined();
+      for (const k of ["x-api-key", "x-auth-token", "x-session-id", "x-signature"])
+        expect(h[k], k).toBeUndefined();
       expect(h["x-trace"]).toBe("keep");
       expect(h.accept).toBe("application/json");
     } finally {
@@ -154,16 +215,32 @@ describe("redirects", () => {
     const guard = createSafetyGuard({}, { interactive: false });
     const ex = createUndiciExecutor({ safety: guard });
     try {
-      for (const loc of ["http://169.254.169.254/latest/meta-data/", "https://evil.example.com/", "http://db.internal/"]) {
-        const r = await ex.execute({ origin: a.origin, method: "GET", path: `/r302/${enc(loc)}`, followRedirects: true });
+      for (const loc of [
+        "http://169.254.169.254/latest/meta-data/",
+        "https://evil.example.com/",
+        "http://db.internal/",
+      ]) {
+        const r = await ex.execute({
+          origin: a.origin,
+          method: "GET",
+          path: `/r302/${enc(loc)}`,
+          followRedirects: true,
+        });
         expect(r.error?.kind, loc).toBe("safety");
         expect(r.status).toBe(302);
         expect(r.redirects).toBe(0);
       }
       expect(guard.auditEntries().filter((e) => e.action === "safety.redirect-blocked")).toHaveLength(3);
       // async checkRedirect (worker shard bridge) is awaited
-      const ex2 = createUndiciExecutor({ safety: { checkRedirect: async () => ({ allowed: false, code: "SW_SAFETY_X", reason: "nope" }) } });
-      const r2 = await ex2.execute({ origin: a.origin, method: "GET", path: `/r307/${enc("/x")}`, followRedirects: true });
+      const ex2 = createUndiciExecutor({
+        safety: { checkRedirect: async () => ({ allowed: false, code: "SW_SAFETY_X", reason: "nope" }) },
+      });
+      const r2 = await ex2.execute({
+        origin: a.origin,
+        method: "GET",
+        path: `/r307/${enc("/x")}`,
+        followRedirects: true,
+      });
       expect(r2.error).toEqual({ kind: "safety", message: "SW_SAFETY_X: nope" });
       await ex2.close();
     } finally {
@@ -174,9 +251,19 @@ describe("redirects", () => {
   it("non-http(s) and malformed redirect targets are refused even without a guard", async () => {
     const ex = createUndiciExecutor();
     try {
-      const r = await ex.execute({ origin: a.origin, method: "GET", path: `/r302/${enc("file:///etc/passwd")}`, followRedirects: true });
+      const r = await ex.execute({
+        origin: a.origin,
+        method: "GET",
+        path: `/r302/${enc("file:///etc/passwd")}`,
+        followRedirects: true,
+      });
       expect(r.error).toMatchObject({ kind: "safety", message: expect.stringContaining("file:") });
-      const r2 = await ex.execute({ origin: a.origin, method: "GET", path: `/r302/${enc("http://[::1")}`, followRedirects: true });
+      const r2 = await ex.execute({
+        origin: a.origin,
+        method: "GET",
+        path: `/r302/${enc("http://[::1")}`,
+        followRedirects: true,
+      });
       expect(r2.error?.kind).toBe("other");
     } finally {
       await ex.close();
@@ -262,7 +349,12 @@ describe("cancellation, limits and DNS re-checks", () => {
     const conns: unknown[] = [];
     const ex = createUndiciExecutor({ timing: "detailed", onConnection: (c) => conns.push(c) });
     try {
-      const r = await ex.execute({ origin: a.origin, method: "GET", path: `/r302/${enc("/t")}`, followRedirects: true });
+      const r = await ex.execute({
+        origin: a.origin,
+        method: "GET",
+        path: `/r302/${enc("/t")}`,
+        followRedirects: true,
+      });
       expect(r.status).toBe(200);
       expect(conns.length).toBeGreaterThanOrEqual(1);
       expect(ex.openSockets).toBeGreaterThanOrEqual(0);

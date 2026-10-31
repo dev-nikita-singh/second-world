@@ -25,10 +25,25 @@ describe("sw analyze (subprocess)", () => {
     mkdirSync(join(dir, ".git"));
     writeFileSync(join(dir, "sw.config.json"), JSON.stringify({}));
     const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
-    const r = await runCli(["-f", "json", "perf", url, "--iterations", "20", "--vus", "2", "--threshold", "p95<0.001ms", "--no-history"], {
-      cwd: dir,
-      env: baseEnv,
-    });
+    const r = await runCli(
+      [
+        "-f",
+        "json",
+        "perf",
+        url,
+        "--iterations",
+        "20",
+        "--vus",
+        "2",
+        "--threshold",
+        "p95<0.001ms",
+        "--no-history",
+      ],
+      {
+        cwd: dir,
+        env: baseEnv,
+      },
+    );
     expect(r.exitCode, r.stderr).toBe(1); // impossible threshold → a finding to summarise
   }, 60_000);
 

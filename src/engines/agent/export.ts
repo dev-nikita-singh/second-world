@@ -238,7 +238,7 @@ export function suggestedTest(s: Scenario, meta: ExportMeta): SuggestedTest {
   const indent = (l: string): string => `    ${l}`;
   const lines = [
     `// Suggested by SECOND WORLD (sw agent). Rule ${J(meta.ruleId)} on ${J(meta.operation)}; fingerprint ${J(meta.fingerprint)}.`,
-    "// Run against a disposable test environment. Credentials: export SW_AUTH_<ROLE> (the full header value, e.g. \"Bearer <token>\") for each test account used below.",
+    '// Run against a disposable test environment. Credentials: export SW_AUTH_<ROLE> (the full header value, e.g. "Bearer <token>") for each test account used below.',
     'import { randomUUID } from "node:crypto";',
     'import { describe, expect, it } from "vitest";',
     "",
@@ -265,7 +265,9 @@ export function suggestedTest(s: Scenario, meta: ExportMeta): SuggestedTest {
     assertions: s.assertions,
     expectedClassification: s.expectedClassification,
   };
-  const config = `// sw.config.ts → agent.regression (re-run on every \`sw agent\`)\nagent: {\n  regression: [\n${jsSafe(JSON.stringify(pinned, null, 2))
+  const config = `// sw.config.ts → agent.regression (re-run on every \`sw agent\`)\nagent: {\n  regression: [\n${jsSafe(
+    JSON.stringify(pinned, null, 2),
+  )
     .split("\n")
     .map((l) => `    ${l}`)
     .join("\n")},\n  ],\n},\n`;

@@ -26,11 +26,16 @@ describe("shannonEntropy", () => {
 describe("exact secrets", () => {
   it("any added secret (≥ 4 chars, regex metacharacters included) never survives in output", () => {
     fc.assert(
-      fc.property(fc.string({ minLength: 4, maxLength: 24 }), fc.string({ maxLength: 20 }), fc.string({ maxLength: 20 }), (secret, pre, post) => {
-        const r = createRedactor({ secrets: [secret], entropy: false });
-        const out = r.redactString(`${pre}${secret}${post}`);
-        expect(out).toContain(redactionMarker(secret));
-      }),
+      fc.property(
+        fc.string({ minLength: 4, maxLength: 24 }),
+        fc.string({ maxLength: 20 }),
+        fc.string({ maxLength: 20 }),
+        (secret, pre, post) => {
+          const r = createRedactor({ secrets: [secret], entropy: false });
+          const out = r.redactString(`${pre}${secret}${post}`);
+          expect(out).toContain(redactionMarker(secret));
+        },
+      ),
     );
   });
 
@@ -126,7 +131,9 @@ describe("headers", () => {
     expect((out["x-forward"] as unknown[])[1]).toBe(3);
     expect(out["x-null"]).toBeNull();
     expect(out["x-num"]).toBe(5);
-    expect(createRedactor().redactHeaders({ "Set-Cookie": undefined } as Record<string, unknown>)["Set-Cookie"]).toBeUndefined();
+    expect(
+      createRedactor().redactHeaders({ "Set-Cookie": undefined } as Record<string, unknown>)["Set-Cookie"],
+    ).toBeUndefined();
     expect(createRedactor().redactHeaders(undefined as unknown as Record<string, unknown>)).toEqual({});
   });
 });
@@ -182,7 +189,18 @@ describe("redactObject", () => {
   });
 
   it("snake/kebab/plain sensitive keys are always redacted, whatever the value", () => {
-    for (const k of ["password", "db_password", "api-key", "apikey", "client_secret", "refresh_token", "x-auth-token", "session_id", "credentials", "Authorization"]) {
+    for (const k of [
+      "password",
+      "db_password",
+      "api-key",
+      "apikey",
+      "client_secret",
+      "refresh_token",
+      "x-auth-token",
+      "session_id",
+      "credentials",
+      "Authorization",
+    ]) {
       const out = r.redactObject({ [k]: "v1" }) as Record<string, string>;
       expect(out[k], k).toMatch(MARK);
     }

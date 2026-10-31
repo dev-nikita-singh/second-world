@@ -54,20 +54,34 @@ export interface DetectorSummary {
   detail: string;
 }
 
-
 /** One summary per detector, across runs (first flagged run's detail wins). */
 export function detectorSummaries(d: ReliabilityData): DetectorSummary[] {
   const out: DetectorSummary[] = [];
-  const pick = <T>(get: (r: RunAnalysis) => T | null | undefined, flagged: (x: T) => boolean, detail: (x: T, r: RunAnalysis) => string, name: DetectorName) => {
-    const vals = d.runs.map((r) => ({ r, x: get(r) })).filter((v): v is { r: RunAnalysis; x: T } => v.x !== null && v.x !== undefined);
+  const pick = <T>(
+    get: (r: RunAnalysis) => T | null | undefined,
+    flagged: (x: T) => boolean,
+    detail: (x: T, r: RunAnalysis) => string,
+    name: DetectorName,
+  ) => {
+    const vals = d.runs
+      .map((r) => ({ r, x: get(r) }))
+      .filter((v): v is { r: RunAnalysis; x: T } => v.x !== null && v.x !== undefined);
     if (vals.length === 0) {
       out.push({ name, assessed: false, flagged: false, detail: "not assessed in this scenario" });
       return;
     }
     const bad = vals.find((v) => flagged(v.x));
     const shown = bad ?? vals[0]!;
-    const runs = d.runs.length > 1 ? ` [run ${shown.r.index + 1}; flagged in ${vals.filter((v) => flagged(v.x)).length}/${vals.length}]` : "";
-    out.push({ name, assessed: true, flagged: bad !== undefined, detail: `${detail(shown.x, shown.r)}${runs}` });
+    const runs =
+      d.runs.length > 1
+        ? ` [run ${shown.r.index + 1}; flagged in ${vals.filter((v) => flagged(v.x)).length}/${vals.length}]`
+        : "";
+    out.push({
+      name,
+      assessed: true,
+      flagged: bad !== undefined,
+      detail: `${detail(shown.x, shown.r)}${runs}`,
+    });
   };
   pick(
     (r) => r.amplification,
@@ -79,7 +93,8 @@ export function detectorSummaries(d: ReliabilityData): DetectorSummary[] {
   pick(
     (r) => r.jitter,
     (j) => j.detected,
-    (j) => `${j.detected ? "synchronised retries detected" : "no synchronised retries"}${j.lagMs !== null ? ` (lag ${fmtMs(j.lagMs)}, z ${fmtVal(j.z)})` : ""}: ${j.reason}`,
+    (j) =>
+      `${j.detected ? "synchronised retries detected" : "no synchronised retries"}${j.lagMs !== null ? ` (lag ${fmtMs(j.lagMs)}, z ${fmtVal(j.z)})` : ""}: ${j.reason}`,
     "synchronised retries",
   );
   pick(
@@ -101,7 +116,10 @@ export function detectorSummaries(d: ReliabilityData): DetectorSummary[] {
     (iso) => iso.some((i) => i.isolationFailure),
     (iso) =>
       iso
-        .map((i) => `${i.route}: ${i.isolationFailure ? "ISOLATION FAILURE" : i.degraded ? "degraded (expected, depends on it)" : "ok"}${i.related === null ? " (relation unknown)" : ""}`)
+        .map(
+          (i) =>
+            `${i.route}: ${i.isolationFailure ? "ISOLATION FAILURE" : i.degraded ? "degraded (expected, depends on it)" : "ok"}${i.related === null ? " (relation unknown)" : ""}`,
+        )
         .join("; "),
     "isolation",
   );
@@ -163,7 +181,8 @@ export function checkSummaries(d: ReliabilityData): CheckSummary[] {
   return [...map.values()].sort((a, b) => (a.phase === b.phase ? 0 : a.phase === "steady" ? -1 : 1));
 }
 
-export const phaseLabel = (p: "steady" | "fault"): string => (p === "steady" ? "steady state" : "hypothesis (during fault)");
+export const phaseLabel = (p: "steady" | "fault"): string =>
+  p === "steady" ? "steady state" : "hypothesis (during fault)";
 
 function phaseRow(name: string, ms: number, s: PhaseStats): CellLike[] {
   return [
@@ -188,7 +207,10 @@ export function reliabilityBlocks(d: ReliabilityData, findings: readonly Finding
       ["dependency", d.dependency],
       ["injector", d.injector],
       ["environment", d.environment],
-      ["workload", `${fmtNum(d.workload.rate, 1)} req/s ${d.workload.arrival} over ${d.workload.routes.join(", ")}`],
+      [
+        "workload",
+        `${fmtNum(d.workload.rate, 1)} req/s ${d.workload.arrival} over ${d.workload.routes.join(", ")}`,
+      ],
       ["repetitions", String(d.repeat)],
       [
         "verdict",
@@ -218,19 +240,45 @@ export function reliabilityBlocks(d: ReliabilityData, findings: readonly Finding
     rows: timelineRows,
   });
   for (const r of d.runs) {
-    if (!r.fault.applied) b.push({ kind: "text", tone: "warn", text: `Run ${r.index + 1}: fault was not applied.` });
-    if (r.fault.abortedEarly) b.push({ kind: "text", tone: "warn", text: `Run ${r.index + 1}: fault aborted early (${r.fault.abortedEarly}).` });
-    if (!r.steadyOk) b.push({ kind: "text", tone: "warn", text: `Run ${r.index + 1}: steady state was not met before injection.` });
+    if (!r.fault.applied)
+      b.push({ kind: "text", tone: "warn", text: `Run ${r.index + 1}: fault was not applied.` });
+    if (r.fault.abortedEarly)
+      b.push({
+        kind: "text",
+        tone: "warn",
+        text: `Run ${r.index + 1}: fault aborted early (${r.fault.abortedEarly}).`,
+      });
+    if (!r.steadyOk)
+      b.push({
+        kind: "text",
+        tone: "warn",
+        text: `Run ${r.index + 1}: steady state was not met before injection.`,
+      });
   }
   if (first && first.windows.length >= 2) {
     const w = first.windows;
     const from = w.findIndex((x) => x.tMs >= 0);
     let to = w.findIndex((x) => x.tMs >= first.fault.durationMs);
     if (to < 0) to = w.length;
-    const mark = from >= 0 && to > from ? { from, to, label: `fault window (${fmtDuration(first.fault.durationMs)})` } : undefined;
+    const mark =
+      from >= 0 && to > from
+        ? { from, to, label: `fault window (${fmtDuration(first.fault.durationMs)})` }
+        : undefined;
     const runNote = d.runs.length > 1 ? ` (run 1 of ${d.runs.length})` : "";
-    b.push({ kind: "spark", title: `error rate per second${runNote}`, values: w.map((x) => x.errorRate * 100), unit: "%", ...(mark ? { mark } : {}) });
-    b.push({ kind: "spark", title: `p95 per second${runNote}`, values: w.map((x) => x.p95), unit: "ms", ...(mark ? { mark } : {}) });
+    b.push({
+      kind: "spark",
+      title: `error rate per second${runNote}`,
+      values: w.map((x) => x.errorRate * 100),
+      unit: "%",
+      ...(mark ? { mark } : {}),
+    });
+    b.push({
+      kind: "spark",
+      title: `p95 per second${runNote}`,
+      values: w.map((x) => x.p95),
+      unit: "ms",
+      ...(mark ? { mark } : {}),
+    });
   }
 
   // ---- verdicts
@@ -249,7 +297,11 @@ export function reliabilityBlocks(d: ReliabilityData, findings: readonly Finding
       ]),
     });
   } else {
-    b.push({ kind: "text", tone: "muted", text: "No steady-state or hypothesis thresholds were configured." });
+    b.push({
+      kind: "text",
+      tone: "muted",
+      text: "No steady-state or hypothesis thresholds were configured.",
+    });
   }
 
   // ---- recovery
@@ -275,7 +327,11 @@ export function reliabilityBlocks(d: ReliabilityData, findings: readonly Finding
     head: ["detector", "result", "details"],
     rows: detectorSummaries(d).map((s) => [
       s.name,
-      !s.assessed ? { text: "n/a", tone: "muted" } : s.flagged ? { text: "FLAGGED", tone: "bad" } : { text: "ok", tone: "good" },
+      !s.assessed
+        ? { text: "n/a", tone: "muted" }
+        : s.flagged
+          ? { text: "FLAGGED", tone: "bad" }
+          : { text: "ok", tone: "good" },
       s.detail,
     ]),
   });
@@ -319,14 +375,18 @@ export function reliabilityBlocks(d: ReliabilityData, findings: readonly Finding
       head: ["rule", "hits", "classification"],
       align: ["l", "r", "l"],
       rows: d.reproduced.map((x) => {
-        const c = cls.get(x.ruleId) ?? (x.runs >= 2 && x.hits === x.runs ? "reproduced-defect" : "observation");
+        const c =
+          cls.get(x.ruleId) ?? (x.runs >= 2 && x.hits === x.runs ? "reproduced-defect" : "observation");
         return [x.ruleId, `${x.hits}/${x.runs}`, c === "reproduced-defect" ? { text: c, tone: "bad" } : c];
       }),
     });
     if (d.repeat < 2) {
-      b.push({ kind: "text", tone: "muted", text: "Single repetition: detector hits are observations. Use repeat ≥ 2 to classify reproduced defects." });
+      b.push({
+        kind: "text",
+        tone: "muted",
+        text: "Single repetition: detector hits are observations. Use repeat ≥ 2 to classify reproduced defects.",
+      });
     }
   }
   return b;
 }
-

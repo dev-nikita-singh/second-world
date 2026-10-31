@@ -86,7 +86,9 @@ export interface World {
     diff(a: unknown, b: unknown, opts?: Record<string, unknown>): Promise<unknown>;
   };
   readonly evolution: EngineHandle;
-  readonly architecture: { inspect(input?: Record<string, unknown>, opts?: RunOptions): Promise<EngineResult> };
+  readonly architecture: {
+    inspect(input?: Record<string, unknown>, opts?: RunOptions): Promise<EngineResult>;
+  };
   /** Experiment history (lazy; JSONL store under config.history.dir). */
   readonly history: WorldHistory;
   /** Reports: combine / write / render (docs/09 §2). */
@@ -124,7 +126,11 @@ export interface WorldHistory {
    * name (e.g. "main"); objects: EngineResult(s) or a combined report not (yet) in history.
    * Returns the history engine's RunComparison.
    */
-  compare(args: { baseline: RunRef | readonly RunRef[]; current: RunRef | readonly RunRef[]; options?: Record<string, unknown> }): Promise<unknown>;
+  compare(args: {
+    baseline: RunRef | readonly RunRef[];
+    current: RunRef | readonly RunRef[];
+    options?: Record<string, unknown>;
+  }): Promise<unknown>;
 }
 
 export type ReportFormatName = "tty" | "json" | "md" | "junit" | "sarif" | "html";
@@ -141,7 +147,11 @@ export interface WorldReport {
   /** Renders one format to a string (pure). */
   render(report: unknown, format: ReportFormatName, opts?: { color?: boolean; ascii?: boolean }): string;
   /** Renders a `history.compare` result. */
-  renderComparison(cmp: unknown, format: "tty" | "json" | "md" | "html", opts?: { color?: boolean; ascii?: boolean }): string;
+  renderComparison(
+    cmp: unknown,
+    format: "tty" | "json" | "md" | "html",
+    opts?: { color?: boolean; ascii?: boolean },
+  ): string;
   /** Process exit code for results per docs (130 cancelled > 70 error > 1 failing > 0). */
   exitCode(results: readonly EngineResult[] | unknown, failOn?: string): number;
 }
@@ -170,7 +180,11 @@ function deepMerge(a: Obj, b: Obj): Obj {
  * resolves `target` names via config.targets, normalises unit strings for rate, resolves
  * `auth` names via config.auth with secret refs, and defaults seed / allowHosts.
  */
-export function buildPerformanceInput(cfg: ResolvedConfig, input: Obj = {}, opts: { seed?: number; env?: NodeJS.ProcessEnv } = {}): Obj {
+export function buildPerformanceInput(
+  cfg: ResolvedConfig,
+  input: Obj = {},
+  opts: { seed?: number; env?: NodeJS.ProcessEnv } = {},
+): Obj {
   const base = isObj(cfg.config.performance) ? (cfg.config.performance as Obj) : {};
   const merged = deepMerge(base, input);
   const targets = cfg.config.targets;
@@ -182,8 +196,10 @@ export function buildPerformanceInput(cfg: ResolvedConfig, input: Obj = {}, opts
   }
   if (typeof merged.rate === "string") merged.rate = parseRate(merged.rate, "performance.rate");
   for (const k of ["duration", "rampUp", "warmup", "timeout", "gracefulStop", "connectTimeout"]) {
-    if (typeof merged[k] === "string" && /^\d+(\.\d+)?$/.test(merged[k] as string)) merged[k] = Number(merged[k]);
-    else if (typeof merged[k] === "string") merged[k] = parseDuration(merged[k] as string, `performance.${k}`);
+    if (typeof merged[k] === "string" && /^\d+(\.\d+)?$/.test(merged[k] as string))
+      merged[k] = Number(merged[k]);
+    else if (typeof merged[k] === "string")
+      merged[k] = parseDuration(merged[k] as string, `performance.${k}`);
   }
   resolvePerfAuthRoles(cfg, merged, "performance", opts.env);
   if (merged.seed === undefined && opts.seed !== undefined) merged.seed = opts.seed;
@@ -195,10 +211,16 @@ export function buildPerformanceInput(cfg: ResolvedConfig, input: Obj = {}, opts
  * Resolves auth role names (section `auth: "<role>"` and scenario-level `scenarios[i].auth`,
  * docs/08-configuration.md §3) into credentials from config.auth, secrets resolved. In place.
  */
-function resolvePerfAuthRoles(cfg: ResolvedConfig, merged: Obj, section: string, env?: NodeJS.ProcessEnv): void {
+function resolvePerfAuthRoles(
+  cfg: ResolvedConfig,
+  merged: Obj,
+  section: string,
+  env?: NodeJS.ProcessEnv,
+): void {
   const resolveRole = (role: string, where: string): Obj => {
     const ref = cfg.config.auth?.[role];
-    if (!isObj(ref)) throw new ConfigError("SW_CONFIG_AUTH", `${where} "${role}" is not defined in config.auth`);
+    if (!isObj(ref))
+      throw new ConfigError("SW_CONFIG_AUTH", `${where} "${role}" is not defined in config.auth`);
     return resolveAuth(ref, { env, cwd: cfg.cwd });
   };
   if (typeof merged.auth === "string") merged.auth = resolveRole(merged.auth, `${section}.auth`);
@@ -230,14 +252,19 @@ const STRESS_FROM_PERF = [
  * Stress input = shared perf base keys from config.performance (target, thresholds, scenarios, …)
  * + config.stress + call input. Target names, auth refs and rate units are resolved like perf.
  */
-export function buildStressInput(cfg: ResolvedConfig, input: Obj = {}, opts: { seed?: number; env?: NodeJS.ProcessEnv } = {}): Obj {
+export function buildStressInput(
+  cfg: ResolvedConfig,
+  input: Obj = {},
+  opts: { seed?: number; env?: NodeJS.ProcessEnv } = {},
+): Obj {
   const perf = isObj(cfg.config.performance) ? (cfg.config.performance as Obj) : {};
   const base: Obj = {};
   for (const k of STRESS_FROM_PERF) if (perf[k] !== undefined) base[k] = perf[k];
   const stress = isObj(cfg.config.stress) ? (cfg.config.stress as Obj) : {};
   const merged = deepMerge(deepMerge(base, stress), input);
   const targets = cfg.config.targets;
-  if (typeof merged.target === "string" && targets[merged.target]) merged.target = targets[merged.target]?.url;
+  if (typeof merged.target === "string" && targets[merged.target])
+    merged.target = targets[merged.target]?.url;
   else if (merged.target === undefined) {
     const first = Object.values(targets).find((t) => t.role !== "dependency");
     if (first) merged.target = first.url;
@@ -255,16 +282,25 @@ const DEFAULT_ARCH_CACHE = ".second-world/cache/arch";
 export function buildArchitectureInput(cfg: ResolvedConfig, input: Obj = {}): Obj {
   const sec = isObj(cfg.config.architecture) ? (cfg.config.architecture as Obj) : {};
   const merged = deepMerge(sec, input);
-  const root = resolvePath(cfg.cwd, typeof merged.project === "string" ? merged.project : cfg.config.project.root);
+  const root = resolvePath(
+    cfg.cwd,
+    typeof merged.project === "string" ? merged.project : cfg.config.project.root,
+  );
   merged.project = root;
   // Default under the config dir, never inside the inspected project (it may be read-only or untrusted).
-  merged.cacheDir = resolvePath(cfg.cwd, typeof merged.cacheDir === "string" ? merged.cacheDir : DEFAULT_ARCH_CACHE);
+  merged.cacheDir = resolvePath(
+    cfg.cwd,
+    typeof merged.cacheDir === "string" ? merged.cacheDir : DEFAULT_ARCH_CACHE,
+  );
   if (typeof merged.tsconfig === "string") merged.tsconfig = resolvePath(root, merged.tsconfig);
   return merged;
 }
 
 /** Engines whose module exports a differently named input parser. */
-const PARSE_ALIASES: Record<string, string> = { whatif: "parseExperimentInput", evolution: "parseEvolutionInput" };
+const PARSE_ALIASES: Record<string, string> = {
+  whatif: "parseExperimentInput",
+  evolution: "parseEvolutionInput",
+};
 
 /** What-If input: the experiment definition as given; `cwd` defaults to the config dir. */
 export function buildWhatIfInput(cfg: ResolvedConfig, input: Obj = {}): Obj {
@@ -283,12 +319,16 @@ export function buildEvolutionInput(cfg: ResolvedConfig, input: Obj = {}): Obj {
   if (merged.repo === undefined) merged.repo = cfg.cwd;
   else if (typeof merged.repo === "string") merged.repo = resolvePath(cfg.cwd, merged.repo);
   // SECOND WORLD's own state is never a "working tree change" (the CLI adds the same; API callers too).
-  const own = [".second-world", cfg.config.report.outDir, cfg.config.history.dir].map((p) => resolvePath(cfg.cwd, p));
+  const own = [".second-world", cfg.config.report.outDir, cfg.config.history.dir].map((p) =>
+    resolvePath(cfg.cwd, p),
+  );
   for (const sec of ["architecture", "model"] as const) {
     const c = (cfg.config[sec] as Obj | undefined)?.cacheDir;
     if (typeof c === "string") own.push(resolvePath(cfg.cwd, c));
   }
-  const given = Array.isArray(merged.ignorePaths) ? (merged.ignorePaths as unknown[]).filter((x): x is string => typeof x === "string") : [];
+  const given = Array.isArray(merged.ignorePaths)
+    ? (merged.ignorePaths as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
   merged.ignorePaths = [...new Set([...own, ...given.map((p) => resolvePath(cfg.cwd, p))])];
   if (merged.workload === undefined && isObj(cfg.config.performance)) {
     const { target: _t, ...rest } = cfg.config.performance as Obj;
@@ -305,14 +345,21 @@ export function buildEvolutionInput(cfg: ResolvedConfig, input: Obj = {}): Obj {
 export function buildModelInput(cfg: ResolvedConfig, input: Obj = {}): Obj {
   const sec = isObj(cfg.config.model) ? (cfg.config.model as Obj) : {};
   const merged = deepMerge(sec, input);
-  merged.project = resolvePath(cfg.cwd, typeof merged.project === "string" ? merged.project : cfg.config.project.root);
-  merged.cacheDir = resolvePath(cfg.cwd, typeof merged.cacheDir === "string" ? merged.cacheDir : DEFAULT_ARCH_CACHE);
+  merged.project = resolvePath(
+    cfg.cwd,
+    typeof merged.project === "string" ? merged.project : cfg.config.project.root,
+  );
+  merged.cacheDir = resolvePath(
+    cfg.cwd,
+    typeof merged.cacheDir === "string" ? merged.cacheDir : DEFAULT_ARCH_CACHE,
+  );
   if (merged.openapi === undefined) {
     const bugs = isObj(cfg.config.bugs) ? (cfg.config.bugs as Obj) : {};
     const spec = bugs.openapi ?? bugs.contract;
     if (typeof spec === "string") merged.openapi = resolvePath(cfg.cwd, spec);
   } else if (typeof merged.openapi === "string") merged.openapi = resolvePath(cfg.cwd, merged.openapi);
-  if (merged.serviceName === undefined && cfg.config.project.name) merged.serviceName = cfg.config.project.name;
+  if (merged.serviceName === undefined && cfg.config.project.name)
+    merged.serviceName = cfg.config.project.name;
   return merged;
 }
 
@@ -346,13 +393,18 @@ const RELIABILITY_KEYS = [
  * shorthand: `proxyListen` → `listen`, `upstream: "<target name>"` → that target's URL, section-level
  * `injector: "auto"` → per-dependency "builtin". `environment` defaults to config.environment.
  */
-export function buildReliabilityInput(cfg: ResolvedConfig, input: Obj = {}, opts: { seed?: number; env?: NodeJS.ProcessEnv } = {}): Obj {
+export function buildReliabilityInput(
+  cfg: ResolvedConfig,
+  input: Obj = {},
+  opts: { seed?: number; env?: NodeJS.ProcessEnv } = {},
+): Obj {
   const sec = isObj(cfg.config.reliability) ? (cfg.config.reliability as Obj) : {};
   const base: Obj = {};
   for (const k of RELIABILITY_KEYS) if (sec[k] !== undefined) base[k] = sec[k];
   const merged = deepMerge(base, input);
   const targets = cfg.config.targets;
-  if (typeof merged.target === "string" && targets[merged.target]) merged.target = targets[merged.target]?.url;
+  if (typeof merged.target === "string" && targets[merged.target])
+    merged.target = targets[merged.target]?.url;
   else if (merged.target === undefined) {
     const first = Object.values(targets).find((t) => t.role !== "dependency");
     if (first) merged.target = first.url;
@@ -366,7 +418,8 @@ export function buildReliabilityInput(cfg: ResolvedConfig, input: Obj = {}, opts
       if (dep.proxyListen !== undefined && dep.listen === undefined) dep.listen = dep.proxyListen;
       delete dep.proxyListen;
       if (dep.injector === undefined || dep.injector === "auto") dep.injector = defInjector;
-      if (typeof dep.upstream === "string" && targets[dep.upstream]) dep.upstream = targets[dep.upstream]?.url;
+      if (typeof dep.upstream === "string" && targets[dep.upstream])
+        dep.upstream = targets[dep.upstream]?.url;
       deps[name] = dep;
     }
     merged.dependencies = deps;
@@ -386,7 +439,11 @@ export function buildReliabilityInput(cfg: ResolvedConfig, input: Obj = {}, opts
  * secrets resolved like the Bug Hunter's roles). Explicit route headers win. Unresolvable roles are
  * left on the route; the engine sends without credentials and records RELIABILITY_AUTH_UNRESOLVED.
  */
-export function authHeadersFor(cfg: ResolvedConfig, role: string, env?: NodeJS.ProcessEnv): Record<string, string> | undefined {
+export function authHeadersFor(
+  cfg: ResolvedConfig,
+  role: string,
+  env?: NodeJS.ProcessEnv,
+): Record<string, string> | undefined {
   const ref = (cfg.config.auth ?? {})[role];
   if (!isObj(ref) || typeof ref.type !== "string" || !BUGS_AUTH_TYPES.has(ref.type)) return undefined;
   let c: Obj;
@@ -399,7 +456,8 @@ export function authHeadersFor(cfg: ResolvedConfig, role: string, env?: NodeJS.P
   if (c.type === "basic" && typeof c.username === "string" && typeof c.password === "string") {
     return { authorization: `Basic ${Buffer.from(`${c.username}:${c.password}`).toString("base64")}` };
   }
-  if (c.type === "header" && typeof c.name === "string" && typeof c.value === "string") return { [c.name.toLowerCase()]: c.value };
+  if (c.type === "header" && typeof c.name === "string" && typeof c.value === "string")
+    return { [c.name.toLowerCase()]: c.value };
   return undefined;
 }
 
@@ -422,7 +480,11 @@ const AGENT_FROM_BUGS = ["target", "openapi", "auth", "hooks", "values", "header
  * config.auth with secrets resolved, hooks.setup/reset, values, headers; cwd = config dir) overlaid
  * with the `agent` config section and the call input. Roles given in agent.auth.roles are resolved too.
  */
-export function buildAgentInput(cfg: ResolvedConfig, input: Obj = {}, opts: { seed?: number; env?: NodeJS.ProcessEnv } = {}): Obj {
+export function buildAgentInput(
+  cfg: ResolvedConfig,
+  input: Obj = {},
+  opts: { seed?: number; env?: NodeJS.ProcessEnv } = {},
+): Obj {
   const bugsBase = buildBugsInput(cfg, {}, opts);
   const base: Obj = { cwd: bugsBase.cwd };
   for (const k of AGENT_FROM_BUGS) if (bugsBase[k] !== undefined) base[k] = bugsBase[k];
@@ -431,7 +493,8 @@ export function buildAgentInput(cfg: ResolvedConfig, input: Obj = {}, opts: { se
   delete sec.contract;
   const merged = deepMerge(deepMerge(base, sec), input);
   const targets = cfg.config.targets;
-  if (typeof merged.target === "string" && targets[merged.target]) merged.target = targets[merged.target]?.url;
+  if (typeof merged.target === "string" && targets[merged.target])
+    merged.target = targets[merged.target]?.url;
   if (isObj(merged.auth) && isObj((merged.auth as Obj).roles)) {
     const roles: Obj = {};
     for (const [name, ref] of Object.entries((merged.auth as Obj).roles as Obj)) {
@@ -451,7 +514,11 @@ const BUGS_AUTH_TYPES = new Set(["bearer", "basic", "header"]);
  * roles from config.auth (secrets resolved) unless `auth.roles` is given; `hooks.reset|setup` from
  * config.hooks; target names resolved like perf.
  */
-export function buildBugsInput(cfg: ResolvedConfig, input: Obj = {}, opts: { seed?: number; env?: NodeJS.ProcessEnv } = {}): Obj {
+export function buildBugsInput(
+  cfg: ResolvedConfig,
+  input: Obj = {},
+  opts: { seed?: number; env?: NodeJS.ProcessEnv } = {},
+): Obj {
   const sec = isObj(cfg.config.bugs) ? { ...(cfg.config.bugs as Obj) } : {};
   if (sec.contract !== undefined && sec.openapi === undefined) sec.openapi = sec.contract;
   delete sec.contract;
@@ -461,7 +528,8 @@ export function buildBugsInput(cfg: ResolvedConfig, input: Obj = {}, opts: { see
     delete merged.contract;
   }
   const targets = cfg.config.targets;
-  if (typeof merged.target === "string" && targets[merged.target]) merged.target = targets[merged.target]?.url;
+  if (typeof merged.target === "string" && targets[merged.target])
+    merged.target = targets[merged.target]?.url;
   else if (merged.target === undefined) {
     const first = Object.values(targets).find((t) => t.role !== "dependency");
     if (first) merged.target = first.url;
@@ -479,7 +547,8 @@ export function buildBugsInput(cfg: ResolvedConfig, input: Obj = {}, opts: { see
     if (Object.keys(roles).length > 0) auth.roles = roles;
   } else {
     const roles: Obj = {};
-    for (const [name, ref] of Object.entries(auth.roles as Obj)) roles[name] = isObj(ref) ? resolveAuth(ref, { env: opts.env, cwd: cfg.cwd }) : ref;
+    for (const [name, ref] of Object.entries(auth.roles as Obj))
+      roles[name] = isObj(ref) ? resolveAuth(ref, { env: opts.env, cwd: cfg.cwd }) : ref;
     auth.roles = roles;
   }
   if (Object.keys(auth).length > 0) merged.auth = auth;
@@ -488,7 +557,13 @@ export function buildBugsInput(cfg: ResolvedConfig, input: Obj = {}, opts: { see
   for (const k of ["setup", "reset"]) {
     const h = cfgHooks[k];
     if (hooks[k] === undefined && isObj(h) && (isObj(h.http) || h.command !== undefined)) {
-      hooks[k] = isObj(h.http) ? { http: h.http } : { command: h.command, ...(h.cwd ? { cwd: h.cwd } : {}), ...(h.timeout ? { timeout: h.timeout } : {}) };
+      hooks[k] = isObj(h.http)
+        ? { http: h.http }
+        : {
+            command: h.command,
+            ...(h.cwd ? { cwd: h.cwd } : {}),
+            ...(h.timeout ? { timeout: h.timeout } : {}),
+          };
     }
   }
   if (Object.keys(hooks).length > 0) merged.hooks = hooks;
@@ -496,12 +571,16 @@ export function buildBugsInput(cfg: ResolvedConfig, input: Obj = {}, opts: { see
 }
 
 function isEngineResult(v: unknown): v is EngineResult {
-  return isObj(v) && typeof v.engine === "string" && typeof v.runId === "string" && typeof v.status === "string";
+  return (
+    isObj(v) && typeof v.engine === "string" && typeof v.runId === "string" && typeof v.status === "string"
+  );
 }
 
 function resolveAuth(ref: Obj, o: { env?: NodeJS.ProcessEnv; cwd?: string }): Obj {
   const val = (v: unknown): unknown =>
-    isObj(v) && (typeof v.env === "string" || typeof v.file === "string") ? resolveSecret(v as SecretRef, o) : v;
+    isObj(v) && (typeof v.env === "string" || typeof v.file === "string")
+      ? resolveSecret(v as SecretRef, o)
+      : v;
   const out: Obj = {};
   for (const [k, v] of Object.entries(ref)) out[k] = val(v);
   return out;
@@ -527,7 +606,8 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
     headers: cfg.config.safety.redact.headers,
     secrets: collectSecretValues(cfg.config, { env, cwd: cfg.cwd }),
   });
-  const log = opts.logger ?? (opts.logLevel ? createLogger({ level: opts.logLevel, redact: redactor }) : silentLogger);
+  const log =
+    opts.logger ?? (opts.logLevel ? createLogger({ level: opts.logLevel, redact: redactor }) : silentLogger);
   for (const w of cfg.warnings) log.warn(w);
 
   const root = new AbortController();
@@ -564,7 +644,11 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
   const envReport = opts.probe === false ? stubEnvironmentReport() : await probeEnvironment({ env });
   const registry = createRegistry();
   for (const [k, v] of Object.entries(opts.engines ?? {})) registry.register(k, v);
-  const seed = opts.seed ?? (typeof (cfg.config.performance as Obj | undefined)?.seed === "number" ? ((cfg.config.performance as Obj).seed as number) : undefined);
+  const seed =
+    opts.seed ??
+    (typeof (cfg.config.performance as Obj | undefined)?.seed === "number"
+      ? ((cfg.config.performance as Obj).seed as number)
+      : undefined);
   let closed = false;
 
   function makeCtx(signal: AbortSignal, engineId: string): EngineContext {
@@ -606,7 +690,10 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
                       ? buildModelInput(cfg, input)
                       : id === "agent"
                         ? buildAgentInput(cfg, input, bo)
-                        : deepMerge(isObj((cfg.config as Obj)[id]) ? ((cfg.config as Obj)[id] as Obj) : {}, input);
+                        : deepMerge(
+                            isObj((cfg.config as Obj)[id]) ? ((cfg.config as Obj)[id] as Obj) : {},
+                            input,
+                          );
     let parsed: unknown;
     // Engines export parse<Id>Input (ConfigError with readable paths); fall back to the Zod schema.
     const parseName = PARSE_ALIASES[id] ?? `parse${id.charAt(0).toUpperCase()}${id.slice(1)}Input`;
@@ -616,7 +703,9 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
       const r = engine.inputSchema.safeParse(raw);
       if (!r.success) {
         const issues = r.error.issues.map((i) => `${[id, ...i.path].join(".")}: ${i.message}`);
-        throw new ConfigError("SW_CONFIG_INVALID", `Invalid ${id} input: ${issues.join("; ")}`, { details: { issues } });
+        throw new ConfigError("SW_CONFIG_INVALID", `Invalid ${id} input: ${issues.join("; ")}`, {
+          details: { issues },
+        });
       }
       parsed = r.data;
     }
@@ -650,13 +739,17 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
       return storePromise;
     },
     async save(input, so = {}) {
-      const results = Array.isArray(input) ? input : [...(input as { results: readonly EngineResult[] }).results];
+      const results = Array.isArray(input)
+        ? input
+        : [...(input as { results: readonly EngineResult[] }).results];
       if (!cfg.config.history.enabled || results.length === 0) return null;
       const store = await history.store();
       // One id per run: a single result is stored under its own runId (the id printed in the header and
       // written to report.json), unless that id is already taken.
       const only = results.length === 1 ? (results[0] as EngineResult).runId : undefined;
-      const reuse = only !== undefined && !(await (store as unknown as { get(id: string): Promise<unknown> }).get(only).catch(() => null));
+      const reuse =
+        only !== undefined &&
+        !(await (store as unknown as { get(id: string): Promise<unknown> }).get(only).catch(() => null));
       const e = await store.append({
         results,
         ...(reuse ? { id: only } : {}),
@@ -673,7 +766,9 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
       };
       const toRuns = async (side: RunRef | readonly RunRef[]): Promise<unknown[]> => {
         const refs: RunRef[] =
-          Array.isArray(side) && !(side.length > 0 && isEngineResult(side[0])) ? [...(side as RunRef[])] : [side as RunRef];
+          Array.isArray(side) && !(side.length > 0 && isEngineResult(side[0]))
+            ? [...(side as RunRef[])]
+            : [side as RunRef];
         const runs: unknown[] = [];
         for (const ref of refs) {
           if (typeof ref === "string") {
@@ -687,7 +782,11 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
             }
             runs.push(run);
           } else {
-            const results = isEngineResult(ref) ? [ref] : Array.isArray(ref) ? [...ref] : [...(ref as { results: readonly EngineResult[] }).results];
+            const results = isEngineResult(ref)
+              ? [ref]
+              : Array.isArray(ref)
+                ? [...ref]
+                : [...(ref as { results: readonly EngineResult[] }).results];
             runs.push({
               schemaVersion: h.HISTORY_SCHEMA_VERSION,
               id: results[0]?.runId ?? "current",
@@ -714,10 +813,16 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
   const asFailOn = (f?: string) => (f ?? failOnDefault) as Parameters<Reporting["computeExitCode"]>[1];
   const report: WorldReport = {
     combine: (results, meta = {}) =>
-      reporting.combineResults(isEngineResult(results) ? [results] : [...(results as readonly EngineResult[])], meta as never, asFailOn()),
+      reporting.combineResults(
+        isEngineResult(results) ? [results] : [...(results as readonly EngineResult[])],
+        meta as never,
+        asFailOn(),
+      ),
     async write(rep, o = {}) {
       const outDir = resolvePath(cfg.cwd, o.outDir ?? cfg.config.report.outDir);
-      const formats = (o.formats ?? cfg.config.report.formats) as Parameters<Reporting["writeReports"]>[1]["formats"];
+      const formats = (o.formats ?? cfg.config.report.formats) as Parameters<
+        Reporting["writeReports"]
+      >[1]["formats"];
       const r = await reporting.writeReports(rep as never, {
         formats,
         outDir,
@@ -726,7 +831,8 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
       });
       return { report: r.report, files: r.files };
     },
-    render: (rep, format, o = {}) => reporting.renderReport(rep as never, format, { failOn: asFailOn(), ...o }),
+    render: (rep, format, o = {}) =>
+      reporting.renderReport(rep as never, format, { failOn: asFailOn(), ...o }),
     renderComparison: (cmp, format, o = {}) => reporting.renderComparison(cmp as never, format, o),
     exitCode(results, failOn) {
       const list = isEngineResult(results)
@@ -761,7 +867,8 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
       async diff(a, b, opts) {
         const { module } = await registry.load("model");
         const m = module as { diffModels?: (x: unknown, y: unknown, o?: unknown) => unknown };
-        if (typeof m.diffModels !== "function") throw new EngineError("SW_ENGINE_LOAD", "model engine does not export diffModels()");
+        if (typeof m.diffModels !== "function")
+          throw new EngineError("SW_ENGINE_LOAD", "model engine does not export diffModels()");
         return m.diffModels(a, b, opts);
       },
     },
@@ -794,10 +901,14 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
         });
       }
       const signal = ro.signal ? AbortSignal.any([rootSignal, ro.signal]) : rootSignal;
-      return runWorkflow(wf.steps, (_id, step, _up, sig) => runEngine(step.engine as EngineId, step.input ?? {}, { signal: sig }), {
-        signal,
-        ...(wf.concurrency ? { concurrency: wf.concurrency } : {}),
-      });
+      return runWorkflow(
+        wf.steps,
+        (_id, step, _up, sig) => runEngine(step.engine as EngineId, step.input ?? {}, { signal: sig }),
+        {
+          signal,
+          ...(wf.concurrency ? { concurrency: wf.concurrency } : {}),
+        },
+      );
     },
     on: (event, fn) => events.on(event, fn),
     cancel(reason) {

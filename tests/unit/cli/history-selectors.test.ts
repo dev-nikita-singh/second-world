@@ -49,8 +49,13 @@ describe("resolveRunSelector", () => {
     expect(await resolveRunSelector(store, { kind: "baseline", name: "main" })).toBe("baseline:main");
     expect(await resolveRunSelector(store, { kind: "last", n: 2 })).toEqual(["r6", "r5"]);
     expect(await resolveRunSelector(store, { kind: "label", label: "fast" })).toEqual(["r3", "r2", "r1"]);
-    expect(await resolveRunSelector(store, { kind: "label", label: "fast" }, { engine: "performance" })).toEqual(["r3", "r1"]);
+    expect(
+      await resolveRunSelector(store, { kind: "label", label: "fast" }, { engine: "performance" }),
+    ).toEqual(["r3", "r1"]);
     expect(await resolveRunSelector(store, { kind: "last", n: 3 }, { label: "fast" })).toEqual(["r3", "r2"]);
-    await expect(resolveRunSelector(store, { kind: "label", label: "nope" })).rejects.toMatchObject({ code: "SW_HISTORY_NOT_FOUND", exitCode: 2 });
+    await expect(resolveRunSelector(store, { kind: "label", label: "nope" })).rejects.toMatchObject({
+      code: "SW_HISTORY_NOT_FOUND",
+      exitCode: 2,
+    });
   });
 });

@@ -46,7 +46,9 @@ export function deterministicSummary(
   results: readonly EngineResult[],
   opts: { top?: number } = {},
 ): DeterministicSummary {
-  const all = results.flatMap((r) => r.findings).map((f) => ({ ...f, severity: sevOf(f), classification: classOf(f) }));
+  const all = results
+    .flatMap((r) => r.findings)
+    .map((f) => ({ ...f, severity: sevOf(f), classification: classOf(f) }));
   const bySeverity = { critical: 0, high: 0, medium: 0, low: 0, info: 0 } as Record<Severity, number>;
   const byClassification: Partial<Record<Classification, number>> = {};
   for (const f of all) {

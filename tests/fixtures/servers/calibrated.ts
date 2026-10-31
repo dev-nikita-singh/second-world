@@ -238,8 +238,7 @@ export async function startCalibratedServer(opts: CalibratedServerOptions = {}):
     const parts = url.pathname.split("/").filter(Boolean);
     const head = parts[0] ?? "";
     const q = url.searchParams;
-    const routeKey =
-      head === "dist" ? `/dist/${parts[1] ?? ""}` : head === "" ? "/" : `/${head}`;
+    const routeKey = head === "dist" ? `/dist/${parts[1] ?? ""}` : head === "" ? "/" : `/${head}`;
     stats.byRoute[routeKey] = (stats.byRoute[routeKey] ?? 0) + 1;
 
     if (behavior.stallAllRoutes && head !== "healthz") await waitStall();
@@ -291,7 +290,8 @@ export async function startCalibratedServer(opts: CalibratedServerOptions = {}):
         if (!pool) pools.set(n, (pool = { busy: 0, queue: [] }));
         const t0 = performance.now();
         if (pool.busy >= n) {
-          if (pool.queue.length >= maxQueue) return sendJson(res, 503, { error: "overloaded", queue: pool.queue.length });
+          if (pool.queue.length >= maxQueue)
+            return sendJson(res, 503, { error: "overloaded", queue: pool.queue.length });
           const p = pool;
           await new Promise<void>((resolve) => p.queue.push(resolve)); // slot handed over by the finisher
         } else pool.busy++;
@@ -394,7 +394,13 @@ export async function startCalibratedServer(opts: CalibratedServerOptions = {}):
       byStatus: { ...stats.byStatus },
     }),
     resetStats: () => {
-      stats = { requests: 0, inFlight: stats.inFlight, inFlightMax: stats.inFlight, byRoute: {}, byStatus: {} };
+      stats = {
+        requests: 0,
+        inFlight: stats.inFlight,
+        inFlightMax: stats.inFlight,
+        byRoute: {},
+        byStatus: {},
+      };
       errorCounters.clear();
     },
     setBehavior: (b) => {

@@ -1,5 +1,5 @@
-import http from "node:http";
 import { existsSync } from "node:fs";
+import http from "node:http";
 import { describe, expect, it } from "vitest";
 import { startPaymentsFake } from "../../../examples/payments-fake/src/server.js";
 import { api } from "../../helpers/http.js";
@@ -16,7 +16,8 @@ describe("payments-fake", () => {
 
       p.setBehavior({ failPct: 20 });
       let fails = 0;
-      for (let i = 0; i < 50; i++) if ((await api(p.url, "POST", "/charges", { body: { orderId: "x" } })).status === 503) fails++;
+      for (let i = 0; i < 50; i++)
+        if ((await api(p.url, "POST", "/charges", { body: { orderId: "x" } })).status === 503) fails++;
       expect(fails).toBe(10);
 
       p.reset();
@@ -51,7 +52,9 @@ describe("test helpers", () => {
     const l = await listenOnRandomPort(srv);
     await waitForReady(`${l.url}/`);
     const agent = new http.Agent({ keepAlive: true });
-    await new Promise<void>((res) => http.get(`${l.url}/`, { agent }, (r) => r.resume().on("end", () => res())));
+    await new Promise<void>((res) =>
+      http.get(`${l.url}/`, { agent }, (r) => r.resume().on("end", () => res())),
+    );
     const t0 = performance.now();
     await l.close();
     await l.close(); // idempotent

@@ -12,9 +12,28 @@ const perfOk = () => makeResult({ data: makePerfData() });
 const perfFail = () =>
   makeResult({
     status: "failed",
-    data: makePerfData({ thresholds: [makeThreshold({ passed: false, actual: 412.5, expression: "http.p95 < 300ms" }), makeThreshold({ expression: "http.error_rate < 5%", metric: "http.error_rate", unit: "ratio", threshold: 0.05, actual: 0.01 })] }),
-    findings: [makeFinding({ classification: "threshold-breach", severity: "high", title: 'Threshold "http.p95 < 300ms" breached' })],
-    limitations: [{ code: "generator-saturated", message: "Load generator saturated", impact: "reduces-confidence" }],
+    data: makePerfData({
+      thresholds: [
+        makeThreshold({ passed: false, actual: 412.5, expression: "http.p95 < 300ms" }),
+        makeThreshold({
+          expression: "http.error_rate < 5%",
+          metric: "http.error_rate",
+          unit: "ratio",
+          threshold: 0.05,
+          actual: 0.01,
+        }),
+      ],
+    }),
+    findings: [
+      makeFinding({
+        classification: "threshold-breach",
+        severity: "high",
+        title: 'Threshold "http.p95 < 300ms" breached',
+      }),
+    ],
+    limitations: [
+      { code: "generator-saturated", message: "Load generator saturated", impact: "reduces-confidence" },
+    ],
   });
 
 describe("tty renderer", () => {
@@ -53,10 +72,20 @@ describe("tty renderer", () => {
   });
 
   it("ASCII mode uses only ASCII characters", () => {
-    const s = renderReport([perfFail(), makeResult({ engine: "bugs", findings: [makeFinding({ title: "BOLA on orders", locations: [{ file: "src/a.ts", line: 3 }] })] })], "tty", {
-      color: false,
-      ascii: true,
-    });
+    const s = renderReport(
+      [
+        perfFail(),
+        makeResult({
+          engine: "bugs",
+          findings: [makeFinding({ title: "BOLA on orders", locations: [{ file: "src/a.ts", line: 3 }] })],
+        }),
+      ],
+      "tty",
+      {
+        color: false,
+        ascii: true,
+      },
+    );
     // biome-ignore lint/suspicious/noControlCharactersInRegex: ascii check
     expect(s).toMatch(/^[\u0000-\u007f]*$/);
     expect(s).toContain("FAIL");
@@ -64,7 +93,9 @@ describe("tty renderer", () => {
   });
 
   it("generic engine results render without data", () => {
-    const s = renderReport(makeResult({ engine: "architecture", data: { whatever: 1 } }), "tty", { color: false });
+    const s = renderReport(makeResult({ engine: "architecture", data: { whatever: 1 } }), "tty", {
+      color: false,
+    });
     expect(s).toContain("[architecture]");
     expect(s).toContain("passed");
   });
@@ -98,7 +129,15 @@ describe("markdown renderer", () => {
   });
 
   it("PASS header and escaping of table-breaking characters", () => {
-    const md = renderReport([makeResult({ engine: "bugs", findings: [makeFinding({ severity: "low", title: "a | b <script> *x*" })] })], "md");
+    const md = renderReport(
+      [
+        makeResult({
+          engine: "bugs",
+          findings: [makeFinding({ severity: "low", title: "a | b <script> *x*" })],
+        }),
+      ],
+      "md",
+    );
     expect(md.startsWith("## SECOND WORLD — ✅ PASS")).toBe(true);
     expect(md).toContain("a \\| b &lt;script&gt; \\*x\\*");
     expect(mdEscape("line1\nline2")).toBe("line1 line2");
@@ -123,7 +162,9 @@ describe("json renderer", () => {
   });
 
   it("re-rendering a CombinedReport with another failOn recomputes the verdict", () => {
-    const rep = combineResults([makeResult({ findings: [makeFinding({ severity: "medium", classification: "reproduced-defect" })] })]);
+    const rep = combineResults([
+      makeResult({ findings: [makeFinding({ severity: "medium", classification: "reproduced-defect" })] }),
+    ]);
     expect(rep.verdict.exitCode).toBe(0);
     expect(JSON.parse(renderReport(rep, "json", { failOn: "medium" })).verdict.exitCode).toBe(1);
     expect(JSON.parse(renderReport(rep, "json")).verdict.exitCode).toBe(0);

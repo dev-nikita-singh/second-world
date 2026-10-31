@@ -26,22 +26,33 @@ describe("sw whatif --aa (subprocess)", () => {
           env: { DELAY_MS: "20" },
           readyWhen: { path: "/healthz" },
         },
-        workload: { vus: 2, duration: "800ms", warmup: "200ms", scenarios: [{ name: "w", steps: [{ path: "/work" }] }] },
+        workload: {
+          vus: 2,
+          duration: "800ms",
+          warmup: "200ms",
+          scenarios: [{ name: "w", steps: [{ path: "/work" }] }],
+        },
         metrics: ["p50", "p95"],
       }),
     );
-    const r = await runCli(["--seed", "3", "-f", "json", "whatif", "aa.json", "--aa", "--repetitions", "5", "--json"], {
-      cwd: dir,
-      env,
-      timeoutMs: 120_000,
-    });
+    const r = await runCli(
+      ["--seed", "3", "-f", "json", "whatif", "aa.json", "--aa", "--repetitions", "5", "--json"],
+      {
+        cwd: dir,
+        env,
+        timeoutMs: 120_000,
+      },
+    );
     expect(r.exitCode, r.stderr.slice(-2000)).toBe(0);
     const res = JSON.parse(r.stdout).results[0];
     expect(res.engine).toBe("whatif");
     expect(res.data.mode).toBe("aa");
     const verdicts = (res.data.comparisons as Array<{ verdict: string }>).map((c) => c.verdict);
     expect(verdicts.length).toBeGreaterThan(0);
-    expect(verdicts.every((v) => v === "no-significant-change" || v === "inconclusive"), verdicts.join(",")).toBe(true);
+    expect(
+      verdicts.every((v) => v === "no-significant-change" || v === "inconclusive"),
+      verdicts.join(","),
+    ).toBe(true);
     expect(verdicts).toContain("no-significant-change");
     const list = await runCli(["history", "list", "--json"], { cwd: dir, env });
     expect(JSON.parse(list.stdout)[0]).toMatchObject({ label: "whatif" });
@@ -58,7 +69,12 @@ describe("sw evolve --sandbox process --yes (subprocess, temp git repo)", () => 
     writeFileSync(
       join(dir, "sw.config.json"),
       JSON.stringify({
-        performance: { vus: 2, duration: "800ms", warmup: "200ms", scenarios: [{ name: "w", steps: [{ path: "/work" }] }] },
+        performance: {
+          vus: 2,
+          duration: "800ms",
+          warmup: "200ms",
+          scenarios: [{ name: "w", steps: [{ path: "/work" }] }],
+        },
         evolution: { metrics: ["p50", "p95", "rps"], success: { p95: { improvement: ">= 15%" } } },
       }),
     );

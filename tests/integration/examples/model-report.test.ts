@@ -9,7 +9,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { EngineResult } from "../../../src/core/evidence/schemas.js";
 import { type ArchitectureData, inspectArchitecture } from "../../../src/engines/architecture/index.js";
 import { buildModel, diffModels, type ModelData } from "../../../src/engines/model/index.js";
-import { REPORT_FORMATS, renderModelDiff, renderReport, writeReports } from "../../../src/engines/reporting/index.js";
+import {
+  REPORT_FORMATS,
+  renderModelDiff,
+  renderReport,
+  writeReports,
+} from "../../../src/engines/reporting/index.js";
 import { isModelData } from "../../../src/engines/reporting/model-render.js";
 import { makeTmpDir, type TmpDir } from "../../helpers/tmp.js";
 

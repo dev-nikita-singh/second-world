@@ -6,8 +6,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import * as api from "../../../src/index.js";
 import { createWorld } from "../../../src/core/world.js";
+import * as api from "../../../src/index.js";
 import { lat, makePerfData, makeResult } from "../../fixtures/reports.js";
 
 function perf(p50: number, i: number) {
@@ -33,8 +33,16 @@ async function world() {
 
 describe("public reporting API from src/index.ts", () => {
   it("exports renderReport, writeReports, renderComparison, REPORT_FORMATS, computeExitCode, combineResults", () => {
-    expect(api.REPORT_FORMATS).toEqual(expect.arrayContaining(["tty", "json", "md", "junit", "sarif", "html"]));
-    for (const fn of [api.renderReport, api.writeReports, api.renderComparison, api.computeExitCode, api.combineResults]) {
+    expect(api.REPORT_FORMATS).toEqual(
+      expect.arrayContaining(["tty", "json", "md", "junit", "sarif", "html"]),
+    );
+    for (const fn of [
+      api.renderReport,
+      api.writeReports,
+      api.renderComparison,
+      api.computeExitCode,
+      api.combineResults,
+    ]) {
       expect(typeof fn).toBe("function");
     }
     expect(api.computeExitCode([makeResult({ status: "cancelled" })])).toBe(130);
@@ -44,7 +52,11 @@ describe("public reporting API from src/index.ts", () => {
 describe("world.report", () => {
   it("combine / render / exitCode use config.report.failOn", async () => {
     const { w } = await world();
-    const rep = w.report.combine([makeResult()]) as { kind: string; results: unknown[]; verdict: { exitCode: number } };
+    const rep = w.report.combine([makeResult()]) as {
+      kind: string;
+      results: unknown[];
+      verdict: { exitCode: number };
+    };
     expect(rep.kind).toBe("second-world-report");
     expect(rep.results).toHaveLength(1);
     expect(w.report.render(rep, "md")).toMatch(/#/);
@@ -59,7 +71,11 @@ describe("world.report", () => {
     const r = await w.report.write(w.report.combine(makeResult()));
     expect(r.files.map((f) => f.format).sort()).toEqual(["json", "md"]);
     expect(existsSync(join(dir, "out", "report.json"))).toBe(true);
-    const r2 = await w.report.write([makeResult()], { formats: ["junit", "tty"], outDir: "x", baseName: "ci" });
+    const r2 = await w.report.write([makeResult()], {
+      formats: ["junit", "tty"],
+      outDir: "x",
+      baseName: "ci",
+    });
     expect(r2.files).toEqual([{ format: "junit", path: join(dir, "x", "ci.junit.xml") }]);
     expect(readFileSync(join(dir, "x", "ci.junit.xml"), "utf8")).toMatch(/<testsuites/);
     await w.close();
@@ -70,12 +86,18 @@ describe("world.history.compare", () => {
   it("baseline name / ids / raw results on either side; ≥ 5 per side → statistical verdict", async () => {
     const { w } = await world();
     const fastIds: string[] = [];
-    for (let i = 0; i < 5; i++) fastIds.push(((await w.history.save([perf(50, i)], { label: "fast" })) as { id: string }).id);
-    const store = (await w.history.store()) as unknown as { setBaseline(n: string, id: string): Promise<unknown> };
+    for (let i = 0; i < 5; i++)
+      fastIds.push(((await w.history.save([perf(50, i)], { label: "fast" })) as { id: string }).id);
+    const store = (await w.history.store()) as unknown as {
+      setBaseline(n: string, id: string): Promise<unknown>;
+    };
     await store.setBaseline("main", fastIds[0] as string);
 
     // bare baseline name vs a report not in history (single-run)
-    const single = (await w.history.compare({ baseline: "main", current: w.report.combine(perf(150, 0)) as never })) as {
+    const single = (await w.history.compare({
+      baseline: "main",
+      current: w.report.combine(perf(150, 0)) as never,
+    })) as {
       method: string;
       metrics: Array<{ metric: string; movement?: string }>;
     };
@@ -94,7 +116,9 @@ describe("world.history.compare", () => {
     expect(stat.regressions).toContain("performance.http.p95");
     expect(w.report.renderComparison(stat, "md")).toMatch(/history comparison/i);
 
-    await expect(w.history.compare({ baseline: "nope", current: fastIds[0] as string })).rejects.toMatchObject({ exitCode: 2 });
+    await expect(
+      w.history.compare({ baseline: "nope", current: fastIds[0] as string }),
+    ).rejects.toMatchObject({ exitCode: 2 });
     await w.close();
   });
 

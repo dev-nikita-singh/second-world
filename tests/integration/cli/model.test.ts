@@ -60,11 +60,21 @@ describe("sw model (subprocess)", () => {
       cache,
     ];
 
-    const full = await runCli([...common, "--traces", join(FIX, "shop-traces.json"), "--traces", join(FIX, "payments-traces.jsonl"), "--json"], {
-      cwd: dir,
-      env,
-      timeoutMs: 120_000,
-    });
+    const full = await runCli(
+      [
+        ...common,
+        "--traces",
+        join(FIX, "shop-traces.json"),
+        "--traces",
+        join(FIX, "payments-traces.jsonl"),
+        "--json",
+      ],
+      {
+        cwd: dir,
+        env,
+        timeoutMs: 120_000,
+      },
+    );
     expect(full.exitCode, full.stderr.slice(-2000)).toBe(0);
     const model = JSON.parse(full.stdout);
     expect(model.schemaVersion).toBe(1);
@@ -84,7 +94,11 @@ describe("sw model (subprocess)", () => {
     expect(JSON.parse(node.stdout).node).toBe("service:payments-fake");
 
     // second build without runtime traces → observed metrics / trace evidence disappear
-    const staticOnly = await runCli([...common, "--no-history", "--graph", "json"], { cwd: dir, env, timeoutMs: 120_000 });
+    const staticOnly = await runCli([...common, "--no-history", "--graph", "json"], {
+      cwd: dir,
+      env,
+      timeoutMs: 120_000,
+    });
     expect(staticOnly.exitCode, staticOnly.stderr.slice(-2000)).toBe(0);
     const snapB = /snapshot: (.+)$/m.exec(staticOnly.stderr)?.[1]?.trim() as string;
     expect(snapB).not.toBe(snapA);

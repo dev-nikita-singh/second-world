@@ -29,7 +29,9 @@ export async function analyzeCommand(paths: string[], o: AnalyzeFlags, g: Global
       const latest = (await store.list({ limit: 1 }))[0];
       const run = latest ? await store.get(latest.id) : null;
       if (!run) {
-        throw new ConfigError("SW_CONFIG_REPORT", "--last: no run in history", { hint: "Run `sw perf`/`sw stress`/… first, or pass report.json paths" });
+        throw new ConfigError("SW_CONFIG_REPORT", "--last: no run in history", {
+          hint: "Run `sw perf`/`sw stress`/… first, or pass report.json paths",
+        });
       }
       // The latest run may also have been passed as a report file: count each result once.
       const seen = new Set(results.map((r) => `${r.engine}:${r.runId}`));
@@ -46,7 +48,11 @@ export async function analyzeCommand(paths: string[], o: AnalyzeFlags, g: Global
       throw new ConfigError("SW_CONFIG_FLAG", `--top must be a non-negative integer, got "${o.top}"`);
     }
     const summary = deterministicSummary(results, top !== undefined ? { top } : {});
-    out(o.json ? JSON.stringify(world.redactor.redactObject(summary), null, 2) : world.redactor.redactString(summary.text));
+    out(
+      o.json
+        ? JSON.stringify(world.redactor.redactObject(summary), null, 2)
+        : world.redactor.redactString(summary.text),
+    );
   } finally {
     await world.close();
   }

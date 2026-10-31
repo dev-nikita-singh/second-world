@@ -19,10 +19,23 @@ describe("hypothesis findings", () => {
     const r = makeResult({
       engine: "model",
       status: "passed",
-      findings: [makeFinding({ id: "m-1", engine: "model", ruleId: "model/hypothesis", severity: "critical", classification: "hypothesis", title: "possible hidden dependency" })],
+      findings: [
+        makeFinding({
+          id: "m-1",
+          engine: "model",
+          ruleId: "model/hypothesis",
+          severity: "critical",
+          classification: "hypothesis",
+          title: "possible hidden dependency",
+        }),
+      ],
     });
     const sarif = JSON.parse(renderReport([r], "sarif"));
-    const res = sarif.runs[0].results as Array<{ level: string; message: { text: string }; properties: Record<string, unknown> }>;
+    const res = sarif.runs[0].results as Array<{
+      level: string;
+      message: { text: string };
+      properties: Record<string, unknown>;
+    }>;
     expect(res).toHaveLength(1);
     expect(res[0]!.level).toBe("note");
     expect(res[0]!.message.text.startsWith("[hypothesis] ")).toBe(true);
@@ -44,7 +57,18 @@ describe("What-If rendering", () => {
 
   it("tty: verdict table per metric with medians, change, CI, Holm p, Cliff's δ, verdict, success, runs needed", () => {
     const s = renderReport([exp()], "tty", { color: false });
-    for (const h of ["variant", "metric", "baseline → variant (median)", "change", "CI", "p (Holm)", "Cliff's δ", "verdict", "success", "runs needed"]) {
+    for (const h of [
+      "variant",
+      "metric",
+      "baseline → variant (median)",
+      "change",
+      "CI",
+      "p (Holm)",
+      "Cliff's δ",
+      "verdict",
+      "success",
+      "runs needed",
+    ]) {
       expect(s).toContain(h);
     }
     expect(s).toContain("95.0ms → 55.1ms");
@@ -84,7 +108,9 @@ describe("What-If rendering", () => {
 
   it("md / html / json", () => {
     const md = renderReport([exp()], "md");
-    expect(md).toContain("| fixed | p95 | 95.0ms → 55.1ms | -42.0% | \\[-50.0%, -35.0%\\] | 0.0317 | -1.00 (large) | improved | met (p95 improvement &gt;= 15%) |  |");
+    expect(md).toContain(
+      "| fixed | p95 | 95.0ms → 55.1ms | -42.0% | \\[-50.0%, -35.0%\\] | 0.0317 | -1.00 (large) | improved | met (p95 improvement &gt;= 15%) |  |",
+    );
     expect(md).toContain("#### Estimates (model, not measured)");
     const html = renderReport([exp()], "html");
     expect(html).toContain('<section class="estimate">');
@@ -95,12 +121,25 @@ describe("What-If rendering", () => {
 
   it("junit: one case per variant × success criterion; A/A one per metric", () => {
     const xml = renderReport([exp()], "junit");
-    const names = [...xml.matchAll(/<testcase name="([^"]+)" classname="([^"]+)"/g)].map((m) => `${m[2]}::${m[1]}`);
-    expect(names).toEqual(["whatif.fixed::fixed: p95 improvement &gt;= 15%", "whatif.fixed::fixed: error_rate not worse"]);
-    expect(xml).toContain('<skipped message="inconclusive: CI includes a 12% worsening (≈12 runs/arm needed)"/>');
+    const names = [...xml.matchAll(/<testcase name="([^"]+)" classname="([^"]+)"/g)].map(
+      (m) => `${m[2]}::${m[1]}`,
+    );
+    expect(names).toEqual([
+      "whatif.fixed::fixed: p95 improvement &gt;= 15%",
+      "whatif.fixed::fixed: error_rate not worse",
+    ]);
+    expect(xml).toContain(
+      '<skipped message="inconclusive: CI includes a 12% worsening (≈12 runs/arm needed)"/>',
+    );
     const notMet = makeExperimentData();
-    notMet.comparisons[0]!.success = { criterion: "p95 improvement >= 15%", status: "not-met", detail: "only -3%" };
-    expect(renderReport([makeResult({ engine: "whatif", data: notMet })], "junit")).toContain('<failure message="only -3%" type="success-criterion-not-met">');
+    notMet.comparisons[0]!.success = {
+      criterion: "p95 improvement >= 15%",
+      status: "not-met",
+      detail: "only -3%",
+    };
+    expect(renderReport([makeResult({ engine: "whatif", data: notMet })], "junit")).toContain(
+      '<failure message="only -3%" type="success-criterion-not-met">',
+    );
     const aa = renderReport([makeResult({ engine: "whatif", data: makeAAData() })], "junit");
     expect(aa).toContain('<testcase name="A/A: p95" classname="whatif.aa">');
     expect(aa).toContain('failures="0"');
@@ -119,7 +158,8 @@ describe("Evolution rendering", () => {
     expect(s).toMatch(/sandbox\s+docker, node:24-slim, 1 cpu, 1g, network none/);
     expect(s).toMatch(/working tree\s+unchanged \(checksum verified\)/);
     expect(s).toMatch(/baseline\s+HEAD @ 0123456789/);
-    for (const h of ["rank", "ref", "status", "diff", "Δ p95", "Δ rps", "verdicts", "score"]) expect(s).toContain(h);
+    for (const h of ["rank", "ref", "status", "diff", "Δ p95", "Δ rps", "verdicts", "score"])
+      expect(s).toContain(h);
     expect(s).toContain("branch:fix/index ★");
     expect(s).toContain("+42.0%");
     expect(s).toContain("p95: improved, rps: no-significant-change");
@@ -134,7 +174,19 @@ describe("Evolution rendering", () => {
   });
 
   it("changed working tree is loud; empty front explained", () => {
-    const s = renderReport([makeResult({ engine: "evolution", data: makeEvolutionData({ workingTree: { before: "a", after: "b", unchanged: false }, paretoFront: [] }) })], "tty", { color: false });
+    const s = renderReport(
+      [
+        makeResult({
+          engine: "evolution",
+          data: makeEvolutionData({
+            workingTree: { before: "a", after: "b", unchanged: false },
+            paretoFront: [],
+          }),
+        }),
+      ],
+      "tty",
+      { color: false },
+    );
     expect(s).toContain("CHANGED during the run");
     expect(s).toContain("none: no candidate passed the gates");
   });
@@ -152,7 +204,9 @@ describe("Evolution rendering", () => {
 
   it("junit: one case per candidate gate (+ embedded experiment criteria)", () => {
     const xml = renderReport([evo()], "junit");
-    const gateCases = [...xml.matchAll(/<testcase name="([^"]+)" classname="evolution\.([^"]+)"/g)].map((m) => `${m[2]}::${m[1]}`);
+    const gateCases = [...xml.matchAll(/<testcase name="([^"]+)" classname="evolution\.([^"]+)"/g)].map(
+      (m) => `${m[2]}::${m[1]}`,
+    );
     expect(gateCases).toEqual([
       "fix/index::fix/index: worktree",
       "fix/index::fix/index: install",
@@ -164,7 +218,9 @@ describe("Evolution rendering", () => {
       "cache.diff::cache.diff: test (npm test)",
       "cache.diff::cache.diff: replay",
     ]);
-    expect(xml).toContain('<failure message="test gate failed" type="gate-test">2 tests failed\ntest gate failed: 2 tests failed</failure>');
+    expect(xml).toContain(
+      '<failure message="test gate failed" type="gate-test">2 tests failed\ntest gate failed: 2 tests failed</failure>',
+    );
     expect(xml).toContain('<skipped message="no artifacts"/>');
     expect(xml).toContain('classname="whatif.fixed"');
   });

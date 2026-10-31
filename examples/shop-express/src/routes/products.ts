@@ -12,7 +12,7 @@ export function productsRouter(db: Db): Router {
       res.json({ items: products });
       return;
     }
-    const items: (typeof products[number] & { reviews: Review[] })[] = [];
+    const items: ((typeof products)[number] & { reviews: Review[] })[] = [];
     for (const p of products) {
       // SEEDED-DEFECT:n-plus-one-reviews — one reviews query per product (use db.reviewsForMany(ids)).
       const reviews = await db.reviewsFor(p.id);

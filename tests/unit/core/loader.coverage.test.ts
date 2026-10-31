@@ -51,7 +51,9 @@ describe("resolveSecret", () => {
     const d = tmp();
     writeFileSync(join(d, "s.txt"), "  file-secret-value\r\n");
     expect(resolveSecret({ file: "s.txt" }, { cwd: d })).toBe("file-secret-value");
-    expect(() => resolveSecret({ file: "missing.txt" }, { cwd: d })).toThrow(/Secret file missing.txt cannot be read/);
+    expect(() => resolveSecret({ file: "missing.txt" }, { cwd: d })).toThrow(
+      /Secret file missing.txt cannot be read/,
+    );
     expect(() => resolveSecret({ file: "." }, { cwd: d })).toThrow(ConfigError); // a directory
   });
 
@@ -91,9 +93,11 @@ describe("coerceValue / setPath / getPath / parseSetArgs", () => {
   });
 
   it("property: integers below 16 chars round-trip through coerceValue", () => {
-    fc.assert(fc.property(fc.integer(), (n) => {
-      expect(coerceValue(String(n))).toEqual(n);
-    }));
+    fc.assert(
+      fc.property(fc.integer(), (n) => {
+        expect(coerceValue(String(n))).toEqual(n);
+      }),
+    );
   });
 
   it("setPath/mergeLayer refuse prototype pollution", () => {
@@ -131,7 +135,7 @@ describe("coerceValue / setPath / getPath / parseSetArgs", () => {
   });
 
   it("parseSetArgs validates syntax", () => {
-    expect(parseSetArgs(["performance.rate=200", "safety.allowHosts=[\"a\"]"])).toEqual({
+    expect(parseSetArgs(["performance.rate=200", 'safety.allowHosts=["a"]'])).toEqual({
       performance: { rate: 200 },
       safety: { allowHosts: ["a"] },
     });
@@ -148,7 +152,9 @@ describe("files", () => {
     const d = tmp();
     await expect(loadObjectFile(join(d, "nope.json"))).rejects.toMatchObject({ code: "SW_CONFIG_NOT_FOUND" });
     writeFileSync(join(d, "x.ts"), "export default {}");
-    await expect(loadObjectFile(join(d, "x.ts"), { noConfigCode: true })).rejects.toMatchObject({ code: "SW_CONFIG_CODE_DISABLED" });
+    await expect(loadObjectFile(join(d, "x.ts"), { noConfigCode: true })).rejects.toMatchObject({
+      code: "SW_CONFIG_CODE_DISABLED",
+    });
     writeFileSync(join(d, "a.json"), '﻿{"k":1}');
     expect(await loadObjectFile(join(d, "a.json"))).toEqual({ k: 1 });
     writeFileSync(join(d, "n.json"), "null");
@@ -158,7 +164,10 @@ describe("files", () => {
     writeFileSync(join(d, "l.yaml"), "- 1\n- 2\n");
     await expect(loadObjectFile(join(d, "l.yaml"))).rejects.toMatchObject({ code: "SW_CONFIG_PARSE" });
     writeFileSync(join(d, "b.json"), "{bad");
-    await expect(loadObjectFile(join(d, "b.json"))).rejects.toMatchObject({ code: "SW_CONFIG_PARSE", details: { file: join(d, "b.json") } });
+    await expect(loadObjectFile(join(d, "b.json"))).rejects.toMatchObject({
+      code: "SW_CONFIG_PARSE",
+      details: { file: join(d, "b.json") },
+    });
     mkdirSync(join(d, "dir.json"));
     await expect(loadObjectFile(join(d, "dir.json"))).rejects.toMatchObject({ code: "SW_CONFIG_READ" });
   });
@@ -188,10 +197,14 @@ describe("files", () => {
     ];
     for (const [ext, re] of cases) {
       writeFileSync(join(d, "c.json"), JSON.stringify({ extends: ext }));
-      await expect(loadConfig({ cwd: d, configFile: "c.json", userConfig: false, env: {} })).rejects.toThrow(re);
+      await expect(loadConfig({ cwd: d, configFile: "c.json", userConfig: false, env: {} })).rejects.toThrow(
+        re,
+      );
     }
     writeFileSync(join(d, "loop.json"), JSON.stringify({ extends: "./loop.json" }));
-    await expect(loadConfig({ cwd: d, configFile: "loop.json", userConfig: false, env: {} })).rejects.toMatchObject({
+    await expect(
+      loadConfig({ cwd: d, configFile: "loop.json", userConfig: false, env: {} }),
+    ).rejects.toMatchObject({
       code: "SW_CONFIG_EXTENDS",
       message: expect.stringContaining("too deep"),
     });
@@ -199,17 +212,29 @@ describe("files", () => {
 
   it("explicit missing config, code disabled, unknown profile with/without profiles", async () => {
     const d = tmp();
-    await expect(loadConfig({ cwd: d, configFile: "x.json", userConfig: false, env: {} })).rejects.toMatchObject({ code: "SW_CONFIG_NOT_FOUND" });
+    await expect(
+      loadConfig({ cwd: d, configFile: "x.json", userConfig: false, env: {} }),
+    ).rejects.toMatchObject({ code: "SW_CONFIG_NOT_FOUND" });
     writeFileSync(join(d, "sw.config.ts"), "export default {}");
-    await expect(loadConfig({ cwd: d, configFile: "sw.config.ts", noConfigCode: true, userConfig: false, env: {} })).rejects.toMatchObject({
+    await expect(
+      loadConfig({ cwd: d, configFile: "sw.config.ts", noConfigCode: true, userConfig: false, env: {} }),
+    ).rejects.toMatchObject({
       code: "SW_CONFIG_CODE_DISABLED",
     });
-    await expect(loadConfig({ cwd: d, configFile: false, profile: "ci", userConfig: false, env: {} })).rejects.toMatchObject({
+    await expect(
+      loadConfig({ cwd: d, configFile: false, profile: "ci", userConfig: false, env: {} }),
+    ).rejects.toMatchObject({
       code: "SW_CONFIG_PROFILE",
       hint: "No profiles are defined in the config",
     });
     await expect(
-      loadConfig({ cwd: d, inline: { profiles: { ci: {}, dev: {} } }, profile: "prod", userConfig: false, env: {} }),
+      loadConfig({
+        cwd: d,
+        inline: { profiles: { ci: {}, dev: {} } },
+        profile: "prod",
+        userConfig: false,
+        env: {},
+      }),
     ).rejects.toMatchObject({ hint: "Available profiles: ci, dev" });
   });
 
@@ -222,7 +247,9 @@ describe("files", () => {
     const r = await loadConfig({ cwd: d, userConfig: false, env: {} }).catch((e) => e);
     // the schema may or may not accept this auth shape; when it loads, the warning must be present
     if (!(r instanceof Error)) {
-      expect(r.warnings.join("\n")).toMatch(/auth\.admin\.password: value in sw\.config\.yaml looks like a secret/);
+      expect(r.warnings.join("\n")).toMatch(
+        /auth\.admin\.password: value in sw\.config\.yaml looks like a secret/,
+      );
       expect(r.warnings.join("\n")).not.toContain("supersecretvalue");
     }
   });
@@ -231,10 +258,15 @@ describe("files", () => {
     const d = tmp();
     const u = join(d, "user");
     mkdirSync(u);
-    writeFileSync(join(u, "config.json"), JSON.stringify({ ui: { color: false }, safety: { allowPublic: true } }));
+    writeFileSync(
+      join(u, "config.json"),
+      JSON.stringify({ ui: { color: false }, safety: { allowPublic: true } }),
+    );
     const r = await loadConfig({ cwd: d, configFile: false, env: { SW_USER_CONFIG_DIR: u } });
     expect(r.config.safety?.allowPublic).not.toBe(true);
     writeFileSync(join(u, "config.json"), "{broken");
-    await expect(loadConfig({ cwd: d, configFile: false, env: { SW_USER_CONFIG_DIR: u } })).resolves.toBeDefined();
+    await expect(
+      loadConfig({ cwd: d, configFile: false, env: { SW_USER_CONFIG_DIR: u } }),
+    ).resolves.toBeDefined();
   });
 });

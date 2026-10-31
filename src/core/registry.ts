@@ -49,7 +49,9 @@ export interface EngineRegistry {
   isLoaded(id: string): boolean;
 }
 
-export function createRegistry(builtins: Partial<Record<string, EngineLoader>> = BUILTIN_ENGINES): EngineRegistry {
+export function createRegistry(
+  builtins: Partial<Record<string, EngineLoader>> = BUILTIN_ENGINES,
+): EngineRegistry {
   const loaders = new Map<string, EngineLoader>();
   for (const [k, v] of Object.entries(builtins)) if (v) loaders.set(k, v);
   const cache = new Map<string, Promise<{ engine: AnyEngine; module: unknown }>>();
@@ -78,10 +80,13 @@ export function createRegistry(builtins: Partial<Record<string, EngineLoader>> =
         try {
           mod = await loader();
         } catch (e) {
-          throw new EngineError("SW_ENGINE_LOAD", `Failed to load engine "${id}": ${(e as Error).message}`, { cause: e });
+          throw new EngineError("SW_ENGINE_LOAD", `Failed to load engine "${id}": ${(e as Error).message}`, {
+            cause: e,
+          });
         }
         const engine = engineFromModule(mod, id);
-        if (!engine) throw new EngineError("SW_ENGINE_LOAD", `Module for engine "${id}" does not export an Engine`);
+        if (!engine)
+          throw new EngineError("SW_ENGINE_LOAD", `Module for engine "${id}" does not export an Engine`);
         return { engine, module: mod };
       })();
       cache.set(id, p);

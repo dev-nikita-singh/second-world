@@ -21,18 +21,23 @@ function lookupP(
   opts: { all?: boolean; family?: number } = {},
 ): Promise<{ address: string | LookupAddress[]; family?: number }> {
   return new Promise((resolve, reject) => {
-    (guard.lookup as unknown as (h: string, o: unknown, cb: (e: Error | null, a: string | LookupAddress[], f?: number) => void) => void)(
-      host,
-      opts,
-      (err, address, family) => (err ? reject(err) : resolve({ address, family })),
-    );
+    (
+      guard.lookup as unknown as (
+        h: string,
+        o: unknown,
+        cb: (e: Error | null, a: string | LookupAddress[], f?: number) => void,
+      ) => void
+    )(host, opts, (err, address, family) => (err ? reject(err) : resolve({ address, family })));
   });
 }
 
 describe("DNS pinning (docs/11 §2)", () => {
   it("preflight resolves once, pins every address; lookup serves only pinned addresses", async () => {
     const dns = fakeDns({ "api.svc.internal": ["10.0.0.5", "10.0.0.6"] });
-    const g = createSafetyGuard({ allowHosts: ["*.svc.internal"] }, { interactive: false, resolver: dns.resolver });
+    const g = createSafetyGuard(
+      { allowHosts: ["*.svc.internal"] },
+      { interactive: false, resolver: dns.resolver },
+    );
     await g.preflight("http://api.svc.internal:8080/x");
     expect(g.pins()).toHaveLength(1);
     expect(g.pins()[0]).toMatchObject({ host: "api.svc.internal", cls: "private" });
@@ -61,18 +66,30 @@ describe("DNS pinning (docs/11 §2)", () => {
     await g.preflight("https://tricky.example.com");
     // a short private-looking name resolving to a PUBLIC address needs allowPublic + approval
     const dns2 = fakeDns({ myservice: ["8.8.8.8"] });
-    const g2 = createSafetyGuard({ allowHosts: ["myservice"] }, { interactive: false, resolver: dns2.resolver });
-    await expect(g2.preflight("http://myservice:3000")).rejects.toMatchObject({ code: "SW_SAFETY_DNS_CLASS", exitCode: 3 });
+    const g2 = createSafetyGuard(
+      { allowHosts: ["myservice"] },
+      { interactive: false, resolver: dns2.resolver },
+    );
+    await expect(g2.preflight("http://myservice:3000")).rejects.toMatchObject({
+      code: "SW_SAFETY_DNS_CLASS",
+      exitCode: 3,
+    });
   });
 
   it("unresolvable host → TargetError (exit 5)", async () => {
-    const g = createSafetyGuard({ allowHosts: ["nope.internal"] }, { interactive: false, resolver: fakeDns({}).resolver });
+    const g = createSafetyGuard(
+      { allowHosts: ["nope.internal"] },
+      { interactive: false, resolver: fakeDns({}).resolver },
+    );
     await expect(g.preflight("http://nope.internal")).rejects.toBeInstanceOf(TargetError);
   });
 
   it("recheckDns: class change → SW_SAFETY_DNS_REBIND + kill switch; same-class churn is fine", async () => {
     const dns = fakeDns({ "app.internal": ["10.0.0.1"] });
-    const g = createSafetyGuard({ allowHosts: ["app.internal"] }, { interactive: false, resolver: dns.resolver });
+    const g = createSafetyGuard(
+      { allowHosts: ["app.internal"] },
+      { interactive: false, resolver: dns.resolver },
+    );
     await g.preflight("http://app.internal");
     dns.table["app.internal"] = ["10.0.0.2"];
     await g.recheckDns("app.internal");
@@ -85,7 +102,10 @@ describe("DNS pinning (docs/11 §2)", () => {
 
   it("recheckDns: a loopback address appearing for a private host is a rebind", async () => {
     const dns = fakeDns({ "db.internal": ["10.0.0.1"] });
-    const g = createSafetyGuard({ allowHosts: ["db.internal"] }, { interactive: false, resolver: dns.resolver });
+    const g = createSafetyGuard(
+      { allowHosts: ["db.internal"] },
+      { interactive: false, resolver: dns.resolver },
+    );
     await g.preflight("http://db.internal");
     dns.table["db.internal"] = ["10.0.0.1", "127.0.0.1"];
     await expect(g.recheckDns("db.internal")).rejects.toBeInstanceOf(SafetyError);
@@ -93,7 +113,10 @@ describe("DNS pinning (docs/11 §2)", () => {
 
   it("lookup on an unpinned host checks, resolves and pins once; blocked hosts error with the safety code", async () => {
     const dns = fakeDns({ "late.internal": ["10.0.0.7", "fd00::7"], "pub.example.com": ["1.2.3.4"] });
-    const g = createSafetyGuard({ allowHosts: ["late.internal"] }, { interactive: false, resolver: dns.resolver });
+    const g = createSafetyGuard(
+      { allowHosts: ["late.internal"] },
+      { interactive: false, resolver: dns.resolver },
+    );
     const v6 = await lookupP(g, "late.internal", { family: 6 });
     expect(v6).toEqual({ address: "fd00::7", family: 6 });
     await lookupP(g, "late.internal", { all: true });

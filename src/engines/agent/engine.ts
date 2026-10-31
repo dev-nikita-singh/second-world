@@ -93,13 +93,7 @@ const AGENT_RULE_INFO: Record<
 };
 const MAX_REJECTED = 200;
 
-export type StopReason =
-  | "iterations"
-  | "requests"
-  | "time"
-  | "no-new-info"
-  | "cancelled"
-  | "arms-exhausted";
+export type StopReason = "iterations" | "requests" | "time" | "no-new-info" | "cancelled" | "arms-exhausted";
 
 export type HypothesisOutcome =
   | "passed"
@@ -636,11 +630,7 @@ export async function executeAgent(
       const proposals = await planner.propose(arm, state);
       let chosen: Scenario | undefined;
       for (const raw of proposals) {
-        chosen = consider(
-          raw,
-          arm.technique === "history" ? "history" : "heuristic",
-          arm.key,
-        );
+        chosen = consider(raw, arm.technique === "history" ? "history" : "heuristic", arm.key);
         if (chosen) break;
       }
       if (!chosen) {
@@ -842,7 +832,15 @@ export async function executeAgent(
     });
   }
   const hasDefect = findings.some((f) => f.classification === "reproduced-defect");
-  const status = cancelled ? "cancelled" : targetUnreachable ? "error" : hasDefect ? "failed" : budgetHit ? "partial" : "passed";
+  const status = cancelled
+    ? "cancelled"
+    : targetUnreachable
+      ? "error"
+      : hasDefect
+        ? "failed"
+        : budgetHit
+          ? "partial"
+          : "passed";
   ctx.events.emit("agent.done", {
     runId,
     iterations: iteration,

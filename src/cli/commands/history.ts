@@ -40,14 +40,19 @@ function pad(s: string, n: number): string {
   return s + " ".repeat(Math.max(1, n - s.length));
 }
 
-export async function historyList(o: { limit?: string; engine?: string; json?: boolean }, g: GlobalOptions): Promise<void> {
+export async function historyList(
+  o: { limit?: string; engine?: string; json?: boolean },
+  g: GlobalOptions,
+): Promise<void> {
   await withStore(g, async (store) => {
     const limit = int("limit", o.limit) ?? 20;
     const entries = await store.list({ limit, ...(o.engine ? { engine: o.engine as never } : {}) });
     if (o.json) out(JSON.stringify(entries, null, 2));
     else if (entries.length === 0) out("no runs recorded yet");
     else {
-      out(`${pad("ID", 28)}${pad("CREATED", 26)}${pad("LABEL", 10)}${pad("STATUS", 10)}${pad("FINDINGS", 10)}P95(ms)`);
+      out(
+        `${pad("ID", 28)}${pad("CREATED", 26)}${pad("LABEL", 10)}${pad("STATUS", 10)}${pad("FINDINGS", 10)}P95(ms)`,
+      );
       for (const e of entries) {
         out(
           `${pad(e.id, 28)}${pad(e.createdAt, 26)}${pad(e.label ?? "", 10)}${pad(e.status, 10)}${pad(String(e.findings.count), 10)}${fmtNum(e.metrics["performance.http.p95"])}${e.compacted ? " (compacted)" : ""}`,
@@ -61,11 +66,13 @@ export async function historyList(o: { limit?: string; engine?: string; json?: b
 export async function historyShow(id: string, o: { json?: boolean }, g: GlobalOptions): Promise<void> {
   await withStore(g, async (store) => {
     const run = await store.get(id);
-    if (!run) throw new SecondWorldError("SW_HISTORY_NOT_FOUND", `No run "${id}" in history`, ExitCode.ConfigInvalid);
+    if (!run)
+      throw new SecondWorldError("SW_HISTORY_NOT_FOUND", `No run "${id}" in history`, ExitCode.ConfigInvalid);
     if (o.json) out(JSON.stringify(run, null, 2));
     else {
       out(`run ${run.id}  ${run.createdAt}  ${run.label ?? ""}  status=${run.status}`);
-      if (run.git) out(`git ${run.git.branch ?? ""} ${run.git.commit ?? ""}${run.git.dirty ? " (dirty)" : ""}`);
+      if (run.git)
+        out(`git ${run.git.branch ?? ""} ${run.git.commit ?? ""}${run.git.dirty ? " (dirty)" : ""}`);
       out(`engines: ${run.engines.join(", ")}`);
       for (const [k, v] of Object.entries(run.metrics).sort()) out(`  ${pad(k, 40)} ${fmtNum(v)}`);
       const findings = run.results.flatMap((r) => r.findings);
@@ -92,7 +99,11 @@ export function parseRunSelector(raw: string): RunSelector {
   const pos = (v: string, what: string): number => {
     const n = Number(v);
     if (!Number.isInteger(n) || n < 1) {
-      throw new SecondWorldError("SW_CONFIG_FLAG", `${what}: expected a positive integer, got "${v}"`, ExitCode.ConfigInvalid);
+      throw new SecondWorldError(
+        "SW_CONFIG_FLAG",
+        `${what}: expected a positive integer, got "${v}"`,
+        ExitCode.ConfigInvalid,
+      );
     }
     return n;
   };
@@ -106,10 +117,14 @@ export function parseRunSelector(raw: string): RunSelector {
   }
   if (s.startsWith("baseline:")) {
     const name = s.slice(9);
-    if (!name) throw new SecondWorldError("SW_CONFIG_FLAG", `"${s}": missing baseline name`, ExitCode.ConfigInvalid);
+    if (!name)
+      throw new SecondWorldError("SW_CONFIG_FLAG", `"${s}": missing baseline name`, ExitCode.ConfigInvalid);
     return { kind: "baseline", name };
   }
-  const ids = s.split(",").map((x) => x.trim()).filter(Boolean);
+  const ids = s
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
   return { kind: "ids", ids };
 }
 
@@ -139,7 +154,9 @@ export async function resolveRunSelector(
           "SW_HISTORY_NOT_FOUND",
           `No runs match ${sel.kind === "label" ? `label "${sel.label}"` : `last:${sel.n}`}${filter.engine ? ` (engine ${filter.engine})` : ""}`,
           ExitCode.ConfigInvalid,
-          { hint: "Save runs with --label <name> (e.g. `sw --label fast perf …`) and check `sw history list`" },
+          {
+            hint: "Save runs with --label <name> (e.g. `sw --label fast perf …`) and check `sw history list`",
+          },
         );
       }
       return ids.length === 1 ? (ids[0] as string) : ids;
@@ -156,7 +173,11 @@ export async function historyDiff(
   // Uses the global -f/--format (single value) for the comparison view.
   const fmt = (o.json ? "json" : (g.format?.trim() ?? "tty")) as "tty" | "json" | "md" | "html";
   if (!["tty", "json", "md", "html"].includes(fmt)) {
-    throw new SecondWorldError("SW_CONFIG_FLAG", `history diff supports -f tty|json|md|html (got "${fmt}")`, ExitCode.ConfigInvalid);
+    throw new SecondWorldError(
+      "SW_CONFIG_FLAG",
+      `history diff supports -f tty|json|md|html (got "${fmt}")`,
+      ExitCode.ConfigInvalid,
+    );
   }
   const selA = parseRunSelector(a);
   const selB = parseRunSelector(b);
@@ -189,7 +210,10 @@ export async function historyBaselineList(o: { json?: boolean }, g: GlobalOption
   });
 }
 
-export async function historyTrend(o: { metric?: string; endpoint?: string; limit?: string; json?: boolean }, g: GlobalOptions): Promise<void> {
+export async function historyTrend(
+  o: { metric?: string; endpoint?: string; limit?: string; json?: boolean },
+  g: GlobalOptions,
+): Promise<void> {
   await withStore(g, async (store) => {
     const limit = int("limit", o.limit);
     const t = await store.trend(o.metric ?? "p95", {
@@ -214,7 +238,9 @@ export async function historyVerify(o: { json?: boolean }, g: GlobalOptions): Pr
     const s = style(colorEnabled(g));
     if (o.json) out(JSON.stringify(r, null, 2));
     else {
-      out(`${r.ok ? s.ok : s.fail} history ${r.ok ? "intact" : "CORRUPTED"}: ${r.checked} run(s) checked, ${r.errors.length} error(s), ${r.warnings.length} warning(s)`);
+      out(
+        `${r.ok ? s.ok : s.fail} history ${r.ok ? "intact" : "CORRUPTED"}: ${r.checked} run(s) checked, ${r.errors.length} error(s), ${r.warnings.length} warning(s)`,
+      );
       for (const e of r.errors) out(`  ${s.fail} ${JSON.stringify(e)}`);
       for (const w of r.warnings) out(`  ${s.warn} ${JSON.stringify(w)}`);
     }
@@ -222,7 +248,10 @@ export async function historyVerify(o: { json?: boolean }, g: GlobalOptions): Pr
   });
 }
 
-export async function historyPrune(o: { keep?: string; compact?: boolean; dryRun?: boolean; json?: boolean }, g: GlobalOptions): Promise<void> {
+export async function historyPrune(
+  o: { keep?: string; compact?: boolean; dryRun?: boolean; json?: boolean },
+  g: GlobalOptions,
+): Promise<void> {
   await withStore(g, async (store) => {
     const keep = int("keep", o.keep);
     const r = await store.prune({
@@ -232,7 +261,9 @@ export async function historyPrune(o: { keep?: string; compact?: boolean; dryRun
     });
     if (o.json) out(JSON.stringify(r, null, 2));
     else {
-      out(`${r.dryRun ? "(dry run) " : ""}kept ${r.kept}, compacted ${r.compacted.length}, removed ${r.removed.length}`);
+      out(
+        `${r.dryRun ? "(dry run) " : ""}kept ${r.kept}, compacted ${r.compacted.length}, removed ${r.removed.length}`,
+      );
     }
     process.exitCode = 0;
   });

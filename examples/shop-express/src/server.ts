@@ -59,7 +59,11 @@ export function createApp(opts: ShopOptions = {}): ShopApp {
 
   app.get("/admin/stats", requireAdmin, async (_req, res) => {
     const orders = await db.allOrders();
-    res.json({ orders: orders.length, revenue: orders.reduce((s, o) => s + o.total, 0), stock: await stockReport(db) });
+    res.json({
+      orders: orders.length,
+      revenue: orders.reduce((s, o) => s + o.total, 0),
+      stock: await stockReport(db),
+    });
   });
 
   // Test-only hooks (a real app would not expose these).
@@ -75,7 +79,8 @@ export function createApp(opts: ShopOptions = {}): ShopApp {
     res.status(404).json({ error: "not_found" });
   });
   const onError: ErrorRequestHandler = (err, _req, res, _next) => {
-    const status = typeof (err as { status?: unknown }).status === "number" ? (err as { status: number }).status : 500;
+    const status =
+      typeof (err as { status?: unknown }).status === "number" ? (err as { status: number }).status : 500;
     res.status(status).json({ error: status === 500 ? "internal_error" : "bad_request" });
   };
   app.use(onError);

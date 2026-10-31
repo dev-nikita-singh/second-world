@@ -326,7 +326,15 @@ export async function executeExperiment(
         rec.status = "error";
         rec.error = `skipped: the app never became healthy (${sf.count} attempts; first: ${sf.first})`;
         runs.push(rec);
-        ctx.events.emit(`${engine}.run.end`, { runId, index: slot.index, total: schedule.length, arm: a.name, rep: slot.rep, status: rec.status, metrics: rec.metrics });
+        ctx.events.emit(`${engine}.run.end`, {
+          runId,
+          index: slot.index,
+          total: schedule.length,
+          arm: a.name,
+          rep: slot.rep,
+          status: rec.status,
+          metrics: rec.metrics,
+        });
         continue;
       }
       try {
@@ -406,7 +414,10 @@ export async function executeExperiment(
           rec.error = e instanceof Error ? e.message : String(e);
           log.warn("run failed", { arm: a.name, rep: slot.rep, error: rec.error });
           const code = (e as { code?: string }).code;
-          if (app === undefined && (code === "SW_ENGINE_WHATIF_HEALTH_TIMEOUT" || code === "SW_ENGINE_WHATIF_APP_EXITED")) {
+          if (
+            app === undefined &&
+            (code === "SW_ENGINE_WHATIF_HEALTH_TIMEOUT" || code === "SW_ENGINE_WHATIF_APP_EXITED")
+          ) {
             const prev = startFailures.get(a.name);
             startFailures.set(a.name, { count: (prev?.count ?? 0) + 1, first: prev?.first ?? rec.error });
           }
@@ -474,9 +485,13 @@ export async function executeExperiment(
   // (the user's app or its config), not an engine error.
   const bsf = startFailures.get(baseline.name);
   if (bsf && !armOk.has(baseline.name) && !cancelled) {
-    throw new TargetError("SW_TARGET_APP_UNHEALTHY", `${baseline.name}: the app never became healthy: ${bsf.first}`, {
-      hint: deps.healthHint ?? "Check the start command, the health path and that the app listens on $PORT",
-    });
+    throw new TargetError(
+      "SW_TARGET_APP_UNHEALTHY",
+      `${baseline.name}: the app never became healthy: ${bsf.first}`,
+      {
+        hint: deps.healthHint ?? "Check the start command, the health path and that the app listens on $PORT",
+      },
+    );
   }
   const success = input.success as Record<string, SuccessCriterion>;
   const cmpInputs: ComparisonInput[] = [];

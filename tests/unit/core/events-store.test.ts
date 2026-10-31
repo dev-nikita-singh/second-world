@@ -73,7 +73,9 @@ describe("evidence store", () => {
     expect(f.occurrences).toBe(1);
     expect(f.status).toBe("open");
     // numbers in title don't change the fingerprint
-    expect(createFinding({ ...base, title: "p95 latency 500ms exceeds 300ms" }).fingerprint).toBe(f.fingerprint);
+    expect(createFinding({ ...base, title: "p95 latency 500ms exceeds 300ms" }).fingerprint).toBe(
+      f.fingerprint,
+    );
     expect(() => createFinding({ ...base, evidence: [] })).toThrow();
   });
 
@@ -82,10 +84,7 @@ describe("evidence store", () => {
     const a = store.addFinding(createFinding(base, { clock }));
     clock.advance(5000);
     const b = store.addFinding(
-      createFinding(
-        { ...base, evidence: [{ kind: "note", text: "again" }] },
-        { clock },
-      ),
+      createFinding({ ...base, evidence: [{ kind: "note", text: "again" }] }, { clock }),
     );
     expect(b).toBe(a);
     expect(a.occurrences).toBe(2);

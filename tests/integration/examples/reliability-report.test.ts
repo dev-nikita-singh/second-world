@@ -97,8 +97,14 @@ describe("Reliability Lab result rendered in every format (shop-express, depende
     expect([...xml.matchAll(/<testcase /g)]).toHaveLength(2 + 6);
     expect(xml).toMatch(/<failure message="\[high\] reliability\/retry-without-backoff"/);
     const sarif = JSON.parse(renderReport([result], "sarif"));
-    const storm = (sarif.runs[0].results as any[]).find((r) => r.ruleId === "reliability/retry-without-backoff");
-    expect(storm.locations[0].logicalLocations[0]).toEqual({ name: "payments", fullyQualifiedName: "dependency:payments", kind: "resource" });
+    const storm = (sarif.runs[0].results as any[]).find(
+      (r) => r.ruleId === "reliability/retry-without-backoff",
+    );
+    expect(storm.locations[0].logicalLocations[0]).toEqual({
+      name: "payments",
+      fullyQualifiedName: "dependency:payments",
+      kind: "resource",
+    });
   });
 
   it("writeReports writes all file formats", async () => {

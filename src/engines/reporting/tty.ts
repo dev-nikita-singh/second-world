@@ -7,12 +7,13 @@
  * ASCII mode (TERM=dumb or SW_ASCII=1, or `ascii: true`) avoids box-drawing and
  * symbol characters. Returns a string; printing is the CLI's job.
  */
-import { dataBlocks } from "./dispatch.js";
+
 import Table from "cli-table3";
 import pc from "picocolors";
 import type { EngineResult, Finding, Severity } from "../../core/evidence/schemas.js";
 import type { PerformanceData } from "../performance/types.js";
 import { type Block, type CellLike, cellText, cellTone, type Tone } from "./blocks.js";
+import { dataBlocks } from "./dispatch.js";
 import {
   type CombinedReport,
   fmtDuration,
@@ -20,8 +21,8 @@ import {
   fmtNum,
   fmtPct,
   fmtThresholdValue,
-  isPerformanceData,
   isFailingFinding,
+  isPerformanceData,
   locationOf,
   sortFindings,
   thresholdsOf,
@@ -37,7 +38,10 @@ export interface TtyOptions {
 type Env = Record<string, string | undefined>;
 
 /** Auto colour decision for a stream. */
-export function resolveColor(env: Env = process.env, isTTY: boolean = process.stdout.isTTY === true): boolean {
+export function resolveColor(
+  env: Env = process.env,
+  isTTY: boolean = process.stdout.isTTY === true,
+): boolean {
   if (env.NO_COLOR !== undefined && env.NO_COLOR !== "") return false;
   if (env.FORCE_COLOR !== undefined && env.FORCE_COLOR !== "0" && env.FORCE_COLOR !== "false") return true;
   if (env.TERM === "dumb") return false;
@@ -70,7 +74,16 @@ const ASCII_CHARS = {
 interface Ctx {
   c: ReturnType<typeof pc.createColors>;
   ascii: boolean;
-  sym: { ok: string; fail: string; warn: string; bullet: string; dash: string; dot: string; pass: string; failLabel: string };
+  sym: {
+    ok: string;
+    fail: string;
+    warn: string;
+    bullet: string;
+    dash: string;
+    dot: string;
+    pass: string;
+    failLabel: string;
+  };
 }
 
 function makeTable(ctx: Ctx, head: string[], aligns?: ("left" | "right")[]): Table.Table {
@@ -115,17 +128,11 @@ function renderPerformance(ctx: Ctx, d: PerformanceData, out: string[]): void {
   out.push(
     `${c.dim("target")} ${d.target}  ${c.dim("model")} ${model}  ${c.dim("measured")} ${fmtDuration(d.window.measuredMs)}  ${c.dim("stop")} ${d.window.stopReason}`,
   );
-  const summary = makeTable(ctx, ["requests", "ok", "failed", "rps", "error rate", "p50", "p95", "p99", "max"], [
-    "right",
-    "right",
-    "right",
-    "right",
-    "right",
-    "right",
-    "right",
-    "right",
-    "right",
-  ]);
+  const summary = makeTable(
+    ctx,
+    ["requests", "ok", "failed", "rps", "error rate", "p50", "p95", "p99", "max"],
+    ["right", "right", "right", "right", "right", "right", "right", "right", "right"],
+  );
   summary.push([
     String(t.requests),
     String(t.ok),
@@ -146,7 +153,9 @@ function renderPerformance(ctx: Ctx, d: PerformanceData, out: string[]): void {
   ]);
   out.push(summary.toString());
   if (t.targetRate !== undefined && t.achievedRate !== undefined) {
-    out.push(`${c.dim("rate")} target ${fmtNum(t.targetRate)}/s ${ctx.sym.dash} achieved ${fmtNum(t.achievedRate)}/s`);
+    out.push(
+      `${c.dim("rate")} target ${fmtNum(t.targetRate)}/s ${ctx.sym.dash} achieved ${fmtNum(t.achievedRate)}/s`,
+    );
   }
   const extras: string[] = [];
   if (t.timeouts > 0) extras.push(`timeouts ${t.timeouts}`);
@@ -155,15 +164,11 @@ function renderPerformance(ctx: Ctx, d: PerformanceData, out: string[]): void {
   if (extras.length > 0) out.push(c.yellow(extras.join(", ")));
 
   if (d.endpoints.length > 0) {
-    const ep = makeTable(ctx, ["endpoint", "requests", "rps", "errors", "p50", "p95", "p99"], [
-      "left",
-      "right",
-      "right",
-      "right",
-      "right",
-      "right",
-      "right",
-    ]);
+    const ep = makeTable(
+      ctx,
+      ["endpoint", "requests", "rps", "errors", "p50", "p95", "p99"],
+      ["left", "right", "right", "right", "right", "right", "right"],
+    );
     for (const e of [...d.endpoints].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))) {
       ep.push([
         e.key,
@@ -236,7 +241,11 @@ function renderBlocks(ctx: Ctx, blocks: readonly Block[], out: string[]): void {
       }
       case "table": {
         if (b.title) out.push(c.bold(b.title));
-        const tb = makeTable(ctx, b.head, b.align?.map((a) => (a === "r" ? "right" : "left")));
+        const tb = makeTable(
+          ctx,
+          b.head,
+          b.align?.map((a) => (a === "r" ? "right" : "left")),
+        );
         for (const row of b.rows) tb.push(row.map((x) => cell(ctx, x)));
         out.push(tb.toString());
         break;
@@ -252,7 +261,9 @@ function renderBlocks(ctx: Ctx, blocks: readonly Block[], out: string[]): void {
         const xs = b.values.filter((v) => Number.isFinite(v));
         const lo = xs.length > 0 ? Math.min(...xs) : 0;
         const hi = xs.length > 0 ? Math.max(...xs) : 0;
-        out.push(`${c.dim(b.title)} ${sparkline(b.values, ctx.ascii)} ${c.dim(`${fmtNum(lo, 1)}..${fmtNum(hi, 1)} ${b.unit}`)}`);
+        out.push(
+          `${c.dim(b.title)} ${sparkline(b.values, ctx.ascii)} ${c.dim(`${fmtNum(lo, 1)}..${fmtNum(hi, 1)} ${b.unit}`)}`,
+        );
         if (b.mark && b.mark.to > b.mark.from) {
           // marker row aligned under the sparkline: ^ under the marked windows
           const row = b.values.map((_, i) => (i >= b.mark!.from && i < b.mark!.to ? "^" : " ")).join("");
@@ -299,8 +310,26 @@ function newCtx(color: boolean, ascii: boolean): Ctx {
     c: pc.createColors(color),
     ascii,
     sym: ascii
-      ? { ok: "PASS", fail: "FAIL", warn: "!", bullet: "-", dash: "-", dot: "|", pass: "PASS", failLabel: "FAIL" }
-      : { ok: "✔", fail: "✖", warn: "⚠", bullet: "•", dash: "—", dot: "·", pass: "✔ PASS", failLabel: "✖ FAIL" },
+      ? {
+          ok: "PASS",
+          fail: "FAIL",
+          warn: "!",
+          bullet: "-",
+          dash: "-",
+          dot: "|",
+          pass: "PASS",
+          failLabel: "FAIL",
+        }
+      : {
+          ok: "✔",
+          fail: "✖",
+          warn: "⚠",
+          bullet: "•",
+          dash: "—",
+          dot: "·",
+          pass: "✔ PASS",
+          failLabel: "✖ FAIL",
+        },
   };
 }
 
@@ -330,7 +359,13 @@ function renderThresholds(ctx: Ctx, r: EngineResult, out: string[]): void {
   out.push(tb.toString());
 }
 
-function renderFindings(ctx: Ctx, findings: Finding[], failOn: CombinedReport["failOn"], max: number, out: string[]): void {
+function renderFindings(
+  ctx: Ctx,
+  findings: Finding[],
+  failOn: CombinedReport["failOn"],
+  max: number,
+  out: string[],
+): void {
   if (findings.length === 0) return;
   const { c } = ctx;
   const sorted = sortFindings(findings);
@@ -357,11 +392,15 @@ export function renderTty(report: CombinedReport, opts: TtyOptions = {}): string
     `${c.bold("SECOND WORLD")} ${c.dim(`run ${report.runId}`)} ${c.dim(`${ctx.sym.dot} ${fmtDuration(report.durationMs)} ${ctx.sym.dot} ${report.toolVersion}`)}`,
   );
   const verdictLabel = v.passed ? c.bold(c.green(ctx.sym.pass)) : c.bold(c.red(ctx.sym.failLabel));
-  out.push(`${verdictLabel} ${c.dim(`(exit ${v.exitCode}, fail-on ${report.failOn})`)} ${v.reasons.join("; ")}`);
+  out.push(
+    `${verdictLabel} ${c.dim(`(exit ${v.exitCode}, fail-on ${report.failOn})`)} ${v.reasons.join("; ")}`,
+  );
 
   for (const r of report.results) {
     out.push("");
-    out.push(`${c.bold(c.cyan(`[${r.engine}]`))} ${statusColor(ctx, r.status)} ${c.dim(fmtDuration(Date.parse(r.endedAt) - Date.parse(r.startedAt)))}`);
+    out.push(
+      `${c.bold(c.cyan(`[${r.engine}]`))} ${statusColor(ctx, r.status)} ${c.dim(fmtDuration(Date.parse(r.endedAt) - Date.parse(r.startedAt)))}`,
+    );
     if (isPerformanceData(r.data)) renderPerformance(ctx, r.data, out);
     else {
       const blocks = dataBlocks(r);
@@ -372,7 +411,12 @@ export function renderTty(report: CombinedReport, opts: TtyOptions = {}): string
     if (r.limitations.length > 0) {
       out.push(c.bold("Limitations"));
       for (const l of r.limitations) {
-        const tag = l.impact === "invalidates" ? c.red(l.impact) : l.impact === "reduces-confidence" ? c.yellow(l.impact) : c.dim(l.impact);
+        const tag =
+          l.impact === "invalidates"
+            ? c.red(l.impact)
+            : l.impact === "reduces-confidence"
+              ? c.yellow(l.impact)
+              : c.dim(l.impact);
         out.push(`  ${ctx.sym.bullet} ${l.message} ${c.dim(`[${l.code}]`)} ${tag}`);
       }
     }

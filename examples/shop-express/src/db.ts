@@ -57,7 +57,8 @@ export function seedReviews(): Review[] {
   const out: Review[] = [];
   let id = 1;
   for (let p = 1; p <= 20; p++) {
-    for (let k = 0; k < 3; k++) out.push({ id: id++, productId: p, rating: 1 + ((p + k) % 5), text: `Review ${k} of ${p}` });
+    for (let k = 0; k < 3; k++)
+      out.push({ id: id++, productId: p, rating: 1 + ((p + k) % 5), text: `Review ${k} of ${p}` });
   }
   return out;
 }

@@ -63,7 +63,9 @@ export async function waitForReady(url: string, timeoutMs = 10_000): Promise<voi
   let lastErr: unknown;
   while (performance.now() < deadline) {
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(Math.max(100, Math.min(2000, deadline - performance.now()))) });
+      const r = await fetch(url, {
+        signal: AbortSignal.timeout(Math.max(100, Math.min(2000, deadline - performance.now()))),
+      });
       await r.arrayBuffer();
       if (r.status < 500) return;
       lastErr = new Error(`status ${r.status}`);

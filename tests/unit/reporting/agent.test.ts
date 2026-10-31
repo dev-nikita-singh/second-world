@@ -55,18 +55,107 @@ function makeAgentData(over: Partial<AgentData> = {}): AgentData {
         minimized: false,
         curl: [`curl -sS 'http://127.0.0.1:3000/orders/ord_1' -H "Authorization: $SW_AUTH_OTHER"`],
       }),
-      summary({ id: "a3", fingerprint: "fp-slow", ruleId: "agent/slow-response", classification: "observation", severity: "low", title: "Slow login", technique: "boundary", operation: "POST /auth/login", flaky: false, replays: 0, failures: 0, curl: [] }),
+      summary({
+        id: "a3",
+        fingerprint: "fp-slow",
+        ruleId: "agent/slow-response",
+        classification: "observation",
+        severity: "low",
+        title: "Slow login",
+        technique: "boundary",
+        operation: "POST /auth/login",
+        flaky: false,
+        replays: 0,
+        failures: 0,
+        curl: [],
+      }),
     ],
-    coverage: { percent: 62.5, documented: { observed: 20, total: 32 }, bits: { status: 20, branch: 7, param: 11, trans: 4 } },
+    coverage: {
+      percent: 62.5,
+      documented: { observed: 20, total: 32 },
+      bits: { status: 20, branch: 7, param: 11, trans: 4 },
+    },
     hypotheses: [
-      { iteration: 1, arm: "POST /orders|idempotency-concurrent", technique: "idempotency-concurrent", operation: "POST /orders", source: "heuristic", title: "same key x2 concurrently", hypothesis: "Concurrent duplicates are created", fingerprint: "sc1", outcome: "confirmed", requests: 12, newCoverage: 1, failures: ["fp-idem"] },
-      { iteration: 2, arm: "GET /orders/{id}|ownership", technique: "ownership", operation: "GET /orders/{id}", source: "heuristic", title: "bob reads alice's order", hypothesis: "Ownership is not checked", fingerprint: "sc2", outcome: "flaky", requests: 9, newCoverage: 0, failures: ["fp-bola"] },
-      { iteration: 3, arm: "GET /products|boundary", technique: "boundary", operation: "GET /products", source: "heuristic", title: "huge page", hypothesis: "Large page sizes crash", fingerprint: "sc3", outcome: "not-reproduced", reason: "0/3 replays failed", requests: 4, newCoverage: 0, failures: [] },
-      { iteration: 4, arm: "POST /cart/items|lifecycle", technique: "lifecycle", operation: "POST /cart/items", source: "heuristic", title: "add after delete", hypothesis: "State machine allows it", fingerprint: "sc4", outcome: "inconclusive", reason: "rate limited", requests: 2, newCoverage: 0, failures: [] },
-      { iteration: 5, arm: "POST /auth/login|boundary", technique: "boundary", operation: "POST /auth/login", source: "heuristic", title: "long password", hypothesis: "Slow hashing", fingerprint: "sc5", outcome: "observation", requests: 3, newCoverage: 2, failures: ["fp-slow"] },
+      {
+        iteration: 1,
+        arm: "POST /orders|idempotency-concurrent",
+        technique: "idempotency-concurrent",
+        operation: "POST /orders",
+        source: "heuristic",
+        title: "same key x2 concurrently",
+        hypothesis: "Concurrent duplicates are created",
+        fingerprint: "sc1",
+        outcome: "confirmed",
+        requests: 12,
+        newCoverage: 1,
+        failures: ["fp-idem"],
+      },
+      {
+        iteration: 2,
+        arm: "GET /orders/{id}|ownership",
+        technique: "ownership",
+        operation: "GET /orders/{id}",
+        source: "heuristic",
+        title: "bob reads alice's order",
+        hypothesis: "Ownership is not checked",
+        fingerprint: "sc2",
+        outcome: "flaky",
+        requests: 9,
+        newCoverage: 0,
+        failures: ["fp-bola"],
+      },
+      {
+        iteration: 3,
+        arm: "GET /products|boundary",
+        technique: "boundary",
+        operation: "GET /products",
+        source: "heuristic",
+        title: "huge page",
+        hypothesis: "Large page sizes crash",
+        fingerprint: "sc3",
+        outcome: "not-reproduced",
+        reason: "0/3 replays failed",
+        requests: 4,
+        newCoverage: 0,
+        failures: [],
+      },
+      {
+        iteration: 4,
+        arm: "POST /cart/items|lifecycle",
+        technique: "lifecycle",
+        operation: "POST /cart/items",
+        source: "heuristic",
+        title: "add after delete",
+        hypothesis: "State machine allows it",
+        fingerprint: "sc4",
+        outcome: "inconclusive",
+        reason: "rate limited",
+        requests: 2,
+        newCoverage: 0,
+        failures: [],
+      },
+      {
+        iteration: 5,
+        arm: "POST /auth/login|boundary",
+        technique: "boundary",
+        operation: "POST /auth/login",
+        source: "heuristic",
+        title: "long password",
+        hypothesis: "Slow hashing",
+        fingerprint: "sc5",
+        outcome: "observation",
+        requests: 3,
+        newCoverage: 2,
+        failures: ["fp-slow"],
+      },
     ],
     rejected: [
-      { source: "history", arm: "DELETE /admin|privilege", title: "drop all", reasons: ["operation not in contract", "destructive without approval"] },
+      {
+        source: "history",
+        arm: "DELETE /admin|privilege",
+        title: "drop all",
+        reasons: ["operation not in contract", "destructive without approval"],
+      },
       { source: "heuristic", reasons: ["budget exhausted"] },
     ],
     rejectedTotal: 25,
@@ -84,7 +173,9 @@ function makeAgentData(over: Partial<AgentData> = {}): AgentData {
         operation: "POST /orders",
         title: "idempotency race",
         filename: "agent-idempotency-key-race-post-orders.test.ts",
-        vitest: Array.from({ length: 20 }, (_, i) => (i === 3 ? "const auth = process.env.SW_AUTH_USER;" : `// line ${i}`)).join("\n"),
+        vitest: Array.from({ length: 20 }, (_, i) =>
+          i === 3 ? "const auth = process.env.SW_AUTH_USER;" : `// line ${i}`,
+        ).join("\n"),
         config: "regression: [{ /* scenario */ }]",
       },
     ],
@@ -94,11 +185,42 @@ function makeAgentData(over: Partial<AgentData> = {}): AgentData {
 }
 
 const agentFindings = () => [
-  makeFinding({ id: "f1", fingerprint: "fp-idem", engine: "agent", category: "bug", ruleId: "agent/idempotency-key-race", severity: "high", classification: "reproduced-defect", title: "Concurrent duplicates", affected: ["POST /orders"] }),
-  makeFinding({ id: "f2", fingerprint: "fp-bola", engine: "agent", category: "security", ruleId: "bugs/bola", severity: "critical", classification: "reproduced-defect", title: "BOLA", affected: ["GET /orders/{id}"] }),
-  makeFinding({ id: "f3", fingerprint: "fp-slow", engine: "agent", category: "performance", ruleId: "agent/slow-response", severity: "low", classification: "observation", title: "Slow login", affected: ["POST /auth/login"] }),
+  makeFinding({
+    id: "f1",
+    fingerprint: "fp-idem",
+    engine: "agent",
+    category: "bug",
+    ruleId: "agent/idempotency-key-race",
+    severity: "high",
+    classification: "reproduced-defect",
+    title: "Concurrent duplicates",
+    affected: ["POST /orders"],
+  }),
+  makeFinding({
+    id: "f2",
+    fingerprint: "fp-bola",
+    engine: "agent",
+    category: "security",
+    ruleId: "bugs/bola",
+    severity: "critical",
+    classification: "reproduced-defect",
+    title: "BOLA",
+    affected: ["GET /orders/{id}"],
+  }),
+  makeFinding({
+    id: "f3",
+    fingerprint: "fp-slow",
+    engine: "agent",
+    category: "performance",
+    ruleId: "agent/slow-response",
+    severity: "low",
+    classification: "observation",
+    title: "Slow login",
+    affected: ["POST /auth/login"],
+  }),
 ];
-const agentResult = (data = makeAgentData()) => makeResult({ engine: "agent", status: "failed", data, findings: agentFindings() });
+const agentResult = (data = makeAgentData()) =>
+  makeResult({ engine: "agent", status: "failed", data, findings: agentFindings() });
 
 describe("agent rendering", () => {
   it("guard", () => {
@@ -173,7 +295,13 @@ describe("agent rendering", () => {
   it("junit: one case per hypothesis; confirmed defects at/above fail-on fail", () => {
     const xml = renderReport([agentResult()], "junit", { failOn: "high" });
     const names = [...xml.matchAll(/<testcase name="([^"]+)" classname="([^"]+)"/g)].map((m) => m[2]);
-    expect(names).toEqual(["agent.idempotency-concurrent", "agent.ownership", "agent.boundary", "agent.lifecycle", "agent.boundary"]);
+    expect(names).toEqual([
+      "agent.idempotency-concurrent",
+      "agent.ownership",
+      "agent.boundary",
+      "agent.lifecycle",
+      "agent.boundary",
+    ]);
     expect(xml).toContain('tests="5" failures="2" errors="0" skipped="1"');
     expect(xml).toContain('<failure message="confirmed 3/3: [high] agent/idempotency-key-race"');
     expect(xml).toContain('<failure message="flaky 2/5: [critical] bugs/bola"');
@@ -184,7 +312,15 @@ describe("agent rendering", () => {
   it("sarif: operation as logical location + replay properties", () => {
     const sarif = JSON.parse(renderReport([agentResult()], "sarif"));
     const r = (sarif.runs[0].results as any[]).find((x) => x.ruleId === "agent/idempotency-key-race");
-    expect(r.locations[0].logicalLocations[0]).toEqual({ name: "POST /orders", fullyQualifiedName: "POST /orders", kind: "resource" });
-    expect(r.properties).toMatchObject({ operation: "POST /orders", technique: "idempotency-concurrent", replay: { failures: 3, replays: 3 } });
+    expect(r.locations[0].logicalLocations[0]).toEqual({
+      name: "POST /orders",
+      fullyQualifiedName: "POST /orders",
+      kind: "resource",
+    });
+    expect(r.properties).toMatchObject({
+      operation: "POST /orders",
+      technique: "idempotency-concurrent",
+      replay: { failures: 3, replays: 3 },
+    });
   });
 });

@@ -23,14 +23,23 @@ describe("probe parsers", () => {
     expect(parseMemLimit("garbage")).toBeUndefined();
   });
   it("fd limit", () => {
-    const limits = "Limit Soft Limit Hard Limit Units\nMax open files            1024                 1048576              files\n";
+    const limits =
+      "Limit Soft Limit Hard Limit Units\nMax open files            1024                 1048576              files\n";
     expect(parseFdLimit(limits)).toBe(1024);
     expect(parseFdLimit("Max open files unlimited unlimited files")).toBeUndefined();
     expect(parseFdLimit(null)).toBeUndefined();
   });
   it("terminal detection honours NO_COLOR / FORCE_COLOR / TERM=dumb", () => {
-    expect(detectTerminal({ NO_COLOR: "1" }, { isTTY: true, columns: 100 })).toMatchObject({ tty: true, color: false, width: 100 });
-    expect(detectTerminal({ FORCE_COLOR: "1" }, { isTTY: false })).toMatchObject({ tty: false, color: true, width: 80 });
+    expect(detectTerminal({ NO_COLOR: "1" }, { isTTY: true, columns: 100 })).toMatchObject({
+      tty: true,
+      color: false,
+      width: 100,
+    });
+    expect(detectTerminal({ FORCE_COLOR: "1" }, { isTTY: false })).toMatchObject({
+      tty: false,
+      color: true,
+      width: 80,
+    });
     expect(detectTerminal({ FORCE_COLOR: "0" }, { isTTY: true })).toMatchObject({ color: false });
     expect(detectTerminal({ TERM: "dumb" }, { isTTY: true })).toMatchObject({ color: false });
     expect(detectTerminal({}, { isTTY: true })).toMatchObject({ color: true });
@@ -39,7 +48,13 @@ describe("probe parsers", () => {
 
 describe("probeEnvironment", () => {
   it("cheap mode: no tools, full shape, never throws", async () => {
-    const r = await probeEnvironment({ env: { HTTPS_PROXY: "http://user:pw123456@proxy:8080", NO_PROXY: "localhost, .internal", NODE_EXTRA_CA_CERTS: "/x.pem" } });
+    const r = await probeEnvironment({
+      env: {
+        HTTPS_PROXY: "http://user:pw123456@proxy:8080",
+        NO_PROXY: "localhost, .internal",
+        NODE_EXTRA_CA_CERTS: "/x.pem",
+      },
+    });
     expect(r.os.platform).toBe(process.platform);
     expect(r.runtime.name).toBe("node");
     expect(r.runtime.version).toBe(process.versions.node);
@@ -87,7 +102,10 @@ describe("probeEnvironment", () => {
   it("quick mode reports tools as not probed, not as missing (sw-qa wave 5)", async () => {
     const quick = doctorChecks(await probeEnvironment({ env: {} }));
     for (const t of ["git", "docker", "toxiproxy", "k6"]) {
-      expect(quick.find((c) => c.id === `tool.${t}`)).toMatchObject({ status: "info", label: expect.stringMatching(/not probed/) });
+      expect(quick.find((c) => c.id === `tool.${t}`)).toMatchObject({
+        status: "info",
+        label: expect.stringMatching(/not probed/),
+      });
     }
     const full = doctorChecks(await probeEnvironment({ full: true, env: {}, runTool: async () => null }));
     expect(full.find((c) => c.id === "tool.git")).toMatchObject({ status: "warn", label: "git not found" });

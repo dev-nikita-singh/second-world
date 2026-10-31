@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError, ExitCode, SafetyError } from "../../../src/core/errors.js";
 import { computeExitCode, exitCodeForError, isFailOn } from "../../../src/engines/reporting/exit-code.js";
-import { combineResults, computeVerdict, type FailOn, sortFindings } from "../../../src/engines/reporting/model.js";
+import {
+  combineResults,
+  computeVerdict,
+  type FailOn,
+  sortFindings,
+} from "../../../src/engines/reporting/model.js";
 import { makeFinding, makePerfData, makeResult, makeThreshold } from "../../fixtures/reports.js";
 
 const sevs = ["critical", "high", "medium", "low", "info"] as const;
@@ -24,7 +29,10 @@ describe("computeExitCode (evidence-and-history §A.6)", () => {
     };
     for (const s of sevs) {
       for (const l of levels) {
-        const r = makeResult({ engine: "bugs", findings: [makeFinding({ severity: s, classification: "reproduced-defect" })] });
+        const r = makeResult({
+          engine: "bugs",
+          findings: [makeFinding({ severity: s, classification: "reproduced-defect" })],
+        });
         expect(computeExitCode([r], l), `${s} @ ${l}`).toBe(expected[s][l]);
       }
     }
@@ -50,9 +58,13 @@ describe("computeExitCode (evidence-and-history §A.6)", () => {
   });
 
   it("status precedence: cancelled 130 > error 70 > failures 1", () => {
-    const failing = makeResult({ findings: [makeFinding({ severity: "critical", classification: "reproduced-defect" })] });
+    const failing = makeResult({
+      findings: [makeFinding({ severity: "critical", classification: "reproduced-defect" })],
+    });
     expect(computeExitCode([failing, makeResult({ status: "error" })])).toBe(70);
-    expect(computeExitCode([failing, makeResult({ status: "error" }), makeResult({ status: "cancelled" })])).toBe(130);
+    expect(
+      computeExitCode([failing, makeResult({ status: "error" }), makeResult({ status: "cancelled" })]),
+    ).toBe(130);
     expect(computeExitCode([makeResult({ status: "cancelled" })], "never")).toBe(130);
     expect(computeExitCode([makeResult({ status: "failed" })])).toBe(1);
     expect(computeExitCode([makeResult({ status: "failed" })], "never")).toBe(0);
@@ -74,19 +86,36 @@ describe("computeExitCode (evidence-and-history §A.6)", () => {
 
 describe("verdict and combineResults", () => {
   it("explains the failure reasons deterministically", () => {
-    const d = makePerfData({ thresholds: [makeThreshold({ passed: false }), makeThreshold({ expression: "b" })] });
+    const d = makePerfData({
+      thresholds: [makeThreshold({ passed: false }), makeThreshold({ expression: "b" })],
+    });
     const v = computeVerdict(
-      [makeResult({ data: d }), makeResult({ engine: "bugs", findings: [makeFinding({ severity: "high", classification: "reproduced-defect" })] })],
+      [
+        makeResult({ data: d }),
+        makeResult({
+          engine: "bugs",
+          findings: [makeFinding({ severity: "high", classification: "reproduced-defect" })],
+        }),
+      ],
       "high",
     );
-    expect(v).toEqual({ passed: false, exitCode: 1, reasons: ["1 threshold(s) breached", "1 finding(s) at or above severity 'high'"] });
+    expect(v).toEqual({
+      passed: false,
+      exitCode: 1,
+      reasons: ["1 threshold(s) breached", "1 finding(s) at or above severity 'high'"],
+    });
   });
 
   it("combines timestamps, status and meta", () => {
     const rep = combineResults(
       [
         makeResult({ startedAt: "2026-10-29T10:00:05.000Z", endedAt: "2026-10-29T10:00:06.000Z" }),
-        makeResult({ engine: "bugs", status: "partial", startedAt: "2026-10-29T10:00:00.000Z", endedAt: "2026-10-29T10:00:03.000Z" }),
+        makeResult({
+          engine: "bugs",
+          status: "partial",
+          startedAt: "2026-10-29T10:00:00.000Z",
+          endedAt: "2026-10-29T10:00:03.000Z",
+        }),
       ],
       { runId: "R", toolVersion: "1.2.3", configHash: "abc" },
     );

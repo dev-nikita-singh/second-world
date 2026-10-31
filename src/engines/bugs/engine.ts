@@ -592,7 +592,15 @@ export async function executeBugs(input: BugsInput, ctx: EngineContext): Promise
   await s.close();
   const cancelled = ctx.signal.aborted;
   const hasDefect = findings.some((f) => f.classification === "reproduced-defect");
-  const status = cancelled ? "cancelled" : targetUnreachable ? "error" : hasDefect ? "failed" : budgetHit ? "partial" : "passed";
+  const status = cancelled
+    ? "cancelled"
+    : targetUnreachable
+      ? "error"
+      : hasDefect
+        ? "failed"
+        : budgetHit
+          ? "partial"
+          : "passed";
   ctx.events.emit("bugs.done", {
     runId,
     findings: findings.length,

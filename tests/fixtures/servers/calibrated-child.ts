@@ -40,12 +40,18 @@ export interface ChildServerOptions extends CalibratedServerOptions {
   startTimeoutMs?: number;
 }
 
-export async function startCalibratedServerInChild(opts: ChildServerOptions = {}): Promise<ChildCalibratedServer> {
+export async function startCalibratedServerInChild(
+  opts: ChildServerOptions = {},
+): Promise<ChildCalibratedServer> {
   const { startTimeoutMs = 15_000, ...serverOpts } = opts;
-  const child: ChildProcessWithoutNullStreams = spawn(process.execPath, ["--import", TSX_LOADER, ENTRY, JSON.stringify(serverOpts)], {
-    stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true,
-  });
+  const child: ChildProcessWithoutNullStreams = spawn(
+    process.execPath,
+    ["--import", TSX_LOADER, ENTRY, JSON.stringify(serverOpts)],
+    {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    },
+  );
   let stderr = "";
   child.stderr.on("data", (b: Buffer) => {
     stderr = (stderr + b.toString("utf8")).slice(-4000);
@@ -78,7 +84,15 @@ export async function startCalibratedServerInChild(opts: ChildServerOptions = {}
       reject(new Error(`calibrated child exited before ready (code ${child.exitCode})\n${stderr}`));
     });
     lines.on("line", (line) => {
-      let msg: { ready?: boolean; url?: string; port?: number; id?: number; ok?: boolean; value?: unknown; error?: string };
+      let msg: {
+        ready?: boolean;
+        url?: string;
+        port?: number;
+        id?: number;
+        ok?: boolean;
+        value?: unknown;
+        error?: string;
+      };
       try {
         msg = JSON.parse(line) as typeof msg;
       } catch {

@@ -20,7 +20,11 @@ import type { BugFindingSummary } from "../bugs/types.js";
 import { isAgentData } from "./agent.js";
 
 /** Replay summary shared by Bug Hunter and agent findings. */
-type ReplaySummary = Pick<BugFindingSummary, "operation" | "technique" | "failures" | "replays" | "flaky" | "wilson">;
+type ReplaySummary = Pick<
+  BugFindingSummary,
+  "operation" | "technique" | "failures" | "replays" | "flaky" | "wilson"
+>;
+
 import { isBugsData } from "./bugs.js";
 import { type CombinedReport, sortFindings } from "./model.js";
 
@@ -35,7 +39,13 @@ export function sarifLevel(s: Severity): SarifLevel {
 }
 
 /** GitHub's numeric security-severity scale (0..10), used for its severity column. */
-const SECURITY_SEVERITY: Record<Severity, string> = { critical: "9.5", high: "8.0", medium: "5.5", low: "3.0", info: "0.0" };
+const SECURITY_SEVERITY: Record<Severity, string> = {
+  critical: "9.5",
+  high: "8.0",
+  medium: "5.5",
+  low: "3.0",
+  info: "0.0",
+};
 
 export function ruleIdOf(f: Finding): string {
   return f.ruleId ?? `${f.engine}/${f.category}`;
@@ -100,7 +110,12 @@ function result(f: Finding, bugsSummary?: ReplaySummary): Record<string, unknown
     const props = r.properties as Record<string, unknown>;
     props.operation = bugsSummary.operation;
     props.technique = bugsSummary.technique;
-    props.replay = { failures: bugsSummary.failures, replays: bugsSummary.replays, flaky: bugsSummary.flaky, wilson: bugsSummary.wilson };
+    props.replay = {
+      failures: bugsSummary.failures,
+      replays: bugsSummary.replays,
+      flaky: bugsSummary.flaky,
+      wilson: bugsSummary.wilson,
+    };
   }
   return r;
 }
@@ -120,12 +135,16 @@ export function buildSarif(report: CombinedReport): Record<string, unknown> {
     const level = levelOf(f);
     if (existing) {
       const cur = (existing.defaultConfiguration as { level: SarifLevel }).level;
-      if (level === "error" || (level === "warning" && cur === "note")) existing.defaultConfiguration = { level };
+      if (level === "error" || (level === "warning" && cur === "note"))
+        existing.defaultConfiguration = { level };
       continue;
     }
     rules.set(id, {
       id,
-      name: id.replace(/[^A-Za-z0-9]+/g, " ").trim().replace(/\s+(\w)/g, (_m, ch: string) => ch.toUpperCase()),
+      name: id
+        .replace(/[^A-Za-z0-9]+/g, " ")
+        .trim()
+        .replace(/\s+(\w)/g, (_m, ch: string) => ch.toUpperCase()),
       shortDescription: { text: f.title },
       defaultConfiguration: { level },
       properties: {
@@ -148,7 +167,9 @@ export function buildSarif(report: CombinedReport): Record<string, unknown> {
           },
         },
         // No absolute uri: consumers (GitHub, IDEs) resolve %SRCROOT% to the checkout root.
-        originalUriBaseIds: { "%SRCROOT%": { description: { text: "Project root; result paths are relative to it" } } },
+        originalUriBaseIds: {
+          "%SRCROOT%": { description: { text: "Project root; result paths are relative to it" } },
+        },
         automationDetails: { id: `second-world/${report.runId}` },
         invocations: [
           {
@@ -173,7 +194,11 @@ export function renderSarif(report: CombinedReport): string {
  * Logical location for a non-code target: an API operation / route ("POST /orders") or a
  * dependency ("dependency:payments" → name "payments"). Both are SARIF kind "resource".
  */
-export function logicalLocation(target: string): { name: string; fullyQualifiedName: string; kind: "resource" } {
+export function logicalLocation(target: string): {
+  name: string;
+  fullyQualifiedName: string;
+  kind: "resource";
+} {
   const m = /^(dependency|service|node):(.+)$/.exec(target);
   return { name: m ? (m[2] ?? target) : target, fullyQualifiedName: target, kind: "resource" };
 }

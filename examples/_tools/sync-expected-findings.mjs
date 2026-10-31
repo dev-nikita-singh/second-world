@@ -14,7 +14,9 @@ if (!root) throw new Error("usage: sync-expected-findings.mjs <example-dir> [--c
 const file = path.join(root, "expected-findings.json");
 const doc = JSON.parse(fs.readFileSync(file, "utf8"));
 const walk = (d) =>
-  fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+  fs
+    .readdirSync(d, { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
 const markers = new Map();
 for (const f of walk(path.join(root, "src"))) {
   fs.readFileSync(f, "utf8")
@@ -30,10 +32,14 @@ for (const d of doc.defects) {
   const loc = markers.get(d.id);
   if (!loc) problems.push(`no marker for ${d.id}`);
   else if (flag === "--check") {
-    if (d.location?.file !== loc.file || d.location?.line !== loc.line) problems.push(`${d.id}: json ${d.location?.file}:${d.location?.line} != marker ${loc.file}:${loc.line}`);
+    if (d.location?.file !== loc.file || d.location?.line !== loc.line)
+      problems.push(
+        `${d.id}: json ${d.location?.file}:${d.location?.line} != marker ${loc.file}:${loc.line}`,
+      );
   } else d.location = { ...d.location, file: loc.file, line: loc.line };
 }
-for (const id of markers.keys()) if (!doc.defects.some((d) => d.id === id)) problems.push(`marker ${id} has no entry`);
+for (const id of markers.keys())
+  if (!doc.defects.some((d) => d.id === id)) problems.push(`marker ${id} has no entry`);
 if (problems.length) {
   console.error(problems.join("\n"));
   process.exit(1);

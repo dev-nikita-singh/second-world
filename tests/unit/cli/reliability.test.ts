@@ -6,18 +6,27 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseParams, parseRoutes, reliabilityInputFromFlags } from "../../../src/cli/commands/reliability.js";
+import {
+  parseParams,
+  parseRoutes,
+  reliabilityInputFromFlags,
+} from "../../../src/cli/commands/reliability.js";
 import { loadConfig } from "../../../src/core/config/loader.js";
 import { buildReliabilityInput } from "../../../src/core/world.js";
 import { runCli } from "../../helpers/cli.js";
 
-const env = { SW_USER_CONFIG_DIR: join(tmpdir(), "sw-no-user-config"), SW_FAULT_LEDGER: join(mkdtempSync(join(tmpdir(), "sw-ledger-")), "ledger.json") };
+const env = {
+  SW_USER_CONFIG_DIR: join(tmpdir(), "sw-no-user-config"),
+  SW_FAULT_LEDGER: join(mkdtempSync(join(tmpdir(), "sw-ledger-")), "ledger.json"),
+};
 
 describe("reliability flag / config mapping", () => {
   it("params, routes, phases, hypotheses, abort", () => {
     expect(parseParams(["latencyMs=500", "mode=fixed"])).toEqual({ latencyMs: 500, mode: "fixed" });
     expect(() => parseParams(["oops"])).toThrow(/--param/);
-    expect(parseRoutes(["orders=post /orders"])).toEqual([{ name: "orders", method: "POST", path: "/orders" }]);
+    expect(parseRoutes(["orders=post /orders"])).toEqual([
+      { name: "orders", method: "POST", path: "/orders" },
+    ]);
     expect(() => parseRoutes(["orders"])).toThrow(/--route/);
     expect(
       reliabilityInputFromFlags("dependency-latency", {
@@ -55,11 +64,20 @@ describe("reliability flag / config mapping", () => {
       userConfig: false,
       inline: {
         environment: "staging",
-        targets: { api: { url: "http://127.0.0.1:3000" }, payments: { url: "http://127.0.0.1:4010", role: "dependency" } },
-        reliability: { injector: "auto", dependencies: { payments: { proxyListen: 14010, upstream: "payments" } }, steady: "2s" },
+        targets: {
+          api: { url: "http://127.0.0.1:3000" },
+          payments: { url: "http://127.0.0.1:4010", role: "dependency" },
+        },
+        reliability: {
+          injector: "auto",
+          dependencies: { payments: { proxyListen: 14010, upstream: "payments" } },
+          steady: "2s",
+        },
       },
     });
-    expect(buildReliabilityInput(cfg, { scenario: "dependency-5xx", dependency: "payments" }, { seed: 4 })).toEqual({
+    expect(
+      buildReliabilityInput(cfg, { scenario: "dependency-5xx", dependency: "payments" }, { seed: 4 }),
+    ).toEqual({
       target: "http://127.0.0.1:3000",
       scenario: "dependency-5xx",
       dependency: "payments",
@@ -90,9 +108,14 @@ describe("sw reliability (subprocess)", () => {
   it("run without approval (non-interactive) → SW_SAFETY_APPROVAL_REQUIRED, exit 3", async () => {
     const dir = project({
       targets: { api: { url: "http://127.0.0.1:9" } },
-      reliability: { dependencies: { payments: { injector: "builtin", upstream: "http://127.0.0.1:9", listen: 0 } } },
+      reliability: {
+        dependencies: { payments: { injector: "builtin", upstream: "http://127.0.0.1:9", listen: 0 } },
+      },
     });
-    const r = await runCli(["reliability", "run", "dependency-latency", "--dependency", "payments", "--no-history"], { cwd: dir, env });
+    const r = await runCli(
+      ["reliability", "run", "dependency-latency", "--dependency", "payments", "--no-history"],
+      { cwd: dir, env },
+    );
     expect(r.exitCode, r.stderr).toBe(3);
     expect(r.stderr).toMatch(/SW_SAFETY_APPROVAL_REQUIRED/);
   });
@@ -101,9 +124,14 @@ describe("sw reliability (subprocess)", () => {
     const dir = project({
       environment: "production",
       targets: { api: { url: "http://127.0.0.1:9" } },
-      reliability: { dependencies: { payments: { injector: "builtin", upstream: "http://127.0.0.1:9", listen: 0 } } },
+      reliability: {
+        dependencies: { payments: { injector: "builtin", upstream: "http://127.0.0.1:9", listen: 0 } },
+      },
     });
-    const r = await runCli(["--yes", "reliability", "run", "dependency-latency", "--dependency", "payments", "--no-history"], { cwd: dir, env });
+    const r = await runCli(
+      ["--yes", "reliability", "run", "dependency-latency", "--dependency", "payments", "--no-history"],
+      { cwd: dir, env },
+    );
     expect(r.exitCode, r.stderr).toBe(3);
     expect(r.stderr).toMatch(/SW_SAFETY_PRODUCTION/);
   });

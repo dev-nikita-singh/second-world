@@ -46,7 +46,9 @@ export interface EventBus {
   once(event: string, listener: (payload: unknown) => void): () => void;
 }
 
-export type SafetyDecision = { allowed: true } | { allowed: false; code: string; reason: string; hint?: string };
+export type SafetyDecision =
+  | { allowed: true }
+  | { allowed: false; code: string; reason: string; hint?: string };
 
 export interface BudgetRequest {
   maxRps?: number;

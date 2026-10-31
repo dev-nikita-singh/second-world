@@ -81,7 +81,11 @@ const SECRET_PATTERNS: [RegExp, string][] = [
 export function scrubSecrets(s: string): string {
   let r = s;
   for (const re of SECRET_HEADERS) {
-    r = r.replace(re, (_m, pre: string, name: string, sep: string, value: string) => `${pre}${name}${sep}${scrubHeaderValue(name, value)}`);
+    r = r.replace(
+      re,
+      (_m, pre: string, name: string, sep: string, value: string) =>
+        `${pre}${name}${sep}${scrubHeaderValue(name, value)}`,
+    );
   }
   for (const [re, to] of SECRET_PATTERNS) r = r.replace(re, to);
   return r;
@@ -108,7 +112,9 @@ function matrixCell(c: TechniqueCell | undefined): CellLike {
 }
 
 /** "flaky 2/5 (Wilson 95% CI 12%–77%)" or "reproduced 3/3". */
-export function replayText(f: Pick<BugFindingSummary, "classification" | "flaky" | "failures" | "replays" | "wilson">): string {
+export function replayText(
+  f: Pick<BugFindingSummary, "classification" | "flaky" | "failures" | "replays" | "wilson">,
+): string {
   if (f.replays === 0) return f.classification === "observation" ? "observed (not replayed)" : "not replayed";
   const ci = `Wilson 95% CI ${fmtPct(f.wilson.lower)}–${fmtPct(f.wilson.upper)}`;
   if (f.flaky) return `flaky ${f.failures}/${f.replays} (${ci})`;
@@ -153,14 +159,20 @@ export function bugsBlocks(d: BugsData, opts: BugsBlockOptions = {}): Block[] {
         "mutations",
         d.mutationsAllowed
           ? "allowed"
-          : { text: `blocked (${d.requests.mutationsBlocked} mutating requests not sent)`, tone: d.requests.mutationsBlocked > 0 ? "warn" : "muted" },
+          : {
+              text: `blocked (${d.requests.mutationsBlocked} mutating requests not sent)`,
+              tone: d.requests.mutationsBlocked > 0 ? "warn" : "muted",
+            },
       ],
       ["duration", fmtDuration(d.durationMs)],
     ],
   });
 
   if (d.mode === "discovery" || d.draftContract) {
-    const paths = d.draftContract && typeof d.draftContract.paths === "object" && d.draftContract.paths !== null ? Object.keys(d.draftContract.paths).length : 0;
+    const paths =
+      d.draftContract && typeof d.draftContract.paths === "object" && d.draftContract.paths !== null
+        ? Object.keys(d.draftContract.paths).length
+        : 0;
     b.push({
       kind: "text",
       tone: "warn",
@@ -193,7 +205,11 @@ export function bugsBlocks(d: BugsData, opts: BugsBlockOptions = {}): Block[] {
       align: ["l", "l", ...cols.map(() => "r" as const), "l"],
       rows: d.matrix.map((row) => [
         row.operation,
-        row.verdict === "fail" ? { text: "FAIL", tone: "bad" } : row.verdict === "pass" ? { text: "pass", tone: "good" } : { text: "untested", tone: "muted" },
+        row.verdict === "fail"
+          ? { text: "FAIL", tone: "bad" }
+          : row.verdict === "pass"
+            ? { text: "pass", tone: "good" }
+            : { text: "untested", tone: "muted" },
         ...cols.map((t) => matrixCell(cellOf(row, t))),
         Object.entries(row.statuses)
           .sort(([a], [z]) => (a < z ? -1 : 1))
@@ -204,7 +220,11 @@ export function bugsBlocks(d: BugsData, opts: BugsBlockOptions = {}): Block[] {
           .join(" "),
       ]),
     });
-    const undocumented = d.matrix.some((r) => Object.keys(r.statuses).some((s) => r.documentedStatuses.length > 0 && !r.documentedStatuses.includes(s)));
+    const undocumented = d.matrix.some((r) =>
+      Object.keys(r.statuses).some(
+        (s) => r.documentedStatuses.length > 0 && !r.documentedStatuses.includes(s),
+      ),
+    );
     b.push({
       kind: "text",
       tone: "muted",
@@ -219,7 +239,9 @@ export function bugsBlocks(d: BugsData, opts: BugsBlockOptions = {}): Block[] {
       title: `Bug findings (${fs.length})`,
       head: ["classification", "severity", "rule", "operation", "technique", "replays", "seen", "title"],
       rows: fs.map((f) => [
-        f.classification === "reproduced-defect" ? { text: f.classification, tone: "bad" } : { text: f.classification, tone: "muted" },
+        f.classification === "reproduced-defect"
+          ? { text: f.classification, tone: "bad" }
+          : { text: f.classification, tone: "muted" },
         f.severity,
         f.ruleId,
         f.operation,
@@ -232,7 +254,9 @@ export function bugsBlocks(d: BugsData, opts: BugsBlockOptions = {}): Block[] {
   }
 
   const max = opts.maxReproductions ?? 10;
-  const repro = fs.map((f) => ({ f, r: d.reproductions[f.fingerprint] })).filter((x) => x.r && x.r.curl.length > 0);
+  const repro = fs
+    .map((f) => ({ f, r: d.reproductions[f.fingerprint] }))
+    .filter((x) => x.r && x.r.curl.length > 0);
   if (repro.length > 0) {
     b.push({ kind: "heading", level: 3, text: "Reproductions" });
     b.push({
@@ -249,7 +273,12 @@ export function bugsBlocks(d: BugsData, opts: BugsBlockOptions = {}): Block[] {
         lang: "sh",
       });
     }
-    if (repro.length > max) b.push({ kind: "text", tone: "muted", text: `${repro.length - max} more reproduction(s) in the JSON report (data.reproductions).` });
+    if (repro.length > max)
+      b.push({
+        kind: "text",
+        tone: "muted",
+        text: `${repro.length - max} more reproduction(s) in the JSON report (data.reproductions).`,
+      });
   }
   return b;
 }
@@ -258,4 +287,3 @@ export function bugsBlocks(d: BugsData, opts: BugsBlockOptions = {}): Block[] {
 export function cellFailureSummary(c: TechniqueCell): string {
   return `${c.failed} of ${c.cases} case(s) failed, ${c.passed} passed${c.inconclusive > 0 ? `, ${c.inconclusive} inconclusive` : ""}`;
 }
-

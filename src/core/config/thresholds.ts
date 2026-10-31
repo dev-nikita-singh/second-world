@@ -129,7 +129,10 @@ function parseScope(raw: string, expr: string): string {
     if (!m) throw fail(expr, `endpoint scope must be "endpoint.<METHOD /path>", got "${raw}"`);
     return `endpoint.${(m[1] as string).toUpperCase()} ${m[2]}`;
   }
-  throw fail(expr, `unknown metric scope "${raw}" (expected http, scenario.<name> or endpoint.<METHOD /path>)`);
+  throw fail(
+    expr,
+    `unknown metric scope "${raw}" (expected http, scenario.<name> or endpoint.<METHOD /path>)`,
+  );
 }
 
 function parseOp(c: Cursor, expr: string): ThresholdOp {
@@ -173,7 +176,10 @@ function parseValue(raw: string, unit: ThresholdUnit, expr: string): number {
       }
     }
   } catch {
-    throw fail(expr, `invalid value "${s}" for a ${unit === "ms" ? "latency" : unit === "ratio" ? "rate" : unit === "per_s" ? "throughput" : "count"} statistic`);
+    throw fail(
+      expr,
+      `invalid value "${s}" for a ${unit === "ms" ? "latency" : unit === "ratio" ? "rate" : unit === "per_s" ? "throughput" : "count"} statistic`,
+    );
   }
 }
 
@@ -236,7 +242,8 @@ export function parseThresholdEntry(
     }
   }
   let delay = 0;
-  if (obj.delayAbortEval !== undefined) delay = parseDuration(obj.delayAbortEval, `thresholds.${metric}.delayAbortEval`);
+  if (obj.delayAbortEval !== undefined)
+    delay = parseDuration(obj.delayAbortEval, `thresholds.${metric}.delayAbortEval`);
   return { ...t, source: `${metric}: ${e}`, abortOnFail: obj.abortOnFail ?? false, delayAbortEvalMs: delay };
 }
 

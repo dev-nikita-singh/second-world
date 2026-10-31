@@ -7,19 +7,19 @@
  */
 import path from "node:path";
 import type { EngineResult } from "../../core/evidence/schemas.js";
-import { renderJson, writeFileAtomic } from "./json.js";
-import { renderJunit } from "./junit.js";
-import { renderMarkdown } from "./markdown.js";
-import { type CombinedReport, type FailOn, type ReportFormat, type ReportMeta, toReport } from "./model.js";
-import { renderBlocksTty, renderTty } from "./tty.js";
 import type { RunComparison } from "../history/types.js";
 import type { ModelDiff } from "../model/diff.js";
-import { modelDiffBlocks } from "./model-render.js";
 import { comparisonBlocks } from "./blocks.js";
 import { renderBlocksHtml, renderHtml } from "./html.js";
-import { renderBlocksMd } from "./markdown.js";
+import { renderJson, writeFileAtomic } from "./json.js";
+import { renderJunit } from "./junit.js";
+import { renderBlocksMd, renderMarkdown } from "./markdown.js";
+import { type CombinedReport, type FailOn, type ReportFormat, type ReportMeta, toReport } from "./model.js";
+import { modelDiffBlocks } from "./model-render.js";
 import { renderSarif } from "./sarif.js";
+import { renderBlocksTty, renderTty } from "./tty.js";
 
+export { agentBlocks, isAgentData } from "./agent.js";
 export {
   type Block,
   comparisonBlocks,
@@ -28,22 +28,14 @@ export {
   perfBlocks,
   stressBlocks,
 } from "./blocks.js";
-export { htmlEscape, renderBlocksHtml, renderHtml, svgSparkline } from "./html.js";
-export { buildSarif, renderSarif, SARIF_SCHEMA, sarifLevel } from "./sarif.js";
-export { asciiFold, renderBlocksTty, sparkline } from "./tty.js";
-export { renderBlocksMd } from "./markdown.js";
 export { bugsBlocks, isBugsData, replayText, scrubSecrets } from "./bugs.js";
-export { checkSummaries, detectorSummaries, isReliabilityData, reliabilityBlocks } from "./reliability.js";
-export { evolutionBlocks, experimentBlocks, isEvolutionData, isExperimentData } from "./experiments.js";
 export { dataBlocks } from "./dispatch.js";
-export { isModelData, isModelDiff, modelBlocks, modelDiffBlocks } from "./model-render.js";
-export { agentBlocks, isAgentData } from "./agent.js";
-export { isHypothesisFinding, levelOf, logicalLocation } from "./sarif.js";
-
 export { computeExitCode, exitCodeForError, FAIL_ON_VALUES, isFailOn } from "./exit-code.js";
+export { evolutionBlocks, experimentBlocks, isEvolutionData, isExperimentData } from "./experiments.js";
+export { htmlEscape, renderBlocksHtml, renderHtml, svgSparkline } from "./html.js";
 export { renderJson, writeFileAtomic, writeJsonReport } from "./json.js";
 export { renderJunit, xmlEscape } from "./junit.js";
-export { mdEscape, renderMarkdown } from "./markdown.js";
+export { mdEscape, renderBlocksMd, renderMarkdown } from "./markdown.js";
 export {
   type CombinedReport,
   combineResults,
@@ -60,7 +52,26 @@ export {
   toReport,
   type Verdict,
 } from "./model.js";
-export { renderTty, resolveAscii, resolveColor, type TtyOptions } from "./tty.js";
+export { isModelData, isModelDiff, modelBlocks, modelDiffBlocks } from "./model-render.js";
+export { checkSummaries, detectorSummaries, isReliabilityData, reliabilityBlocks } from "./reliability.js";
+export {
+  buildSarif,
+  isHypothesisFinding,
+  levelOf,
+  logicalLocation,
+  renderSarif,
+  SARIF_SCHEMA,
+  sarifLevel,
+} from "./sarif.js";
+export {
+  asciiFold,
+  renderBlocksTty,
+  renderTty,
+  resolveAscii,
+  resolveColor,
+  sparkline,
+  type TtyOptions,
+} from "./tty.js";
 
 export interface RenderOptions {
   failOn?: FailOn;
@@ -112,7 +123,11 @@ const EXT: Record<Exclude<ReportFormat, "tty">, string> = {
 /**
  * Render a System Model diff (`sw model diff`) on its own; json = the ModelDiff as-is.
  */
-export function renderModelDiff(diff: ModelDiff, format: "tty" | "json" | "md" | "html", opts: { color?: boolean; ascii?: boolean } = {}): string {
+export function renderModelDiff(
+  diff: ModelDiff,
+  format: "tty" | "json" | "md" | "html",
+  opts: { color?: boolean; ascii?: boolean } = {},
+): string {
   const blocks = modelDiffBlocks(diff);
   switch (format) {
     case "json":

@@ -15,10 +15,17 @@ describe("errors", () => {
 describe("FindingSchema", () => {
   it("applies defaults and requires evidence", () => {
     const f = FindingSchema.parse({
-      id: "01J", fingerprint: "fp", engine: "performance", category: "performance", title: "slow",
-      severity: "high", classification: "threshold-breach", confidence: 1,
+      id: "01J",
+      fingerprint: "fp",
+      engine: "performance",
+      category: "performance",
+      title: "slow",
+      severity: "high",
+      classification: "threshold-breach",
+      confidence: 1,
       evidence: [{ kind: "threshold", expression: "p95<300ms", actual: 420, passed: false }],
-      firstSeen: "2026-10-29T00:00:00Z", lastSeen: "2026-10-29T00:00:00Z",
+      firstSeen: "2026-10-29T00:00:00Z",
+      lastSeen: "2026-10-29T00:00:00Z",
     });
     expect(f.status).toBe("open");
     expect(f.occurrences).toBe(1);

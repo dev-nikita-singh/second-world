@@ -29,7 +29,10 @@ const BUDGET_KEYS: Record<string, string> = {
 /** `--budget requests=500,iterations=100,time=2m,patience=30` → budget object (durations in ms). */
 export function parseBudget(spec: string): Obj {
   const out: Obj = {};
-  for (const part of spec.split(",").map((p) => p.trim()).filter(Boolean)) {
+  for (const part of spec
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean)) {
     const eq = part.indexOf("=");
     const key = eq > 0 ? part.slice(0, eq).trim().toLowerCase() : "";
     const raw = eq > 0 ? part.slice(eq + 1).trim() : "";
@@ -42,7 +45,8 @@ export function parseBudget(spec: string): Obj {
     if (target === "maxDuration") out[target] = parseDuration(raw, `--budget ${key}`);
     else {
       const n = Number(raw);
-      if (!Number.isInteger(n) || n < 1) throw new ConfigError("SW_CONFIG_FLAG", `--budget ${key} must be a positive integer, got "${raw}"`);
+      if (!Number.isInteger(n) || n < 1)
+        throw new ConfigError("SW_CONFIG_FLAG", `--budget ${key} must be a positive integer, got "${raw}"`);
       out[target] = n;
     }
   }
@@ -51,7 +55,10 @@ export function parseBudget(spec: string): Obj {
 
 function list(v: unknown): string[] | undefined {
   if (v === undefined) return undefined;
-  const arr = (Array.isArray(v) ? v : [v]).flatMap((x) => String(x).split(",")).map((x) => x.trim()).filter(Boolean);
+  const arr = (Array.isArray(v) ? v : [v])
+    .flatMap((x) => String(x).split(","))
+    .map((x) => x.trim())
+    .filter(Boolean);
   return arr.length ? arr : undefined;
 }
 
@@ -68,7 +75,8 @@ export function agentInputFromFlags(o: Obj, cwd: string): Obj {
   if (o.allowDestructive === true) input.allowDestructive = true;
   const include = list(o.include);
   const exclude = list(o.exclude);
-  if (include || exclude) input.operations = { ...(include ? { include } : {}), ...(exclude ? { exclude } : {}) };
+  if (include || exclude)
+    input.operations = { ...(include ? { include } : {}), ...(exclude ? { exclude } : {}) };
   const ctx = o.context as string[] | undefined;
   if (ctx?.length) input.context = { files: ctx.map((f) => resolve(cwd, f)) };
   return input;
@@ -107,14 +115,25 @@ export async function agentCommand(o: Obj, g: GlobalOptions): Promise<void> {
     const flags = agentInputFromFlags(o, world.config.invocationCwd ?? world.config.cwd);
     const plan = world.buildInput("agent", flags);
     if (typeof plan.target !== "string") {
-      throw new ConfigError("SW_CONFIG_NO_TARGET", "No agent target given", { hint: "Pass --target, or set agent.target / bugs.target / targets in sw.config" });
+      throw new ConfigError("SW_CONFIG_NO_TARGET", "No agent target given", {
+        hint: "Pass --target, or set agent.target / bugs.target / targets in sw.config",
+      });
     }
     await world.safety.preflight(plan.target);
     if (g.dryRun) {
       const { parseAgentInput } = await import("../../engines/agent/index.js");
       const parsed = parseAgentInput(plan);
-      const view = { ...parsed, auth: parsed.auth ? { ...parsed.auth, roles: Object.keys(parsed.auth.roles ?? {}) } : undefined };
-      out(JSON.stringify(world.redactor.redactObject({ dryRun: true, target: plan.target, input: view }), null, 2));
+      const view = {
+        ...parsed,
+        auth: parsed.auth ? { ...parsed.auth, roles: Object.keys(parsed.auth.roles ?? {}) } : undefined,
+      };
+      out(
+        JSON.stringify(
+          world.redactor.redactObject({ dryRun: true, target: plan.target, input: view }),
+          null,
+          2,
+        ),
+      );
       process.exitCode = 0;
       return;
     }
@@ -122,7 +141,11 @@ export async function agentCommand(o: Obj, g: GlobalOptions): Promise<void> {
     if (!g.quiet && !o.json) {
       world.on("agent.done", (p) => {
         const d = p as { iterations?: number; findings?: number; defects?: number; stopReason?: string };
-        err(s.dim(`agent: ${d.iterations ?? 0} iterations, ${d.findings ?? 0} finding(s), ${d.defects ?? 0} reproduced defect(s); stop: ${d.stopReason ?? "?"}`));
+        err(
+          s.dim(
+            `agent: ${d.iterations ?? 0} iterations, ${d.findings ?? 0} finding(s), ${d.defects ?? 0} reproduced defect(s); stop: ${d.stopReason ?? "?"}`,
+          ),
+        );
       });
     }
     const result = (await world.agent.run(flags)) as EngineResult<{ suggestedTests?: SuggestedTestLike[] }>;
@@ -132,10 +155,15 @@ export async function agentCommand(o: Obj, g: GlobalOptions): Promise<void> {
       const files = exportSuggestedTests(dir, tests);
       if (!g.quiet) {
         err(s.dim(`exported ${files.length} suggested test(s) to ${dir}`));
-        for (const t of tests) if (t.config) err(s.dim(`  agent.regression snippet for ${t.filename}:\n${t.config}`));
+        for (const t of tests)
+          if (t.config) err(s.dim(`  agent.regression snippet for ${t.filename}:\n${t.config}`));
       }
     }
-    await finishRun(world, result as EngineResult, g, { json: o.json === true, history: o.history as boolean | undefined, label: "agent" });
+    await finishRun(world, result as EngineResult, g, {
+      json: o.json === true,
+      history: o.history as boolean | undefined,
+      label: "agent",
+    });
   } finally {
     removeSignals();
     await world.close();

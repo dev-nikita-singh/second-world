@@ -153,7 +153,10 @@ describe("HAR 1.2 export of reproductions", () => {
       wait: 2,
       receive: 1,
     });
-    expect(harTimings({ phases: { waitMs: 0, serverMs: 3, transferMs: 1 } }, 3.9).receive).toBeCloseTo(0.9, 6);
+    expect(harTimings({ phases: { waitMs: 0, serverMs: 3, transferMs: 1 } }, 3.9).receive).toBeCloseTo(
+      0.9,
+      6,
+    );
   });
 
   it("the validator checks timings (ssl inside connect, -1 only for optional phases, sum = time)", () => {

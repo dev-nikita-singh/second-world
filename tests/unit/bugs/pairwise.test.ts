@@ -193,7 +193,9 @@ describe("pairwiseCases (params + body in one covering array)", () => {
     expect(strip(a)).toEqual(strip(b));
     expect(a.length).toBeGreaterThan(5);
     expect(a.every((c) => c.steps[0]?.expect === "valid")).toBe(true);
-    const kinds = new Set(a.map((c) => (c.steps[0]?.request.body as { value: { kind: string } } | undefined)?.value.kind));
+    const kinds = new Set(
+      a.map((c) => (c.steps[0]?.request.body as { value: { kind: string } } | undefined)?.value.kind),
+    );
     expect(kinds).toEqual(new Set(["standard", "express", "pickup"]));
     const dry = new Set(a.map((c) => JSON.stringify(c.steps[0]?.request.query.dryRun)));
     expect(dry.size).toBe(3); // true, false, absent

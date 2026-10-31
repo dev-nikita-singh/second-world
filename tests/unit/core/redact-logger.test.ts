@@ -20,14 +20,14 @@ describe("redactString patterns", () => {
       "aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
       "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     ],
-    [
-      "pem",
-      "x -----BEGIN RSA PRIVATE KEY-----\nMIIEow\nabc\n-----END RSA PRIVATE KEY----- y",
-      "MIIEow",
-    ],
+    ["pem", "x -----BEGIN RSA PRIVATE KEY-----\nMIIEow\nabc\n-----END RSA PRIVATE KEY----- y", "MIIEow"],
     ["basic-auth url", "connect https://admin:s3cr3tP4ss@db.example.com/x", "s3cr3tP4ss"],
     ["conn string", "Server=x;User Id=sa;Password=Hunter2Pass;Database=y", "Hunter2Pass"],
-    ["anthropic", "ANTHROPIC=sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAA", "sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAA"],
+    [
+      "anthropic",
+      "ANTHROPIC=sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    ],
     ["github", "ghp_abcdefghijklmnopqrstuvwxyz0123456789", "ghp_abcdefghijklmnopqrstuvwxyz0123456789"],
   ];
   it.each(cases)("%s", (_n, input, secret) => {
@@ -63,11 +63,16 @@ describe("redactString patterns", () => {
   });
   it("property: registered secrets never appear in output", () => {
     fc.assert(
-      fc.property(fc.string({ minLength: 4, maxLength: 40 }), fc.string(), fc.string(), (secret, pre, post) => {
-        const rr = createRedactor({ secrets: [secret] });
-        const out = rr.redactString(`${pre}${secret}${post}`);
-        expect(out.includes(secret)).toBe(false);
-      }),
+      fc.property(
+        fc.string({ minLength: 4, maxLength: 40 }),
+        fc.string(),
+        fc.string(),
+        (secret, pre, post) => {
+          const rr = createRedactor({ secrets: [secret] });
+          const out = rr.redactString(`${pre}${secret}${post}`);
+          expect(out.includes(secret)).toBe(false);
+        },
+      ),
     );
   });
   it("property: never throws on arbitrary input", () => {
@@ -81,7 +86,11 @@ describe("redactString patterns", () => {
 
 describe("redactHeaders / redactObject", () => {
   it("headers by name, case-insensitive", () => {
-    const h = r.redactHeaders({ Authorization: "Basic dXNlcjpwYXNz", "X-Request-Id": "abc", "set-cookie": ["a=1", "b=2"] });
+    const h = r.redactHeaders({
+      Authorization: "Basic dXNlcjpwYXNz",
+      "X-Request-Id": "abc",
+      "set-cookie": ["a=1", "b=2"],
+    });
     expect(h.Authorization).toMatch(MARK);
     expect(h["X-Request-Id"]).toBe("abc");
     expect((h["set-cookie"] as string[]).every((x) => MARK.test(x))).toBe(true);
@@ -126,7 +135,9 @@ describe("logger", () => {
   });
   it("text mode + child bindings", () => {
     const lines: string[] = [];
-    const log = createLogger({ level: "trace", write: (l) => lines.push(l) }).child({ engine: "performance" });
+    const log = createLogger({ level: "trace", write: (l) => lines.push(l) }).child({
+      engine: "performance",
+    });
     log.warn("slow", { p95: 12 });
     expect(lines[0]).toMatch(/^WARN {2}slow engine=performance p95=12\n$/);
   });
@@ -161,7 +172,8 @@ describe("camelCase sensitive keys (sw-coverage wave 5)", () => {
       author: "bob",
       authorId: "a1",
     }) as Record<string, string>;
-    for (const k of ["accessToken", "refreshToken", "idToken", "userPassword", "sessionId"]) expect(out[k], k).toMatch(/^«redacted:/);
+    for (const k of ["accessToken", "refreshToken", "idToken", "userPassword", "sessionId"])
+      expect(out[k], k).toMatch(/^«redacted:/);
     expect(out).toMatchObject({ tokenCount: "5", maxTokens: "100", author: "bob", authorId: "a1" });
   });
 });
@@ -169,9 +181,13 @@ describe("camelCase sensitive keys (sw-coverage wave 5)", () => {
 describe("sensitive names in free text (sw-coverage wave 5)", () => {
   it("access_token=<32 hex> is redacted despite low entropy; look-alikes are kept", () => {
     const r = createRedactor({});
-    expect(r.redactString("GET /cb?access_token=8f14e45fceea167a5a36dedd4bea2543&x=1")).not.toContain("8f14e45f");
+    expect(r.redactString("GET /cb?access_token=8f14e45fceea167a5a36dedd4bea2543&x=1")).not.toContain(
+      "8f14e45f",
+    );
     expect(r.redactString('api_key: "0123456789abcdef0123456789abcdef"')).not.toContain("0123456789abcdef");
     expect(r.redactString("monkey=bananabananabananabanana")).toBe("monkey=bananabananabananabanana");
-    expect(r.redactString("token_count=123456789012345678901234")).toBe("token_count=123456789012345678901234");
+    expect(r.redactString("token_count=123456789012345678901234")).toBe(
+      "token_count=123456789012345678901234",
+    );
   });
 });

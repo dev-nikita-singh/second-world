@@ -2,7 +2,12 @@
  * `sw config print|validate|schema`. See docs/08-configuration.md §1.
  */
 import { resolve } from "node:path";
-import { loadConfig, type LoadConfigOptions, maskConfig, type ResolvedConfig } from "../../core/config/loader.js";
+import {
+  type LoadConfigOptions,
+  loadConfig,
+  maskConfig,
+  type ResolvedConfig,
+} from "../../core/config/loader.js";
 import { configJsonSchema } from "../../core/config/schema.js";
 import { ConfigError } from "../../core/errors.js";
 import type { GlobalOptions } from "../main.js";
@@ -11,7 +16,11 @@ import { colorEnabled, err, out, style } from "../output.js";
 /** Maps global CLI flags to config overrides (highest precedence). */
 export function globalOverrides(g: GlobalOptions): Record<string, unknown> {
   const report: Record<string, unknown> = {};
-  if (g.format) report.formats = g.format.split(",").map((s) => s.trim()).filter(Boolean);
+  if (g.format)
+    report.formats = g.format
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
   // Typed on the command line → relative to the shell cwd (docs/08 §1), not the config folder.
   if (g.out) report.outDir = resolve(process.cwd(), g.out);
   if (g.failOn) report.failOn = g.failOn;
@@ -23,7 +32,8 @@ export function globalOverrides(g: GlobalOptions): Record<string, unknown> {
 export function parseSeed(g: GlobalOptions): number | undefined {
   if (g.seed === undefined) return undefined;
   const n = Number(g.seed);
-  if (!Number.isInteger(n)) throw new ConfigError("SW_CONFIG_FLAG", `--seed must be an integer, got "${g.seed}"`);
+  if (!Number.isInteger(n))
+    throw new ConfigError("SW_CONFIG_FLAG", `--seed must be an integer, got "${g.seed}"`);
   return n;
 }
 
@@ -43,11 +53,19 @@ async function toYaml(v: unknown): Promise<string> {
   return YAML.stringify(v);
 }
 
-export async function configPrint(o: { resolved?: boolean; json?: boolean }, g: GlobalOptions): Promise<void> {
+export async function configPrint(
+  o: { resolved?: boolean; json?: boolean },
+  g: GlobalOptions,
+): Promise<void> {
   const r = await loadConfig(loadOptionsFromGlobals(g));
   for (const w of r.warnings) err(`warning: ${w}`);
   if (o.resolved) {
-    const payload = { configFile: r.configFile ?? null, profile: r.profile ?? null, config: maskConfig(r.config), origins: r.origins };
+    const payload = {
+      configFile: r.configFile ?? null,
+      profile: r.profile ?? null,
+      config: maskConfig(r.config),
+      origins: r.origins,
+    };
     out(o.json ? JSON.stringify(payload, null, 2) : await toYaml(payload));
   } else {
     const masked = maskConfig(r.raw);
@@ -86,7 +104,9 @@ export async function validateEngineSections(r: ResolvedConfig): Promise<void> {
       parseThresholds(input.thresholds as Parameters<typeof parseThresholds>[0]);
     } catch (e) {
       if (e instanceof ConfigError) {
-        throw new ConfigError("SW_CONFIG_THRESHOLD", `performance.${e.message}`, { ...(e.hint ? { hint: e.hint } : {}) });
+        throw new ConfigError("SW_CONFIG_THRESHOLD", `performance.${e.message}`, {
+          ...(e.hint ? { hint: e.hint } : {}),
+        });
       }
       throw e;
     }

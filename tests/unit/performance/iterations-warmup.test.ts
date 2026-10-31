@@ -6,7 +6,11 @@
  *   computed from "no data"; it is an invalid run instead (status error, no breach findings).
  */
 import { describe, expect, it } from "vitest";
-import type { HttpExecutor, HttpRequestSpec, HttpResult } from "../../../src/adapters/http/undici-executor.js";
+import type {
+  HttpExecutor,
+  HttpRequestSpec,
+  HttpResult,
+} from "../../../src/adapters/http/undici-executor.js";
 import { parsePerformanceInput, runPerformance } from "../../../src/engines/performance/index.js";
 
 function fastExecutor(delayMs = 0): HttpExecutor & { seen: HttpRequestSpec[] } {
@@ -35,7 +39,9 @@ describe("iterations model and warm-up", () => {
     const p = parsePerformanceInput({ target, iterations: 10, warmup: "2s", scenarios });
     expect(p.warmup).toBe(0);
     expect(p.warmupIgnoredMs).toBe(2000);
-    expect(parsePerformanceInput({ target, vus: 2, duration: "1s", warmup: "2s", scenarios }).warmup).toBe(2000);
+    expect(parsePerformanceInput({ target, vus: 2, duration: "1s", warmup: "2s", scenarios }).warmup).toBe(
+      2000,
+    );
   });
 
   it("every requested iteration is measured; the ignored warm-up is reported", async () => {
@@ -53,7 +59,15 @@ describe("iterations model and warm-up", () => {
   it("zero measured requests → status error, no threshold-breach findings", async () => {
     // The only request starts in the warm-up and returns after the measured window ended.
     const res = await runPerformance(
-      { target, vus: 1, warmup: "300ms", duration: "100ms", timeout: "5s", scenarios, thresholds: { "http.p95": "< 200ms" } },
+      {
+        target,
+        vus: 1,
+        warmup: "300ms",
+        duration: "100ms",
+        timeout: "5s",
+        scenarios,
+        thresholds: { "http.p95": "< 200ms" },
+      },
       {},
       { executor: fastExecutor(600) },
     );

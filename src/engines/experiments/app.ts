@@ -171,10 +171,15 @@ export async function startApp(opts: StartAppOptions): Promise<RunningApp> {
   };
   const url = `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
   try {
-    await waitHealthy(`${url}${opts.readyWhen.path}`, opts.readyWhen, opts.clock, opts.signal, () =>
-      exited
-        ? `app exited before becoming healthy (${exitInfo || "spawn failed"}): ${out.trim().split(/\r?\n/).slice(-5).join(" | ").slice(0, 600)}`
-        : undefined,
+    await waitHealthy(
+      `${url}${opts.readyWhen.path}`,
+      opts.readyWhen,
+      opts.clock,
+      opts.signal,
+      () =>
+        exited
+          ? `app exited before becoming healthy (${exitInfo || "spawn failed"}): ${out.trim().split(/\r?\n/).slice(-5).join(" | ").slice(0, 600)}`
+          : undefined,
       opts.healthHint,
     );
   } catch (e) {

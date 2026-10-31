@@ -26,7 +26,11 @@ function flagError(fn: () => unknown): ConfigError {
 
 describe("parseMix", () => {
   it("operation + count shorthand; GET defaults to as=read", () => {
-    expect(parseMix("GET /products/{id}:3")).toEqual({ operation: "GET /products/{id}", count: 3, as: "read" });
+    expect(parseMix("GET /products/{id}:3")).toEqual({
+      operation: "GET /products/{id}",
+      count: 3,
+      as: "read",
+    });
     expect(parseMix("  get /stock  ")).toEqual({ operation: "GET /stock", as: "read" });
   });
 
@@ -94,12 +98,21 @@ describe("bugsInputFromFlags with --mix", () => {
         role: "user",
         body: '{"items":[{"productId":1,"qty":1}]}',
         invariant: "linearizable:stock",
-        mix: ["GET /products/{id} id=1 pointer=/stock phase=before", "GET /products/{id}:2 id=1 pointer=/stock"],
+        mix: [
+          "GET /products/{id} id=1 pointer=/stock phase=before",
+          "GET /products/{id}:2 id=1 pointer=/stock",
+        ],
       },
       "/w",
     );
     const mix = [
-      { operation: "GET /products/{id}", as: "read", pointer: "/stock", phase: "before", pathParams: { id: 1 } },
+      {
+        operation: "GET /products/{id}",
+        as: "read",
+        pointer: "/stock",
+        phase: "before",
+        pathParams: { id: 1 },
+      },
       { operation: "GET /products/{id}", count: 2, as: "read", pointer: "/stock", pathParams: { id: 1 } },
     ];
     expect(flags.concurrency).toEqual([
@@ -159,7 +172,7 @@ describe("sw bugs --mix (subprocess)", () => {
         "--mix",
         "GET /products/{id} id=7 pointer=/stock phase=before",
         "--mix",
-        "PUT /products/{id}/stock:2 id=7 as=inc body={\"delta\": 1}",
+        'PUT /products/{id}/stock:2 id=7 as=inc body={"delta": 1}',
         "--json",
       ],
       { cwd: dir, env, timeoutMs: 60_000 },
@@ -168,14 +181,35 @@ describe("sw bugs --mix (subprocess)", () => {
     expect(r.exitCode).toBe(0);
     const j = JSON.parse(r.stdout);
     expect(j.input.concurrency[0].mix).toEqual([
-      expect.objectContaining({ operation: "GET /products/{id}", as: "read", phase: "before", pointer: "/stock", pathParams: { id: 7 }, count: 1 }),
-      expect.objectContaining({ operation: "PUT /products/{id}/stock", as: "inc", count: 2, phase: "during", body: { delta: 1 } }),
+      expect.objectContaining({
+        operation: "GET /products/{id}",
+        as: "read",
+        phase: "before",
+        pointer: "/stock",
+        pathParams: { id: 7 },
+        count: 1,
+      }),
+      expect.objectContaining({
+        operation: "PUT /products/{id}/stock",
+        as: "inc",
+        count: 2,
+        phase: "during",
+        body: { delta: 1 },
+      }),
     ]);
   }, 60_000);
 
   it("bad --mix syntax and --mix without --concurrency-test exit 2", async () => {
     const bad = await runCli(
-      ["bugs", "--target", "http://127.0.0.1:9", "--concurrency-test", "POST /orders", "--mix", "POST /orders count=2"],
+      [
+        "bugs",
+        "--target",
+        "http://127.0.0.1:9",
+        "--concurrency-test",
+        "POST /orders",
+        "--mix",
+        "POST /orders count=2",
+      ],
       { cwd: dir, env, timeoutMs: 60_000 },
     );
     expect(bad.exitCode).toBe(2);

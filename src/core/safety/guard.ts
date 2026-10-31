@@ -11,15 +11,22 @@
  * - killSwitch: AbortSignal aborted by kill() or by the parent signal.
  */
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { promises as dnsPromises } from "node:dns";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { isIP, type LookupFunction } from "node:net";
 import { userInfo } from "node:os";
 import { dirname } from "node:path";
 import { systemClock } from "../clock.js";
 import { SafetyError, TargetError } from "../errors.js";
 import { createRedactor } from "../log/redact.js";
-import type { BudgetLease, BudgetRequest, Clock, DisruptiveAction, SafetyDecision, SafetyGuard } from "../types.js";
+import type {
+  BudgetLease,
+  BudgetRequest,
+  Clock,
+  DisruptiveAction,
+  SafetyDecision,
+  SafetyGuard,
+} from "../types.js";
 import { Gcra } from "./gcra.js";
 
 export type TargetClass = "loopback" | "private" | "public" | "invalid";
@@ -37,7 +44,9 @@ export interface SafetyConfig {
   environment?: "local" | "isolated" | "staging" | "production";
 }
 
-export const DEFAULT_SAFETY: Required<Omit<SafetyConfig, "environment">> & { environment: SafetyConfig["environment"] } = {
+export const DEFAULT_SAFETY: Required<Omit<SafetyConfig, "environment">> & {
+  environment: SafetyConfig["environment"];
+} = {
   allowHosts: ["127.0.0.1", "localhost", "::1"],
   allowPublic: false,
   maxRps: 2000,
@@ -93,7 +102,9 @@ export interface SafetyLease extends BudgetLease {
   throttle(signal?: AbortSignal): Promise<boolean>;
   /** Lease-scoped signal: aborted on killSwitch, release(), or when maxDuration elapses. */
   readonly signal: AbortSignal;
-  readonly limits: Required<Pick<BudgetRequest, "maxRps" | "maxConcurrency" | "maxRequests" | "maxDurationMs">>;
+  readonly limits: Required<
+    Pick<BudgetRequest, "maxRps" | "maxConcurrency" | "maxRequests" | "maxDurationMs">
+  >;
 }
 
 export interface SafetyGuardEx extends SafetyGuard {
@@ -179,7 +190,8 @@ export function classifyHost(hostRaw: string): TargetClass {
     // Hex form of an IPv4-mapped address: WHATWG URL serialises [::ffff:127.0.0.1] as [::ffff:7f00:1].
     const mappedHex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(h);
     if (mappedHex) {
-      const n = Number.parseInt(mappedHex[1] as string, 16) * 0x10000 + Number.parseInt(mappedHex[2] as string, 16);
+      const n =
+        Number.parseInt(mappedHex[1] as string, 16) * 0x10000 + Number.parseInt(mappedHex[2] as string, 16);
       return classifyV4(n >>> 0);
     }
     const first = Number.parseInt(h.split(":")[0] || "0", 16);
@@ -271,7 +283,8 @@ export function verifyAuditLog(file: string): { ok: boolean; entries: number; br
     try {
       const e = JSON.parse(lines[i] as string) as AuditEntry;
       const { hash, ...rest } = e;
-      if (e.prevHash !== prev || entryHash(rest) !== hash) return { ok: false, entries: lines.length, brokenAt: i + 1 };
+      if (e.prevHash !== prev || entryHash(rest) !== hash)
+        return { ok: false, entries: lines.length, brokenAt: i + 1 };
       prev = hash;
     } catch {
       return { ok: false, entries: lines.length, brokenAt: i + 1 };
@@ -300,7 +313,10 @@ function ciJob(): string | undefined {
 
 const MAX_AUDIT_IN_MEMORY = 1000;
 
-export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOptions = { interactive: false }): SafetyGuardEx {
+export function createSafetyGuard(
+  cfgIn: SafetyConfig = {},
+  opts: SafetyGuardOptions = { interactive: false },
+): SafetyGuardEx {
   const cfg: SafetyConfig = { ...DEFAULT_SAFETY, ...stripUndefined(cfgIn) };
   const allowHosts = cfg.allowHosts ?? [];
   const clock = opts.clock;
@@ -371,11 +387,13 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
         hint: "Use an http(s):// or ws(s):// target",
       };
     }
-    if (killSwitch.aborted) return { allowed: false, code: "SW_SAFETY_KILLED", reason: "Kill switch engaged" };
+    if (killSwitch.aborted)
+      return { allowed: false, code: "SW_SAFETY_KILLED", reason: "Kill switch engaged" };
     const host = u.hostname;
     const cls = classifyHost(host);
     const listed = isAllowListed(u);
-    if (cls === "invalid") return { allowed: false, code: "SW_SAFETY_INVALID_HOST", reason: `Invalid host "${host}"` };
+    if (cls === "invalid")
+      return { allowed: false, code: "SW_SAFETY_INVALID_HOST", reason: `Invalid host "${host}"` };
     if (cfg.environment === "production" && !approvedActions.has("production-target") && !opts.approve) {
       return {
         allowed: false,
@@ -389,7 +407,8 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
 
   /** Class-based decision (shared by checkTarget and DNS pinning). */
   function decide(host: string, cls: TargetClass, listed: boolean): SafetyDecision {
-    if (cls === "invalid") return { allowed: false, code: "SW_SAFETY_INVALID_HOST", reason: `Invalid host "${host}"` };
+    if (cls === "invalid")
+      return { allowed: false, code: "SW_SAFETY_INVALID_HOST", reason: `Invalid host "${host}"` };
     if (cls === "loopback") return { allowed: true };
     if (cls === "private") {
       if (listed) return { allowed: true };
@@ -433,7 +452,10 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
   const resolver =
     opts.resolver ??
     (async (host: string): Promise<ResolvedAddress[]> =>
-      (await dnsPromises.lookup(host, { all: true, verbatim: true })).map((a) => ({ address: a.address, family: a.family })));
+      (await dnsPromises.lookup(host, { all: true, verbatim: true })).map((a) => ({
+        address: a.address,
+        family: a.family,
+      })));
 
   function strictest(a: TargetClass, b: TargetClass): TargetClass {
     return RANK[b] > RANK[a] ? b : a;
@@ -463,10 +485,18 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
       const d = decide(host, cls, listedName || allAddrsListed);
       if (!d.allowed) {
         const list = addrs.map((a) => a.address).join(", ");
-        audit({ action: "safety.blocked", target: host, detail: { code: "SW_SAFETY_DNS_CLASS", addresses: list, cls } });
-        throw new SafetyError("SW_SAFETY_DNS_CLASS", `"${host}" resolves to ${cls} address(es) ${list}: ${d.reason}`, {
-          hint: d.hint ?? "Add the resolved addresses (or a CIDR) to safety.allowHosts if this is intended",
+        audit({
+          action: "safety.blocked",
+          target: host,
+          detail: { code: "SW_SAFETY_DNS_CLASS", addresses: list, cls },
         });
+        throw new SafetyError(
+          "SW_SAFETY_DNS_CLASS",
+          `"${host}" resolves to ${cls} address(es) ${list}: ${d.reason}`,
+          {
+            hint: d.hint ?? "Add the resolved addresses (or a CIDR) to safety.allowHosts if this is intended",
+          },
+        );
       }
     }
     const pin: DnsPin = { host: key, addresses: addrs, cls, pinnedAt: isoNow() };
@@ -502,8 +532,12 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
 
   const lookup = ((hostname: string, options: unknown, callback: unknown) => {
     const cb = (typeof options === "function" ? options : callback) as Cb;
-    const o = (typeof options === "object" && options !== null ? options : {}) as { all?: boolean; family?: number | string };
-    const want = o.family === "IPv4" ? 4 : o.family === "IPv6" ? 6 : typeof o.family === "number" ? o.family : 0;
+    const o = (typeof options === "object" && options !== null ? options : {}) as {
+      all?: boolean;
+      family?: number | string;
+    };
+    const want =
+      o.family === "IPv4" ? 4 : o.family === "IPv6" ? 6 : typeof o.family === "number" ? o.family : 0;
     const host = hostname.toLowerCase();
     const empty = o.all ? [] : "";
     const finish = (pin: DnsPin): void => {
@@ -513,7 +547,11 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
         cb(lookupErr(new Error(`no IPv${want} address pinned for ${hostname}`), "ENOTFOUND"), empty);
         return;
       }
-      if (o.all) cb(null, list.map((a) => ({ address: a.address, family: a.family })));
+      if (o.all)
+        cb(
+          null,
+          list.map((a) => ({ address: a.address, family: a.family })),
+        );
       else cb(null, first.address, first.family);
     };
     const pinned = pinsByHost.get(host);
@@ -567,12 +605,19 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
     const err = new SafetyError(
       "SW_SAFETY_DNS_REBIND",
       `DNS for "${host}" changed address class mid-run (${pin.cls} → ${cls}: ${addrs.map((a) => a.address).join(", ")})`,
-      { hint: "Possible DNS rebinding: the run was aborted. Connections only ever use the addresses pinned at pre-flight" },
+      {
+        hint: "Possible DNS rebinding: the run was aborted. Connections only ever use the addresses pinned at pre-flight",
+      },
     );
     audit({
       action: "safety.dns-rebind",
       target: host,
-      detail: { pinned: pin.addresses.map((a) => a.address), now: addrs.map((a) => a.address), from: pin.cls, to: cls },
+      detail: {
+        pinned: pin.addresses.map((a) => a.address),
+        now: addrs.map((a) => a.address),
+        from: pin.cls,
+        to: cls,
+      },
     });
     if (!killCtl.signal.aborted) killCtl.abort(err);
     throw err;
@@ -583,11 +628,19 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
     try {
       next = new URL(location, typeof from === "string" ? from : from.href);
     } catch {
-      return { allowed: false, code: "SW_SAFETY_INVALID_URL", reason: `Invalid redirect location: ${location}` };
+      return {
+        allowed: false,
+        code: "SW_SAFETY_INVALID_URL",
+        reason: `Invalid redirect location: ${location}`,
+      };
     }
     const d = checkTarget(next);
     if (!d.allowed) {
-      audit({ action: "safety.redirect-blocked", target: next.origin, detail: { from: String(from), code: d.code } });
+      audit({
+        action: "safety.redirect-blocked",
+        target: next.origin,
+        detail: { from: String(from), code: d.code },
+      });
       return { ...d, reason: `Redirect to ${next.origin} blocked: ${d.reason}` };
     }
     return d;
@@ -597,7 +650,10 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
     const d = checkTarget(typeof url === "string" ? safeUrl(url) : url);
     if (!d.allowed) {
       audit({ action: "safety.blocked", target: String(url), detail: { code: d.code, reason: d.reason } });
-      throw new SafetyError(d.code as `SW_SAFETY_${string}`, d.reason, { hint: d.hint, details: { target: String(url) } });
+      throw new SafetyError(d.code as `SW_SAFETY_${string}`, d.reason, {
+        hint: d.hint,
+        details: { target: String(url) },
+      });
     }
   }
 
@@ -609,21 +665,31 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
   }
 
   function canPrompt(): boolean {
-    return opts.interactive && (Boolean(opts.confirm) || (process.stdin.isTTY === true && process.stdout.isTTY === true));
+    return (
+      opts.interactive &&
+      (Boolean(opts.confirm) || (process.stdin.isTTY === true && process.stdout.isTTY === true))
+    );
   }
 
   async function requireApproval(action: DisruptiveAction, detail = ""): Promise<void> {
     if (approvedActions.has(action)) return;
     if (opts.approve || (cfg.approveDisruptive && action !== "production-target")) {
       approvedActions.add(action);
-      audit({ action: "approval.granted", detail: { action, detail, source: opts.approve ? "flag" : "config" } });
+      audit({
+        action: "approval.granted",
+        detail: { action, detail, source: opts.approve ? "flag" : "config" },
+      });
       return;
     }
     if (!canPrompt()) {
       audit({ action: "approval.missing", detail: { action, detail } });
-      throw new SafetyError("SW_SAFETY_APPROVAL_REQUIRED", `Action "${action}" requires approval${detail ? `: ${detail}` : ""}`, {
-        hint: "Re-run with --yes / --approve-disruptive (logged to the audit trail), or run in an interactive terminal",
-      });
+      throw new SafetyError(
+        "SW_SAFETY_APPROVAL_REQUIRED",
+        `Action "${action}" requires approval${detail ? `: ${detail}` : ""}`,
+        {
+          hint: "Re-run with --yes / --approve-disruptive (logged to the audit trail), or run in an interactive terminal",
+        },
+      );
     }
     const ok = await confirmPrompt(`Approve ${action}${detail ? ` (${detail})` : ""}?`);
     if (!ok) {
@@ -647,7 +713,11 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
       const ok = await confirmPrompt(`Send traffic to PUBLIC host ${u.host}? Only test systems you own.`);
       if (ok) {
         approvedHosts.add(u.hostname.toLowerCase());
-        audit({ action: "approval.granted", target: u.origin, detail: { action: "public-target", source: "interactive" } });
+        audit({
+          action: "approval.granted",
+          target: u.origin,
+          detail: { action: "public-target", source: "interactive" },
+        });
         await pinHost(u);
         return;
       }
@@ -663,7 +733,8 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
       maxRequests: req.maxRequests ?? cfg.maxRequests ?? Number.POSITIVE_INFINITY,
       maxDurationMs: req.maxDurationMs ?? cfg.maxDurationMs ?? Number.POSITIVE_INFINITY,
     };
-    if (cfg.maxRps !== undefined && lim.maxRps > cfg.maxRps) over.push(`rate ${lim.maxRps}/s > safety.maxRps ${cfg.maxRps}`);
+    if (cfg.maxRps !== undefined && lim.maxRps > cfg.maxRps)
+      over.push(`rate ${lim.maxRps}/s > safety.maxRps ${cfg.maxRps}`);
     if (cfg.maxConcurrency !== undefined && lim.maxConcurrency > cfg.maxConcurrency)
       over.push(`concurrency ${lim.maxConcurrency} > safety.maxConcurrency ${cfg.maxConcurrency}`);
     if (cfg.maxRequests !== undefined && lim.maxRequests > cfg.maxRequests)
@@ -672,10 +743,14 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
       over.push(`duration ${lim.maxDurationMs}ms > safety.maxDuration ${cfg.maxDurationMs}ms`);
     if (over.length > 0) {
       audit({ action: "budget.rejected", detail: { request: { ...req }, over } });
-      throw new SafetyError("SW_SAFETY_BUDGET", `Requested budget exceeds safety limits: ${over.join("; ")}`, {
-        hint: "Lower the requested load or raise the limits in the safety section of your config",
-        details: { over },
-      });
+      throw new SafetyError(
+        "SW_SAFETY_BUDGET",
+        `Requested budget exceeds safety limits: ${over.join("; ")}`,
+        {
+          hint: "Lower the requested load or raise the limits in the safety section of your config",
+          details: { over },
+        },
+      );
     }
     if (killSwitch.aborted) throw new SafetyError("SW_SAFETY_KILLED", "Kill switch engaged");
 
@@ -684,12 +759,16 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
     const startedAt = now();
     let taken = 0;
     let released = false;
-    const gcra = Number.isFinite(lim.maxRps) && lim.maxRps > 0
-      ? new Gcra({ rate: lim.maxRps, burst: Math.max(1, Math.ceil(lim.maxRps / 10)) })
-      : null;
+    const gcra =
+      Number.isFinite(lim.maxRps) && lim.maxRps > 0
+        ? new Gcra({ rate: lim.maxRps, burst: Math.max(1, Math.ceil(lim.maxRps / 10)) })
+        : null;
     let durationTimer: ReturnType<typeof setTimeout> | undefined;
     if (!clock && Number.isFinite(lim.maxDurationMs)) {
-      durationTimer = setTimeout(() => leaseCtl.abort(new SafetyError("SW_SAFETY_BUDGET", "safety.maxDuration reached")), lim.maxDurationMs);
+      durationTimer = setTimeout(
+        () => leaseCtl.abort(new SafetyError("SW_SAFETY_BUDGET", "safety.maxDuration reached")),
+        lim.maxDurationMs,
+      );
       durationTimer.unref?.();
     }
     audit({ action: "budget.reserved", detail: { ...lim } });
@@ -740,7 +819,10 @@ export function createSafetyGuard(cfgIn: SafetyConfig = {}, opts: SafetyGuardOpt
     },
     kill(reason?: unknown): void {
       if (killCtl.signal.aborted) return;
-      audit({ action: "kill-switch", detail: { reason: reason instanceof Error ? reason.message : String(reason ?? "") } });
+      audit({
+        action: "kill-switch",
+        detail: { reason: reason instanceof Error ? reason.message : String(reason ?? "") },
+      });
       killCtl.abort(reason ?? new SafetyError("SW_SAFETY_KILLED", "Kill switch engaged"));
     },
     auditEntries: () => entries,
@@ -758,7 +840,9 @@ function safeUrl(s: string): URL {
   try {
     return new URL(s);
   } catch {
-    throw new SafetyError("SW_SAFETY_INVALID_URL", `Invalid URL: ${s}`, { hint: "Use a full URL like http://127.0.0.1:3000" });
+    throw new SafetyError("SW_SAFETY_INVALID_URL", `Invalid URL: ${s}`, {
+      hint: "Use a full URL like http://127.0.0.1:3000",
+    });
   }
 }
 

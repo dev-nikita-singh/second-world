@@ -49,16 +49,23 @@ export const SafetySchema = z
     maxConcurrency: z.number().int().positive().default(500),
     maxRequests: z.number().int().positive().default(2_000_000),
     /** ms after normalisation */
-    maxDuration: zDuration().pipe(z.number().positive()).default(30 * 60_000),
+    maxDuration: zDuration()
+      .pipe(z.number().positive())
+      .default(30 * 60_000),
     allowMutations: z.boolean().default(false),
     approveDisruptive: z.boolean().default(false),
     redact: z
       .object({
-        headers: z.array(z.string()).default(["authorization", "cookie", "set-cookie", "x-api-key", "proxy-authorization"]),
+        headers: z
+          .array(z.string())
+          .default(["authorization", "cookie", "set-cookie", "x-api-key", "proxy-authorization"]),
         bodyPaths: z.array(z.string()).default([]),
       })
       .strict()
-      .default({ headers: ["authorization", "cookie", "set-cookie", "x-api-key", "proxy-authorization"], bodyPaths: [] }),
+      .default({
+        headers: ["authorization", "cookie", "set-cookie", "x-api-key", "proxy-authorization"],
+        bodyPaths: [],
+      }),
   })
   .strict();
 
@@ -80,7 +87,10 @@ export const HistorySchema = z
     backend: z.enum(["jsonl", "sqlite"]).default("jsonl"),
     dir: z.string().default(".second-world/history"),
     baseline: z.string().optional(),
-    retain: z.object({ runs: z.number().int().positive().default(200) }).strict().default({ runs: 200 }),
+    retain: z
+      .object({ runs: z.number().int().positive().default(200) })
+      .strict()
+      .default({ runs: 200 }),
   })
   .strict();
 
@@ -94,7 +104,12 @@ export const WorkflowStepSchema = z
   })
   .strict();
 
-export const WorkflowSchema = z.object({ steps: z.record(z.string(), WorkflowStepSchema), concurrency: z.number().int().positive().optional() }).strict();
+export const WorkflowSchema = z
+  .object({
+    steps: z.record(z.string(), WorkflowStepSchema),
+    concurrency: z.number().int().positive().optional(),
+  })
+  .strict();
 
 const Section = z.record(z.string(), z.unknown());
 
@@ -102,7 +117,10 @@ export const ConfigSchema = z
   .object({
     $schemaVersion: z.literal(1).optional(),
     $schema: z.string().optional(),
-    project: z.object({ root: z.string().default("."), name: z.string().optional() }).strict().default({ root: "." }),
+    project: z
+      .object({ root: z.string().default("."), name: z.string().optional() })
+      .strict()
+      .default({ root: "." }),
     environment: EnvironmentSchema.default("local"),
     targets: z.record(z.string(), TargetSchema).default({}),
     safety: SafetySchema.default(() => SafetySchema.parse({})),

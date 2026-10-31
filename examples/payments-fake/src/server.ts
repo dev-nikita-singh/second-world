@@ -132,7 +132,12 @@ export async function startPaymentsFake(
           return send(res, 503, { error: "payment provider unavailable" });
         }
         stats.succeeded++;
-        return send(res, 201, { id: `ch_${nextId++}`, orderId, amount: body?.amount ?? 0, status: "captured" });
+        return send(res, 201, {
+          id: `ch_${nextId++}`,
+          orderId,
+          amount: body?.amount ?? 0,
+          status: "captured",
+        });
       }
       return send(res, 404, { error: "not found" });
     } catch {

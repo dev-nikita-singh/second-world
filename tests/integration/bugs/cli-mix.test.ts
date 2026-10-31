@@ -178,13 +178,17 @@ describe("sw bugs --mix finds a mixed-operation race end to end", () => {
     expect(races.length).toBe(1);
     expect(races[0].classification).toBe("reproduced-defect");
     expect(races[0].affected[0]).toBe("POST /orders");
-    const harPath = (res.artifacts as { path: string }[]).find((a) => a.path.endsWith("reproduction.har"))?.path;
+    const harPath = (res.artifacts as { path: string }[]).find((a) =>
+      a.path.endsWith("reproduction.har"),
+    )?.path;
     expect(harPath).toBeDefined();
     const har = JSON.parse(readFileSync(harPath as string, "utf8"));
     expect(validateHar12(har)).toEqual([]);
     const entries = har.log.entries as { request: { method: string; url: string } }[];
     expect(entries.filter((e) => e.request.method === "POST").length).toBe(4);
-    expect(entries.filter((e) => e.request.method === "GET" && e.request.url.endsWith("/products/1")).length).toBe(4);
+    expect(
+      entries.filter((e) => e.request.method === "GET" && e.request.url.endsWith("/products/1")).length,
+    ).toBe(4);
   }, 150_000);
 
   it("atomic server (control): no race finding, exit 0", async () => {

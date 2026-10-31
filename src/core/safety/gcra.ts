@@ -62,7 +62,8 @@ export class Gcra {
       const d = this.tryTake(clock.now(), n);
       if (d.ok) return waited;
       waited = true;
-      if (!Number.isFinite(d.retryAfterMs)) throw new RangeError(`cannot take ${n} cells with burst ${this.burst}`);
+      if (!Number.isFinite(d.retryAfterMs))
+        throw new RangeError(`cannot take ${n} cells with burst ${this.burst}`);
       await clock.sleep(d.retryAfterMs, signal);
     }
   }

@@ -9,23 +9,38 @@ import { runBugHunt as runBugs } from "../../../src/engines/bugs/index.js";
 import { computeVerdict } from "../../../src/engines/reporting/model.js";
 import { makeResult } from "../../fixtures/reports.js";
 
-const unreachable = { code: "target-unreachable", message: "Every request failed to connect", impact: "invalidates" as const };
+const unreachable = {
+  code: "target-unreachable",
+  message: "Every request failed to connect",
+  impact: "invalidates" as const,
+};
 
 describe("exit code for target-side errors", () => {
   it("error + target-unreachable / no-measurements → 5; other errors stay 70", () => {
-    expect(computeVerdict([makeResult({ status: "error", limitations: [unreachable] })]).exitCode).toBe(ExitCode.TargetUnreachable);
+    expect(computeVerdict([makeResult({ status: "error", limitations: [unreachable] })]).exitCode).toBe(
+      ExitCode.TargetUnreachable,
+    );
     expect(
-      computeVerdict([makeResult({ status: "error", limitations: [{ ...unreachable, code: "no-measurements" }] })]).exitCode,
+      computeVerdict([
+        makeResult({ status: "error", limitations: [{ ...unreachable, code: "no-measurements" }] }),
+      ]).exitCode,
     ).toBe(ExitCode.TargetUnreachable);
-    expect(computeVerdict([makeResult({ status: "error", limitations: [] })]).exitCode).toBe(ExitCode.Internal);
+    expect(computeVerdict([makeResult({ status: "error", limitations: [] })]).exitCode).toBe(
+      ExitCode.Internal,
+    );
     // A reduces-confidence mention is not enough.
     expect(
-      computeVerdict([makeResult({ status: "error", limitations: [{ ...unreachable, impact: "reduces-confidence" }] })]).exitCode,
+      computeVerdict([
+        makeResult({ status: "error", limitations: [{ ...unreachable, impact: "reduces-confidence" }] }),
+      ]).exitCode,
     ).toBe(ExitCode.Internal);
   });
 
   it("a run stopped by the Safety Guard (dns-rebind) → 3, not 70", () => {
-    const r = makeResult({ status: "error", limitations: [{ code: "dns-rebind", message: "rebind", impact: "invalidates" }] });
+    const r = makeResult({
+      status: "error",
+      limitations: [{ code: "dns-rebind", message: "rebind", impact: "invalidates" }],
+    });
     expect(computeVerdict([r]).exitCode).toBe(ExitCode.SafetyBlocked);
   });
 

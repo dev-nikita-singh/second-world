@@ -62,7 +62,11 @@ function verdictCell(v: MetricComparison["verdict"]): CellLike {
 function successCell(c: MetricComparison): CellLike {
   if (!c.success) return { text: "-", tone: "muted" };
   const t = `${c.success.status} (${c.success.criterion})`;
-  return c.success.status === "met" ? { text: t, tone: "good" } : c.success.status === "not-met" ? { text: t, tone: "bad" } : { text: t, tone: "warn" };
+  return c.success.status === "met"
+    ? { text: t, tone: "good" }
+    : c.success.status === "not-met"
+      ? { text: t, tone: "bad" }
+      : { text: t, tone: "warn" };
 }
 
 const HYP_TONE = { supported: "good", rejected: "bad", inconclusive: "warn", untested: "muted" } as const;
@@ -91,7 +95,9 @@ export function experimentBlocks(d: ExperimentData): Block[] {
       align: ["l", "l", "r", "r", "l"],
       rows: d.arms.map((a) => [
         a.name,
-        a.sharesProcessWith.length > 0 ? `${a.kind} (shares process with ${a.sharesProcessWith.join(", ")})` : a.kind,
+        a.sharesProcessWith.length > 0
+          ? `${a.kind} (shares process with ${a.sharesProcessWith.join(", ")})`
+          : a.kind,
         String(a.runs),
         a.failedRuns > 0 ? { text: String(a.failedRuns), tone: "bad" } : "0",
         a.target ?? a.command ?? "-",
@@ -103,7 +109,18 @@ export function experimentBlocks(d: ExperimentData): Block[] {
     b.push({
       kind: "table",
       title: "Verdicts per metric",
-      head: ["variant", "metric", "baseline → variant (median)", "change", "CI", "p (Holm)", "Cliff's δ", "verdict", "success", "runs needed"],
+      head: [
+        "variant",
+        "metric",
+        "baseline → variant (median)",
+        "change",
+        "CI",
+        "p (Holm)",
+        "Cliff's δ",
+        "verdict",
+        "success",
+        "runs needed",
+      ],
       align: ["l", "l", "l", "r", "r", "r", "l", "l", "l", "r"],
       rows: d.comparisons.map((c) => [
         c.variant,
@@ -115,7 +132,9 @@ export function experimentBlocks(d: ExperimentData): Block[] {
         `${c.cliffsDelta.delta.toFixed(2)} (${c.cliffsDelta.magnitude})`,
         verdictCell(c.verdict),
         successCell(c),
-        c.verdict === "inconclusive" && c.recommendedRepetitions !== undefined ? `${c.recommendedRepetitions}/arm` : "",
+        c.verdict === "inconclusive" && c.recommendedRepetitions !== undefined
+          ? `${c.recommendedRepetitions}/arm`
+          : "",
       ]),
     });
     const ci = d.comparisons[0]?.ci;
@@ -149,11 +168,18 @@ export function experimentBlocks(d: ExperimentData): Block[] {
       title: "Noise floor (A/A): smallest detectable effect at this r",
       head: ["metric", "min. detectable effect", "relative SD", "runs/arm for 5%"],
       align: ["l", "r", "r", "r"],
-      rows: d.noiseFloor.map((n) => [n.metric, fmtPct(n.mde), fmtPct(n.relativeSd), String(n.recommendedFor5pct)]),
+      rows: d.noiseFloor.map((n) => [
+        n.metric,
+        fmtPct(n.mde),
+        fmtPct(n.relativeSd),
+        String(n.recommendedFor5pct),
+      ]),
     });
   }
 
-  const outliers = d.runs.filter((r) => r.outlierMetrics.length > 0 || r.generatorSaturated || r.status !== "ok");
+  const outliers = d.runs.filter(
+    (r) => r.outlierMetrics.length > 0 || r.generatorSaturated || r.status !== "ok",
+  );
   if (outliers.length > 0) {
     b.push({
       kind: "table",
@@ -165,12 +191,22 @@ export function experimentBlocks(d: ExperimentData): Block[] {
         if (r.outlierMetrics.length > 0) flags.push(`outlier (MAD z > 3.5): ${r.outlierMetrics.join(", ")}`);
         if (r.generatorSaturated) flags.push("generator saturated");
         if (r.error) flags.push(r.error);
-        return [String(r.index), r.arm, String(r.rep), r.status === "ok" ? "ok" : { text: r.status, tone: "bad" }, { text: flags.join("; "), tone: "warn" }];
+        return [
+          String(r.index),
+          r.arm,
+          String(r.rep),
+          r.status === "ok" ? "ok" : { text: r.status, tone: "bad" },
+          { text: flags.join("; "), tone: "warn" },
+        ];
       }),
     });
   }
 
-  const warnings = [...(d.fingerprints.consistent ? [] : ["environment fingerprints differ between arms"]), ...d.fingerprints.warnings, ...d.warnings];
+  const warnings = [
+    ...(d.fingerprints.consistent ? [] : ["environment fingerprints differ between arms"]),
+    ...d.fingerprints.warnings,
+    ...d.warnings,
+  ];
   for (const w of [...new Set(warnings)]) b.push({ kind: "text", tone: "warn", text: w });
 
   if (d.projections.length > 0) {
@@ -187,7 +223,9 @@ export function experimentBlocks(d: ExperimentData): Block[] {
             ? [
                 p.arm,
                 `${fmtVal(p.rate)}/s`,
-                p.saturated ? { text: `${fmtPct(p.utilisation)} (saturated)`, tone: "bad" } : fmtPct(p.utilisation),
+                p.saturated
+                  ? { text: `${fmtPct(p.utilisation)} (saturated)`, tone: "bad" }
+                  : fmtPct(p.utilisation),
                 p.meanMs === null ? "-" : fmtMs(p.meanMs),
                 p.p95Ms === null ? "-" : fmtMs(p.p95Ms),
                 `measured ${fmtVal(p.basis.rate)}/s, mean ${fmtMs(p.basis.meanMs)}, service ${fmtMs(p.basis.serviceMs)}`,
@@ -196,7 +234,8 @@ export function experimentBlocks(d: ExperimentData): Block[] {
         ),
       });
       const a = mm1[0];
-      if (a && a.method === "mm1") b.push({ kind: "text", tone: "muted", text: `Assumptions: ${a.assumptions}` });
+      if (a && a.method === "mm1")
+        b.push({ kind: "text", tone: "muted", text: `Assumptions: ${a.assumptions}` });
     }
     const usl = d.projections.filter((p) => p.method === "usl");
     if (usl.length > 0) {
@@ -213,7 +252,11 @@ export function experimentBlocks(d: ExperimentData): Block[] {
                 fmtVal(p.fit.sigma),
                 fmtVal(p.fit.kappa),
                 fmtVal(p.fit.r2),
-                p.refused ? { text: `refused: ${p.refused}`, tone: "muted" } : p.extrapolated ? { text: "extrapolated", tone: "warn" } : "",
+                p.refused
+                  ? { text: `refused: ${p.refused}`, tone: "muted" }
+                  : p.extrapolated
+                    ? { text: "extrapolated", tone: "warn" }
+                    : "",
               ]
             : [],
         ),
@@ -234,9 +277,25 @@ export function evolutionBlocks(d: EvolutionData): Block[] {
       ["repository", d.repo],
       ["baseline", `${d.baseline.ref} @ ${short(d.baseline.commit)}`],
       ...(d.finding ? ([["finding", d.finding]] as [string, CellLike][]) : []),
-      ["sandbox", [sb.kind, sb.image, sb.cpus !== undefined ? `${sb.cpus} cpu` : undefined, sb.memory, sb.network ? `network ${sb.network}` : undefined].filter(Boolean).join(", ")],
+      [
+        "sandbox",
+        [
+          sb.kind,
+          sb.image,
+          sb.cpus !== undefined ? `${sb.cpus} cpu` : undefined,
+          sb.memory,
+          sb.network ? `network ${sb.network}` : undefined,
+        ]
+          .filter(Boolean)
+          .join(", "),
+      ],
       ["install", `${d.install.strategy} (${d.install.installed} installed, ${d.install.reused} reused)`],
-      ["working tree", d.workingTree.unchanged ? { text: "unchanged (checksum verified)", tone: "good" } : { text: "CHANGED during the run", tone: "bad" }],
+      [
+        "working tree",
+        d.workingTree.unchanged
+          ? { text: "unchanged (checksum verified)", tone: "good" }
+          : { text: "CHANGED during the run", tone: "bad" },
+      ],
       ["worktrees cleaned", d.worktreesCleaned ? "yes" : { text: "no", tone: "warn" }],
     ],
   });
@@ -244,7 +303,10 @@ export function evolutionBlocks(d: EvolutionData): Block[] {
   b.push({
     kind: "quote",
     title: "Pareto front (best first)",
-    text: d.paretoFront.length > 0 ? d.paretoFront.map((n, i) => `${i + 1}. ${n}`).join("   ") : "none: no candidate passed the gates and improved without regressing",
+    text:
+      d.paretoFront.length > 0
+        ? d.paretoFront.map((n, i) => `${i + 1}. ${n}`).join("   ")
+        : "none: no candidate passed the gates and improved without regressing",
   });
 
   const metrics = d.rankBy.map((r) => r.metric);
@@ -262,7 +324,10 @@ export function evolutionBlocks(d: EvolutionData): Block[] {
         ...metrics.map((m): CellLike => {
           const v = c.improvement[m];
           if (v === undefined) return "-";
-          return { text: fmtRel(v), ...(v > 0 ? { tone: "good" as const } : v < 0 ? { tone: "bad" as const } : {}) };
+          return {
+            text: fmtRel(v),
+            ...(v > 0 ? { tone: "good" as const } : v < 0 ? { tone: "bad" as const } : {}),
+          };
         }),
         Object.entries(c.verdicts)
           .map(([m, v]) => `${m}: ${v}`)
@@ -270,7 +335,11 @@ export function evolutionBlocks(d: EvolutionData): Block[] {
         c.score !== undefined ? fmtVal(c.score) : "-",
       ]),
     });
-    b.push({ kind: "text", tone: "muted", text: "Δ = oriented relative improvement (+ is better), only where the change is significant. ★ = on the Pareto front." });
+    b.push({
+      kind: "text",
+      tone: "muted",
+      text: "Δ = oriented relative improvement (+ is better), only where the change is significant. ★ = on the Pareto front.",
+    });
   }
 
   const gateRows: CellLike[][] = [];
@@ -280,14 +349,24 @@ export function evolutionBlocks(d: EvolutionData): Block[] {
         c.name,
         g.gate,
         g.name,
-        g.skipped ? { text: "skipped", tone: "muted" } : g.ok ? { text: "ok", tone: "good" } : { text: "FAIL", tone: "bad" },
+        g.skipped
+          ? { text: "skipped", tone: "muted" }
+          : g.ok
+            ? { text: "ok", tone: "good" }
+            : { text: "FAIL", tone: "bad" },
         fmtDuration(g.durationMs),
         g.detail ?? "",
       ]);
     }
   }
   if (gateRows.length > 0) {
-    b.push({ kind: "table", title: "Gates", head: ["candidate", "gate", "name", "result", "time", "detail"], align: ["l", "l", "l", "l", "r", "l"], rows: gateRows });
+    b.push({
+      kind: "table",
+      title: "Gates",
+      head: ["candidate", "gate", "name", "result", "time", "detail"],
+      align: ["l", "l", "l", "l", "r", "l"],
+      rows: gateRows,
+    });
   }
 
   if (d.rejected.length > 0) {

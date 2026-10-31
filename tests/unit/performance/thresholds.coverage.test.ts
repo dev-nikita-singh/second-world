@@ -54,7 +54,10 @@ describe("statValue", () => {
       fc.property(fc.integer({ min: 1, max: 1000 }), fc.integer({ min: 0, max: 1000 }), (req, f) => {
         const failed = f % (req + 1);
         const v = view([1], { requests: req, ok: req - failed, failed });
-        expect((statValue({ stat: "error_rate" }, v) as number) + (statValue({ stat: "success_rate" }, v) as number)).toBeCloseTo(1, 12);
+        expect(
+          (statValue({ stat: "error_rate" }, v) as number) +
+            (statValue({ stat: "success_rate" }, v) as number),
+        ).toBeCloseTo(1, 12);
       }),
     );
   });
@@ -67,8 +70,15 @@ describe("evaluateThresholds + scopes", () => {
     ok: 9,
     failed: 1,
     timeouts: 0,
-    scenarios: new Map([["checkout", { latency: { corrected: view([100]).latency }, requests: 4, ok: 4, failed: 0, timeouts: 0 }]]),
-    endpoints: new Map([["GET /a", { latency: { corrected: view([7]).latency }, requests: 3, ok: 1, failed: 2, timeouts: 2 }]]),
+    scenarios: new Map([
+      [
+        "checkout",
+        { latency: { corrected: view([100]).latency }, requests: 4, ok: 4, failed: 0, timeouts: 0 },
+      ],
+    ]),
+    endpoints: new Map([
+      ["GET /a", { latency: { corrected: view([7]).latency }, requests: 3, ok: 1, failed: 2, timeouts: 2 }],
+    ]),
   } as never;
   const resolve = scopeResolver(metrics, 2);
 
@@ -93,7 +103,9 @@ describe("evaluateThresholds + scopes", () => {
     expect(res.map((r) => r.passed)).toEqual([true, false, false, false, false]);
     expect(res[3]?.reason).toBe('no data for scope "scenario.ghost"');
     expect(res[4]?.abortOnFail).toBe(true);
-    const empty = evaluateThresholds(parseInputThresholds({ "http.p95": "< 1ms" }), () => view([], { requests: 0 }));
+    const empty = evaluateThresholds(parseInputThresholds({ "http.p95": "< 1ms" }), () =>
+      view([], { requests: 0 }),
+    );
     expect(empty[0]).toMatchObject({ actual: null, passed: false, reason: "no data for this statistic" });
     let id = 0;
     const findings = thresholdFindings(res, {
@@ -109,7 +121,14 @@ describe("evaluateThresholds + scopes", () => {
     expect(new Set(findings.map((f) => f.fingerprint)).size).toBe(4);
     const noData = findings.find((f) => JSON.stringify(f.evidence).includes("no data for scope"));
     expect(noData).toBeDefined();
-    const again = thresholdFindings(res, { newId: () => "x", isoNow: () => "t", runId: "r2", target: "http://127.0.0.1:1", confidence: 1, severity: "low" });
+    const again = thresholdFindings(res, {
+      newId: () => "x",
+      isoNow: () => "t",
+      runId: "r2",
+      target: "http://127.0.0.1:1",
+      confidence: 1,
+      severity: "low",
+    });
     expect(again.map((f) => f.fingerprint)).toEqual(findings.map((f) => f.fingerprint)); // stable across runs
     expect(again[0]?.severity).toBe("low");
   });

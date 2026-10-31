@@ -3,10 +3,16 @@
  * and docs/11-safety-security-privacy.md §4. Writes to stderr by default (stdout is for
  * reports / --json output). No pino dependency in core: keeps `sw --help` fast.
  */
-import type { LogLevel, Logger } from "../types.js";
+import type { Logger, LogLevel } from "../types.js";
 import { createRedactor, type Redactor } from "./redact.js";
 
-const LEVELS: Record<Exclude<LogLevel, "silent">, number> = { trace: 10, debug: 20, info: 30, warn: 40, error: 50 };
+const LEVELS: Record<Exclude<LogLevel, "silent">, number> = {
+  trace: 10,
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+};
 
 export interface LoggerOptions {
   level?: LogLevel;

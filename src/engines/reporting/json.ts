@@ -25,7 +25,11 @@ export interface AtomicWriteOptions {
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Write `data` to `file` atomically: write a sibling temp file, then rename over the target. */
-export async function writeFileAtomic(file: string, data: string | Uint8Array, opts: AtomicWriteOptions = {}): Promise<void> {
+export async function writeFileAtomic(
+  file: string,
+  data: string | Uint8Array,
+  opts: AtomicWriteOptions = {},
+): Promise<void> {
   const dir = path.dirname(file);
   await mkdir(dir, { recursive: true });
   const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`);

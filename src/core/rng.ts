@@ -74,7 +74,8 @@ class Xoshiro128ss implements Rng {
   }
 
   int(min: number, max: number): number {
-    if (!Number.isInteger(min) || !Number.isInteger(max)) throw new RangeError("int(min, max) requires integers");
+    if (!Number.isInteger(min) || !Number.isInteger(max))
+      throw new RangeError("int(min, max) requires integers");
     if (max < min) throw new RangeError("int(min, max) requires min <= max");
     const span = max - min + 1;
     if (span <= 0x100000000) {

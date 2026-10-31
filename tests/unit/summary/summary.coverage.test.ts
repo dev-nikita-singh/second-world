@@ -12,7 +12,14 @@ import { deterministicSummary } from "../../../src/engines/summary/deterministic
 import { loadReports, resultsFromJson } from "../../../src/engines/summary/sources.js";
 
 const SEVS = ["critical", "high", "medium", "low", "info"] as const;
-const CLASSES = ["verified-fix", "reproduced-defect", "threshold-breach", "observation", "suspected-risk", "hypothesis"] as const;
+const CLASSES = [
+  "verified-fix",
+  "reproduced-defect",
+  "threshold-breach",
+  "observation",
+  "suspected-risk",
+  "hypothesis",
+] as const;
 
 const finding = fc.record({
   title: fc.string({ maxLength: 10 }),
@@ -25,7 +32,13 @@ const result = fc.record({
   runId: fc.string({ minLength: 1, maxLength: 5 }),
   status: fc.constantFrom("passed", "failed", "error"),
   findings: fc.array(finding, { maxLength: 8 }),
-  limitations: fc.array(fc.record({ impact: fc.constantFrom("invalidates", "reduces", "none"), message: fc.string({ maxLength: 8 }) }), { maxLength: 3 }),
+  limitations: fc.array(
+    fc.record({
+      impact: fc.constantFrom("invalidates", "reduces", "none"),
+      message: fc.string({ maxLength: 8 }),
+    }),
+    { maxLength: 3 },
+  ),
   artifacts: fc.constant([]),
 });
 
@@ -41,9 +54,12 @@ describe("deterministicSummary", () => {
         expect(Object.values(s.counts.statuses).reduce((a, b) => a + b, 0)).toBe(rs.length);
         expect(s.topFindings.length).toBe(Math.min(top, n));
         const sevIdx = s.topFindings.map((f) => SEVS.indexOf(f.severity));
-        for (let i = 1; i < sevIdx.length; i++) expect(sevIdx[i]).toBeGreaterThanOrEqual(sevIdx[i - 1] as number);
+        for (let i = 1; i < sevIdx.length; i++)
+          expect(sevIdx[i]).toBeGreaterThanOrEqual(sevIdx[i - 1] as number);
         expect(s.text.split("\n")).toHaveLength(1 + s.bullets.length);
-        const invalidating = rs.flatMap((r) => r.limitations).filter((l) => l.impact === "invalidates").length;
+        const invalidating = rs
+          .flatMap((r) => r.limitations)
+          .filter((l) => l.impact === "invalidates").length;
         expect(s.bullets.filter((b) => b.startsWith("Limitation (")).length).toBe(invalidating);
       }),
     );
@@ -51,10 +67,21 @@ describe("deterministicSummary", () => {
 
   it("headlines for empty input, no findings and serious findings", () => {
     expect(deterministicSummary([]).headline).toBe("No results to summarise.");
-    const base = { engine: "performance", runId: "r", status: "passed", findings: [], limitations: [], artifacts: [] };
-    expect(deterministicSummary([base] as never).headline).toBe("1 run(s) (performance) produced no findings.");
+    const base = {
+      engine: "performance",
+      runId: "r",
+      status: "passed",
+      findings: [],
+      limitations: [],
+      artifacts: [],
+    };
+    expect(deterministicSummary([base] as never).headline).toBe(
+      "1 run(s) (performance) produced no findings.",
+    );
     const f = { title: "t", severity: "high", classification: "observation", engine: "performance" };
-    expect(deterministicSummary([{ ...base, findings: [f] }] as never).headline).toMatch(/1 of severity high or critical/);
+    expect(deterministicSummary([{ ...base, findings: [f] }] as never).headline).toMatch(
+      /1 of severity high or critical/,
+    );
   });
 
   // Regression (sw-coverage bug report, fixed by main): severities outside the schema (hand-edited / other-version report JSON fed to
@@ -63,10 +90,13 @@ describe("deterministicSummary", () => {
   it("unknown severities never outrank critical findings", () => {
     const base = { engine: "bugs", runId: "r", status: "failed", limitations: [], artifacts: [] };
     const s = deterministicSummary([
-      { ...base, findings: [
-        { title: "real", severity: "critical", classification: "reproduced-defect", engine: "bugs" },
-        { title: "odd", severity: "urgent", classification: "observation", engine: "bugs" },
-      ] },
+      {
+        ...base,
+        findings: [
+          { title: "real", severity: "critical", classification: "reproduced-defect", engine: "bugs" },
+          { title: "odd", severity: "urgent", classification: "observation", engine: "bugs" },
+        ],
+      },
     ] as never);
     expect(s.topFindings[0]?.title).toBe("real");
   });
@@ -89,7 +119,10 @@ describe("report sources", () => {
   it("loads files relative to cwd and EngineResult objects; unreadable/invalid files are ConfigErrors", async () => {
     writeFileSync(join(dir, "a.json"), JSON.stringify([r, r]));
     writeFileSync(join(dir, "bad.json"), "{nope");
-    const out = await loadReports(["a.json", { ...r, findings: [], limitations: [], artifacts: [] } as never], dir);
+    const out = await loadReports(
+      ["a.json", { ...r, findings: [], limitations: [], artifacts: [] } as never],
+      dir,
+    );
     expect(out).toHaveLength(3);
     await expect(loadReports(["missing.json"], dir)).rejects.toBeInstanceOf(ConfigError);
     await expect(loadReports(["bad.json"], dir)).rejects.toBeInstanceOf(ConfigError);

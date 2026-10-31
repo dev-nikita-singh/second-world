@@ -5,8 +5,8 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
-  compareArms,
   type ComparisonInput,
+  compareArms,
   extractMetric,
   flagOutliers,
   hypothesisStatus,
@@ -34,9 +34,17 @@ describe("parseMetric", () => {
   it("scopes, aliases, directions and unsupported names", () => {
     expect(p95).toMatchObject({ scope: "http", stat: "p95", direction: "lower-is-better", unit: "ms" });
     expect(parseMetric("median")).toMatchObject({ stat: "p50" });
-    expect(parseMetric("throughput")).toMatchObject({ stat: "rps", direction: "higher-is-better", unit: "per_s" });
+    expect(parseMetric("throughput")).toMatchObject({
+      stat: "rps",
+      direction: "higher-is-better",
+      unit: "per_s",
+    });
     expect(parseMetric("errorRate")).toMatchObject({ stat: "error_rate", unit: "ratio" });
-    expect(parseMetric("endpoint.GET /a.b.p99")).toMatchObject({ scope: "endpoint", endpoint: "GET /a.b", stat: "p99" });
+    expect(parseMetric("endpoint.GET /a.b.p99")).toMatchObject({
+      scope: "endpoint",
+      endpoint: "GET /a.b",
+      stat: "p99",
+    });
     expect(parseMetric("endpoint.ok_rps")).toBeNull();
     expect(parseMetric("endpoint..p95")).toBeNull();
     expect(parseMetric("cpu.usage")).toBeNull();
@@ -48,7 +56,17 @@ describe("parseMetric", () => {
       latency: { corrected: { p95: 12 } },
       totals: { rps: 100, okRps: 90, errorRate: 0.1, timeoutRate: 0.01 },
       window: { measuredMs: 0 },
-      endpoints: [{ key: "GET /a", latency: { corrected: { p95: 7 } }, rps: 50, ok: 10, errorRate: 0.2, timeouts: 1, requests: 4 }],
+      endpoints: [
+        {
+          key: "GET /a",
+          latency: { corrected: { p95: 7 } },
+          rps: 50,
+          ok: 10,
+          errorRate: 0.2,
+          timeouts: 1,
+          requests: 4,
+        },
+      ],
     } as never;
     expect(extractMetric(data, p95)).toBe(12);
     expect(extractMetric(data, rps)).toBe(100);
@@ -65,16 +83,23 @@ describe("parseMetric", () => {
 describe("power analysis", () => {
   it("property: MDE decreases with n and requiredRepetitions achieves the requested effect", () => {
     fc.assert(
-      fc.property(fc.double({ min: 0.01, max: 0.5, noNaN: true }), fc.double({ min: 0.02, max: 0.5, noNaN: true }), fc.integer({ min: 1, max: 200 }), (relSd, effect, n) => {
-        expect(minimumDetectableEffect(relSd, n + 1, 0.05)).toBeLessThan(minimumDetectableEffect(relSd, n, 0.05));
-        const req = requiredRepetitions(relSd, effect, 0.05);
-        expect(req).toBeGreaterThanOrEqual(2);
-        expect(req).toBeLessThanOrEqual(1000);
-        if (req < 1000 && req > 2) {
-          expect(minimumDetectableEffect(relSd, req, 0.05)).toBeLessThanOrEqual(effect + 1e-9);
-          expect(minimumDetectableEffect(relSd, req - 1, 0.05)).toBeGreaterThan(effect - 1e-9);
-        }
-      }),
+      fc.property(
+        fc.double({ min: 0.01, max: 0.5, noNaN: true }),
+        fc.double({ min: 0.02, max: 0.5, noNaN: true }),
+        fc.integer({ min: 1, max: 200 }),
+        (relSd, effect, n) => {
+          expect(minimumDetectableEffect(relSd, n + 1, 0.05)).toBeLessThan(
+            minimumDetectableEffect(relSd, n, 0.05),
+          );
+          const req = requiredRepetitions(relSd, effect, 0.05);
+          expect(req).toBeGreaterThanOrEqual(2);
+          expect(req).toBeLessThanOrEqual(1000);
+          if (req < 1000 && req > 2) {
+            expect(minimumDetectableEffect(relSd, req, 0.05)).toBeLessThanOrEqual(effect + 1e-9);
+            expect(minimumDetectableEffect(relSd, req - 1, 0.05)).toBeGreaterThan(effect - 1e-9);
+          }
+        },
+      ),
     );
     expect(minimumDetectableEffect(0.1, 0, 0.05)).toBe(Number.POSITIVE_INFINITY);
     expect(requiredRepetitions(0.1, 0, 0.05)).toBe(1000);
@@ -131,7 +156,10 @@ describe("compareArms", () => {
   it("identical arms → no-significant-change; tiny n → inconclusive with a recommendation; empty arm", () => {
     const [same] = compareArms([{ variant: "a", metric: p95, baseline: base, values: [...base] }], opts);
     expect(same?.verdict).toBe("no-significant-change");
-    const [small] = compareArms([{ variant: "a", metric: p95, baseline: [100, 101], values: [100, 102] }], opts);
+    const [small] = compareArms(
+      [{ variant: "a", metric: p95, baseline: [100, 101], values: [100, 102] }],
+      opts,
+    );
     expect(small?.verdict).toBe("inconclusive");
     expect(small?.recommendedRepetitions).toBeGreaterThanOrEqual(3);
     expect(small?.reasons.join(" ")).toMatch(/under-powered/);
@@ -153,7 +181,9 @@ describe("compareArms", () => {
     ];
     const r = compareArms(inputs, opts).map((c) => c.success?.status);
     expect(r).toEqual(["met", "not-met", "not-met", "met", "inconclusive", "inconclusive", "not-met", "met"]);
-    expect(compareArms([inputs[0] as ComparisonInput], opts)[0]?.success?.criterion).toBe("improvement >= 20.0%");
+    expect(compareArms([inputs[0] as ComparisonInput], opts)[0]?.success?.criterion).toBe(
+      "improvement >= 20.0%",
+    );
   });
 
   it("outlier runs are reported in reasons, never dropped", () => {

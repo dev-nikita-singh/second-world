@@ -59,8 +59,19 @@ describe("resolver", () => {
         B: { type: "string", minLength: 1 },
         Loop1: { $ref: "#/components/schemas/Loop2" },
         Loop2: { $ref: "#/components/schemas/Loop1" },
-        Base: { type: "object", properties: { id: { type: "integer" } }, required: ["id"], minimum: 1, maximum: 100 },
-        Ext: { allOf: [{ $ref: "#/components/schemas/Base" }, { properties: { n: { type: "string" } }, required: ["n"], minimum: 5, maximum: 50 }] },
+        Base: {
+          type: "object",
+          properties: { id: { type: "integer" } },
+          required: ["id"],
+          minimum: 1,
+          maximum: 100,
+        },
+        Ext: {
+          allOf: [
+            { $ref: "#/components/schemas/Base" },
+            { properties: { n: { type: "string" } }, required: ["n"], minimum: 5, maximum: 50 },
+          ],
+        },
       },
     },
   };
@@ -68,7 +79,11 @@ describe("resolver", () => {
 
   it("follows chains, merges siblings, handles booleans, externals, missing targets and cycles", () => {
     expect(r.resolve({ $ref: "#/components/schemas/A" })).toEqual({ type: "string", minLength: 1 });
-    expect(r.resolve({ $ref: "#/components/schemas/B", description: "d", minLength: 3 })).toEqual({ type: "string", minLength: 3, description: "d" });
+    expect(r.resolve({ $ref: "#/components/schemas/B", description: "d", minLength: 3 })).toEqual({
+      type: "string",
+      minLength: 3,
+      description: "d",
+    });
     expect(r.resolve(true)).toEqual({});
     expect(r.resolve(undefined)).toEqual({});
     expect(r.resolve(false)).toEqual({ not: {} });
@@ -85,7 +100,10 @@ describe("resolver", () => {
     expect(m.minimum).toBe(5);
     expect(m.maximum).toBe(50);
     expect(m.type).toBe("object");
-    const nested = mergeAllOf({ allOf: [{ allOf: [{ minLength: 2 }, { minLength: 4, maxLength: 9 }] }, { maxLength: 7 }] }, r);
+    const nested = mergeAllOf(
+      { allOf: [{ allOf: [{ minLength: 2 }, { minLength: 4, maxLength: 9 }] }, { maxLength: 7 }] },
+      r,
+    );
     expect(nested).toMatchObject({ minLength: 4, maxLength: 7 });
     expect(mergeAllOf({ type: "string" }, r)).toEqual({ type: "string" });
     expect(normalize({ type: "number" }, r)).toEqual({ type: "number" });
@@ -93,11 +111,14 @@ describe("resolver", () => {
 
   it("property: merged allOf bounds are never looser than any part", () => {
     fc.assert(
-      fc.property(fc.array(fc.record({ minimum: fc.integer(), maximum: fc.integer() }), { minLength: 1, maxLength: 6 }), (parts) => {
-        const m = mergeAllOf({ allOf: parts }, r);
-        expect(m.minimum).toBe(Math.max(...parts.map((p) => p.minimum)));
-        expect(m.maximum).toBe(Math.min(...parts.map((p) => p.maximum)));
-      }),
+      fc.property(
+        fc.array(fc.record({ minimum: fc.integer(), maximum: fc.integer() }), { minLength: 1, maxLength: 6 }),
+        (parts) => {
+          const m = mergeAllOf({ allOf: parts }, r);
+          expect(m.minimum).toBe(Math.max(...parts.map((p) => p.minimum)));
+          expect(m.maximum).toBe(Math.min(...parts.map((p) => p.maximum)));
+        },
+      ),
     );
   });
 
@@ -172,10 +193,18 @@ describe("inferSchema / mergeInferred", () => {
     const m = mergeInferred(inferSchema({ a: 1, b: 2 }), inferSchema({ a: 1.5, c: "x" }));
     expect(m.required).toEqual(["a"]);
     expect((m.properties as any).a).toEqual({ type: "number" });
-    expect(mergeInferred({ type: "array" }, { type: "array", items: { type: "string" } })).toEqual({ type: "array", items: { type: "string" } });
-    expect(mergeInferred({ type: "array", items: { type: "string" } }, { type: "array" })).toEqual({ type: "array", items: { type: "string" } });
+    expect(mergeInferred({ type: "array" }, { type: "array", items: { type: "string" } })).toEqual({
+      type: "array",
+      items: { type: "string" },
+    });
+    expect(mergeInferred({ type: "array", items: { type: "string" } }, { type: "array" })).toEqual({
+      type: "array",
+      items: { type: "string" },
+    });
     expect(mergeInferred({ type: "string" }, { type: "string" })).toEqual({ type: "string" });
-    expect(mergeInferred({ type: ["null", "string"] }, { type: "integer" })).toEqual({ type: ["integer", "null", "string"] });
+    expect(mergeInferred({ type: ["null", "string"] }, { type: "integer" })).toEqual({
+      type: ["integer", "null", "string"],
+    });
     expect(mergeInferred({}, {})).toEqual({});
     expect(mergeInferred({ description: "x" }, { title: "y" })).toEqual({});
     let deep: unknown = 1;

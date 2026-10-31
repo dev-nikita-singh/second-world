@@ -28,7 +28,8 @@ beforeEach(async () => {
 
 const order = (token: string, body: unknown, headers?: Record<string, string>) =>
   api(shop.url, "POST", "/orders", { token, body, ...(headers ? { headers } : {}) });
-const queries = async (): Promise<number> => (await api(shop.url, "GET", "/__test/stats")).body.queries as number;
+const queries = async (): Promise<number> =>
+  (await api(shop.url, "GET", "/__test/stats")).body.queries as number;
 
 describe("shop-fastify happy paths", () => {
   it("healthz, paging, product get, search, terms", async () => {
@@ -100,7 +101,8 @@ describe("shop-fastify seeded defects are reproducible", () => {
 
   it("no-circuit-breaker: every order keeps hammering a dead provider", async () => {
     shop.payments.setBehavior({ failPct: 100 });
-    for (let i = 0; i < 5; i++) expect((await order("alice-token", { productId: 1, qty: 1 })).status).toBe(502);
+    for (let i = 0; i < 5; i++)
+      expect((await order("alice-token", { productId: 1, qty: 1 })).status).toBe(502);
     expect(shop.payments.stats().attempts).toBe(20);
     reproduced.add("no-circuit-breaker");
   });
@@ -119,15 +121,20 @@ describe("shop-fastify seeded defects are reproducible", () => {
   });
 
   it("sync-fs-in-handler: readFileSync inside the /terms handler", () => {
-    const src = readFileSync(new URL("../../../examples/shop-fastify/src/server.ts", import.meta.url), "utf8");
-    const handler = src.slice(src.indexOf('app.get("/terms"'), src.indexOf('app.post<{ Body'));
+    const src = readFileSync(
+      new URL("../../../examples/shop-fastify/src/server.ts", import.meta.url),
+      "utf8",
+    );
+    const handler = src.slice(src.indexOf('app.get("/terms"'), src.indexOf("app.post<{ Body"));
     expect(handler).toContain("readFileSync(");
     reproduced.add("sync-fs-in-handler");
   });
 
   it("idempotency-key-race (discovered): concurrent requests with one key create several orders", async () => {
     const h = { "idempotency-key": "race-key-1" };
-    const rs = await Promise.all(Array.from({ length: 5 }, () => order("alice-token", { productId: 6, qty: 1 }, h)));
+    const rs = await Promise.all(
+      Array.from({ length: 5 }, () => order("alice-token", { productId: 6, qty: 1 }, h)),
+    );
     expect(rs.every((r) => r.status === 201)).toBe(true);
     expect(new Set(rs.map((r) => r.body.id)).size).toBeGreaterThan(1);
     // ...while a sequential repeat afterwards is replayed (one of the earlier orders comes back)
@@ -165,20 +172,26 @@ describe("shop-fastify correct-by-design behaviours (precision guards)", () => {
   });
 
   it("stock-atomic: product 40 (stock 1) sells exactly once under concurrency", async () => {
-    const rs = await Promise.all(Array.from({ length: 6 }, () => order("alice-token", { productId: 40, qty: 1 })));
+    const rs = await Promise.all(
+      Array.from({ length: 6 }, () => order("alice-token", { productId: 40, qty: 1 })),
+    );
     expect(rs.filter((r) => r.status === 201)).toHaveLength(1);
     expect(rs.filter((r) => r.status === 409)).toHaveLength(5);
     verifiedCorrect.add("stock-atomic");
   });
 
   it("outbound-timeout: payments fetch is bounded by AbortSignal.timeout (static check; a live hang costs 4 x 2 s)", () => {
-    const src = readFileSync(new URL("../../../examples/shop-fastify/src/payments-client.ts", import.meta.url), "utf8");
+    const src = readFileSync(
+      new URL("../../../examples/shop-fastify/src/payments-client.ts", import.meta.url),
+      "utf8",
+    );
     expect(src).toMatch(/signal: AbortSignal\.timeout\(\d+\)/);
     verifiedCorrect.add("outbound-timeout");
   });
 
   it("order-qty-validated", async () => {
-    for (const qty of [0, 101, -1]) expect((await order("alice-token", { productId: 1, qty })).status).toBe(400);
+    for (const qty of [0, 101, -1])
+      expect((await order("alice-token", { productId: 1, qty })).status).toBe(400);
     verifiedCorrect.add("order-qty-validated");
   });
 
@@ -197,7 +210,9 @@ describe("shop-fastify FIXED variant", () => {
       const f = await api(fixed.url, "GET", "/products/search?q=red");
       expect((await api(fixed.url, "GET", "/__test/stats")).body.queries).toBe(1);
       const s = await api(seeded.url, "GET", "/products/search?q=red");
-      expect(f.body.items.map((p: { id: number }) => p.id)).toEqual(s.body.items.map((p: { id: number }) => p.id));
+      expect(f.body.items.map((p: { id: number }) => p.id)).toEqual(
+        s.body.items.map((p: { id: number }) => p.id),
+      );
       expect(s.ms).toBeGreaterThan(f.ms * 3);
     } finally {
       await Promise.all([fixed.close(), seeded.close()]);

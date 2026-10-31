@@ -77,7 +77,12 @@ const BODY_HEADERS = new Set(["content-type", "content-length", "transfer-encodi
  * Never forwarded to another origin on a redirect: the known credential headers plus anything whose
  * name looks like one (x-api-key, x-auth-token, x-session-id, x-signature, ...).
  */
-const CREDENTIAL_HEADERS = new Set([...DEFAULT_REDACT_HEADERS, "authorization", "cookie", "proxy-authorization"]);
+const CREDENTIAL_HEADERS = new Set([
+  ...DEFAULT_REDACT_HEADERS,
+  "authorization",
+  "cookie",
+  "proxy-authorization",
+]);
 const CREDENTIAL_NAME = /auth|token|api[-_]?key|secret|session|cookie|signature|credential|password/i;
 
 function stripHeaders(

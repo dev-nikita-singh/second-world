@@ -26,8 +26,11 @@ beforeEach(async () => {
   shop.payments.reset();
 });
 
-const order = (token: string, items: { productId: number; qty: number }[], headers?: Record<string, string>) =>
-  api(shop.url, "POST", "/orders", { token, body: { items }, ...(headers ? { headers } : {}) });
+const order = (
+  token: string,
+  items: { productId: number; qty: number }[],
+  headers?: Record<string, string>,
+) => api(shop.url, "POST", "/orders", { token, body: { items }, ...(headers ? { headers } : {}) });
 
 describe("shop-express happy paths", () => {
   it("healthz, products list/get", async () => {
@@ -42,7 +45,9 @@ describe("shop-express happy paths", () => {
   });
 
   it("login with valid/invalid credentials", async () => {
-    const ok = await api(shop.url, "POST", "/auth/login", { body: { username: "alice", password: "alice-pass" } });
+    const ok = await api(shop.url, "POST", "/auth/login", {
+      body: { username: "alice", password: "alice-pass" },
+    });
     expect(ok.status).toBe(200);
     expect(ok.body.token).toBe("alice-token");
     const bad = await api(shop.url, "POST", "/auth/login", { body: { username: "alice", password: "nope" } });
@@ -51,13 +56,19 @@ describe("shop-express happy paths", () => {
 
   it("cart add/get/clear within valid quantities", async () => {
     expect((await api(shop.url, "GET", "/cart")).status).toBe(401);
-    const add = await api(shop.url, "POST", "/cart/items", { token: "alice-token", body: { productId: 1, qty: 10 } });
+    const add = await api(shop.url, "POST", "/cart/items", {
+      token: "alice-token",
+      body: { productId: 1, qty: 10 },
+    });
     expect(add.status).toBe(201);
     const cart = await api(shop.url, "GET", "/cart", { token: "alice-token" });
     expect(cart.body.items).toHaveLength(1);
-    expect(cart.body.total).toBeCloseTo(71.3, 2) // unit price 7.125 → 7.13;
+    expect(cart.body.total).toBeCloseTo(71.3, 2); // unit price 7.125 → 7.13;
     expect((await api(shop.url, "DELETE", "/cart", { token: "alice-token" })).status).toBe(204);
-    expect((await api(shop.url, "POST", "/cart/items", { token: "alice-token", body: { productId: "x", qty: 1 } })).status).toBe(400);
+    expect(
+      (await api(shop.url, "POST", "/cart/items", { token: "alice-token", body: { productId: "x", qty: 1 } }))
+        .status,
+    ).toBe(400);
   });
 
   it("orders: create (paid via payments), list own, admin route protected", async () => {
@@ -116,15 +127,23 @@ describe("shop-express seeded defects are reproducible", () => {
   });
 
   it("module-cycle: inventory.ts and orders.ts import each other", () => {
-    const inv = readFileSync(new URL("../../../examples/shop-express/src/services/inventory.ts", import.meta.url), "utf8");
-    const ord = readFileSync(new URL("../../../examples/shop-express/src/services/orders.ts", import.meta.url), "utf8");
+    const inv = readFileSync(
+      new URL("../../../examples/shop-express/src/services/inventory.ts", import.meta.url),
+      "utf8",
+    );
+    const ord = readFileSync(
+      new URL("../../../examples/shop-express/src/services/orders.ts", import.meta.url),
+      "utf8",
+    );
     expect(inv).toMatch(/from "\.\/orders\.js"/);
     expect(ord).toMatch(/from "\.\/inventory\.js"/);
     reproduced.add("module-cycle");
   });
 
   it("stock-race: concurrent orders oversell a product with stock 1", async () => {
-    const rs = await Promise.all(Array.from({ length: 5 }, () => order("alice-token", [{ productId: 20, qty: 1 }])));
+    const rs = await Promise.all(
+      Array.from({ length: 5 }, () => order("alice-token", [{ productId: 20, qty: 1 }])),
+    );
     const created = rs.filter((r) => r.status === 201).length;
     expect(created).toBeGreaterThan(1);
     reproduced.add("stock-race");
@@ -142,7 +161,9 @@ describe("shop-express seeded defects are reproducible", () => {
 
   it("idempotency-key-race (discovered): concurrent requests with one key create several orders", async () => {
     const h = { "idempotency-key": "race-key-1" };
-    const rs = await Promise.all(Array.from({ length: 5 }, () => order("alice-token", [{ productId: 6, qty: 1 }], h)));
+    const rs = await Promise.all(
+      Array.from({ length: 5 }, () => order("alice-token", [{ productId: 6, qty: 1 }], h)),
+    );
     expect(rs.every((r) => r.status === 201)).toBe(true);
     expect(new Set(rs.map((r) => r.body.id)).size).toBeGreaterThan(1);
     reproduced.add("idempotency-key-race");
@@ -164,11 +185,17 @@ describe("shop-express seeded defects are reproducible", () => {
 
   it("boundary-500: qty 0 / -1 / 101 → 500 (contract: 400); 1 and 100 are fine", async () => {
     for (const qty of [0, -1, 101]) {
-      const r = await api(shop.url, "POST", "/cart/items", { token: "alice-token", body: { productId: 1, qty } });
+      const r = await api(shop.url, "POST", "/cart/items", {
+        token: "alice-token",
+        body: { productId: 1, qty },
+      });
       expect(r.status, `qty=${qty}`).toBe(500);
     }
     for (const qty of [1, 100]) {
-      const r = await api(shop.url, "POST", "/cart/items", { token: "alice-token", body: { productId: 1, qty } });
+      const r = await api(shop.url, "POST", "/cart/items", {
+        token: "alice-token",
+        body: { productId: 1, qty },
+      });
       expect(r.status, `qty=${qty}`).toBe(201);
     }
     expect((await order("alice-token", [{ productId: 1, qty: 0 }])).status).toBe(500);

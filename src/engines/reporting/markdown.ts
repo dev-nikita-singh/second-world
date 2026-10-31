@@ -3,13 +3,12 @@
  * docs/03-engines/evidence-and-history.md §A.4–A.5. GitHub-flavoured tables, no HTML
  * except <details> blocks for long appendices.
  */
-import { dataBlocks } from "./dispatch.js";
-import { isEvolutionData, isExperimentData } from "./experiments.js";
+
 import type { EngineResult } from "../../core/evidence/schemas.js";
 import type { PerformanceData } from "../performance/types.js";
 import { type Block, cellText, isStressData } from "./blocks.js";
-import { sparkline } from "./tty.js";
-import { isReliabilityData } from "./reliability.js";
+import { dataBlocks } from "./dispatch.js";
+import { isEvolutionData, isExperimentData } from "./experiments.js";
 import {
   type CombinedReport,
   fmtDuration,
@@ -23,6 +22,8 @@ import {
   sortFindings,
   thresholdsOf,
 } from "./model.js";
+import { isReliabilityData } from "./reliability.js";
+import { sparkline } from "./tty.js";
 
 /** Escape text for a GFM table cell / inline context. */
 export function mdEscape(s: string): string {
@@ -44,7 +45,11 @@ export function mdCode(s: string): string {
 
 function table(head: string[], rows: string[][], align?: ("l" | "r")[]): string {
   const sep = head.map((_, i) => ((align?.[i] ?? "l") === "r" ? "---:" : "---"));
-  return [`| ${head.join(" | ")} |`, `| ${sep.join(" | ")} |`, ...rows.map((r) => `| ${r.join(" | ")} |`)].join("\n");
+  return [
+    `| ${head.join(" | ")} |`,
+    `| ${sep.join(" | ")} |`,
+    ...rows.map((r) => `| ${r.join(" | ")} |`),
+  ].join("\n");
 }
 
 function perfSection(d: PerformanceData, out: string[]): void {
@@ -56,7 +61,16 @@ function perfSection(d: PerformanceData, out: string[]): void {
     table(
       ["", "requests", "rps", "error rate", "p50", "p95", "p99", "max"],
       [
-        ["corrected", String(t.requests), fmtNum(t.rps), fmtPct(t.errorRate), fmtMs(L.corrected.p50), fmtMs(L.corrected.p95), fmtMs(L.corrected.p99), fmtMs(L.corrected.max)],
+        [
+          "corrected",
+          String(t.requests),
+          fmtNum(t.rps),
+          fmtPct(t.errorRate),
+          fmtMs(L.corrected.p50),
+          fmtMs(L.corrected.p95),
+          fmtMs(L.corrected.p99),
+          fmtMs(L.corrected.max),
+        ],
         ["raw", "", "", "", fmtMs(L.raw.p50), fmtMs(L.raw.p95), fmtMs(L.raw.p99), fmtMs(L.raw.max)],
       ],
       ["l", "r", "r", "r", "r", "r", "r", "r"],
@@ -75,10 +89,24 @@ function perfSection(d: PerformanceData, out: string[]): void {
         fmtMs(e.latency.corrected.p95),
         fmtMs(e.latency.corrected.p99),
       ]);
-    out.push(table(["endpoint", "requests", "rps", "errors", "p50", "p95", "p99"], rows, ["l", "r", "r", "r", "r", "r", "r"]), "");
+    out.push(
+      table(["endpoint", "requests", "rps", "errors", "p50", "p95", "p99"], rows, [
+        "l",
+        "r",
+        "r",
+        "r",
+        "r",
+        "r",
+        "r",
+      ]),
+      "",
+    );
   }
   if (d.generator.saturated) {
-    out.push(`> **Warning:** load generator saturated: ${mdEscape((d.generator.reasons ?? []).join("; "))}`, "");
+    out.push(
+      `> **Warning:** load generator saturated: ${mdEscape((d.generator.reasons ?? []).join("; "))}`,
+      "",
+    );
   }
 }
 
@@ -91,14 +119,34 @@ export function renderBlocksMd(blocks: readonly Block[]): string[] {
         out.push(`${"#".repeat(b.level + 1)} ${mdEscape(b.text)}`, "");
         break;
       case "kv":
-        out.push(table(["", ""], b.items.map(([k, v]) => [`**${mdEscape(k)}**`, mdEscape(cellText(v))])), "");
+        out.push(
+          table(
+            ["", ""],
+            b.items.map(([k, v]) => [`**${mdEscape(k)}**`, mdEscape(cellText(v))]),
+          ),
+          "",
+        );
         break;
       case "table":
         if (b.title) out.push(`**${mdEscape(b.title)}**`, "");
-        out.push(table(b.head.map(mdEscape), b.rows.map((r) => r.map((c) => mdEscape(cellText(c)))), b.align), "");
+        out.push(
+          table(
+            b.head.map(mdEscape),
+            b.rows.map((r) => r.map((c) => mdEscape(cellText(c)))),
+            b.align,
+          ),
+          "",
+        );
         break;
       case "text":
-        out.push(b.tone === "warn" || b.tone === "bad" ? `> **Warning:** ${mdEscape(b.text)}` : b.tone === "muted" ? `_${mdEscape(b.text)}_` : mdEscape(b.text), "");
+        out.push(
+          b.tone === "warn" || b.tone === "bad"
+            ? `> **Warning:** ${mdEscape(b.text)}`
+            : b.tone === "muted"
+              ? `_${mdEscape(b.text)}_`
+              : mdEscape(b.text),
+          "",
+        );
         break;
       case "quote":
         // verbatim statement: escaped only so Markdown cannot reinterpret it
@@ -107,13 +155,22 @@ export function renderBlocksMd(blocks: readonly Block[]): string[] {
       case "spark": {
         const xs = b.values.filter((v) => Number.isFinite(v));
         if (xs.length === 0) break;
-        const mark = b.mark && b.mark.to > b.mark.from ? ` — ${mdEscape(b.mark.label)}: windows ${b.mark.from + 1}–${b.mark.to} of ${b.values.length}` : "";
-        out.push(`${mdEscape(b.title)}: ${sparkline(b.values)} (${fmtNum(Math.min(...xs), 1)}..${fmtNum(Math.max(...xs), 1)} ${mdEscape(b.unit)})${mark}`, "");
+        const mark =
+          b.mark && b.mark.to > b.mark.from
+            ? ` — ${mdEscape(b.mark.label)}: windows ${b.mark.from + 1}–${b.mark.to} of ${b.values.length}`
+            : "";
+        out.push(
+          `${mdEscape(b.title)}: ${sparkline(b.values)} (${fmtNum(Math.min(...xs), 1)}..${fmtNum(Math.max(...xs), 1)} ${mdEscape(b.unit)})${mark}`,
+          "",
+        );
         break;
       }
       case "code": {
         // fence longer than any backtick run inside the content
-        const longest = Math.max(2, ...b.lines.map((l) => Math.max(0, ...(l.match(/`+/g) ?? []).map((m) => m.length))));
+        const longest = Math.max(
+          2,
+          ...b.lines.map((l) => Math.max(0, ...(l.match(/`+/g) ?? []).map((m) => m.length))),
+        );
         const fence = "`".repeat(longest + 1);
         out.push(mdEscape(b.title), "", `${fence}${b.lang ?? ""}`, ...b.lines, fence, "");
         break;
@@ -135,7 +192,11 @@ function engineSection(r: EngineResult, failOn: CombinedReport["failOn"], out: s
     out.push(
       table(
         ["", "threshold", "actual"],
-        ths.map((t) => [t.passed ? "✅" : "❌", `${mdCode(t.expression)}`, fmtThresholdValue(t.actual, t.unit)]),
+        ths.map((t) => [
+          t.passed ? "✅" : "❌",
+          `${mdCode(t.expression)}`,
+          fmtThresholdValue(t.actual, t.unit),
+        ]),
         ["l", "l", "r"],
       ),
       "",
@@ -149,7 +210,12 @@ function engineSection(r: EngineResult, failOn: CombinedReport["failOn"], out: s
       mdEscape(f.title),
       locationOf(f) ? `${mdCode(locationOf(f))}` : "",
     ]);
-    out.push(`**Findings (${r.findings.length})**`, "", table(["", "severity", "class", "finding", "where"], rows), "");
+    out.push(
+      `**Findings (${r.findings.length})**`,
+      "",
+      table(["", "severity", "class", "finding", "where"], rows),
+      "",
+    );
   }
   if (r.limitations.length > 0) {
     out.push("**Limitations**", "");
@@ -179,7 +245,16 @@ export function renderMarkdown(report: CombinedReport): string {
   out.push(
     table(
       ["run", "status", "duration", "exit code", "fail-on", "version"],
-      [[`${mdCode(report.runId)}`, report.status, fmtDuration(report.durationMs), String(v.exitCode), report.failOn, mdEscape(report.toolVersion)]],
+      [
+        [
+          `${mdCode(report.runId)}`,
+          report.status,
+          fmtDuration(report.durationMs),
+          String(v.exitCode),
+          report.failOn,
+          mdEscape(report.toolVersion),
+        ],
+      ],
     ),
     "",
   );

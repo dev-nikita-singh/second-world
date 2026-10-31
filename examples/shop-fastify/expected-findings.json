@@ -7,10 +7,7 @@
     {
       "id": "slow-search",
       "engine": "evolution",
-      "alsoDetectableBy": [
-        "performance",
-        "architecture"
-      ],
+      "alsoDetectableBy": ["performance", "architecture"],
       "category": "performance",
       "ruleId": "perf/slow-query-full-scan",
       "severity": "medium",
@@ -37,9 +34,7 @@
     {
       "id": "retry-no-jitter",
       "engine": "reliability",
-      "alsoDetectableBy": [
-        "architecture"
-      ],
+      "alsoDetectableBy": ["architecture"],
       "category": "reliability",
       "ruleId": "reliability/retry-without-jitter",
       "severity": "medium",
@@ -92,9 +87,7 @@
     {
       "id": "boundary-500-limit",
       "engine": "bugs",
-      "alsoDetectableBy": [
-        "agent"
-      ],
+      "alsoDetectableBy": ["agent"],
       "category": "bug",
       "ruleId": "bugs/server-error-on-boundary",
       "severity": "medium",
@@ -120,9 +113,7 @@
     {
       "id": "bfla-delete-product",
       "engine": "bugs",
-      "alsoDetectableBy": [
-        "agent"
-      ],
+      "alsoDetectableBy": ["agent"],
       "category": "security",
       "ruleId": "bugs/bfla",
       "severity": "critical",
@@ -148,9 +139,7 @@
     {
       "id": "sync-fs-in-handler",
       "engine": "architecture",
-      "alsoDetectableBy": [
-        "performance"
-      ],
+      "alsoDetectableBy": ["performance"],
       "category": "performance",
       "ruleId": "perf/sync-io-in-handler",
       "severity": "low",
@@ -204,9 +193,7 @@
     {
       "id": "idempotency-key-race",
       "engine": "agent",
-      "alsoDetectableBy": [
-        "bugs"
-      ],
+      "alsoDetectableBy": ["bugs"],
       "category": "bug",
       "ruleId": "agent/idempotency-key-race",
       "severity": "high",

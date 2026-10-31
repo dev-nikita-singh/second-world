@@ -62,7 +62,8 @@ describe("Adversarial agent result rendered in every format (shop-express)", () 
     const xml = renderReport([result], "junit");
     expect([...xml.matchAll(/<testcase /g)]).toHaveLength(result.data!.hypotheses.length);
     const sarif = JSON.parse(renderReport([result], "sarif"));
-    for (const r of sarif.runs[0].results as any[]) expect(r.locations[0].logicalLocations[0].name).toMatch(/^[A-Z]+ \//);
+    for (const r of sarif.runs[0].results as any[])
+      expect(r.locations[0].logicalLocations[0].name).toMatch(/^[A-Z]+ \//);
     const { files } = await writeReports([result], { formats: [...REPORT_FORMATS], outDir: tmp.path });
     expect(files).toHaveLength(5);
   });

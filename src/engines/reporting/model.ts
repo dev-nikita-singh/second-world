@@ -91,7 +91,8 @@ export function thresholdsOf(r: EngineResult): ThresholdResult[] {
   const d = r.data as { thresholds?: unknown } | undefined;
   if (!d || !Array.isArray(d.thresholds)) return [];
   return d.thresholds.filter(
-    (t): t is ThresholdResult => typeof t === "object" && t !== null && typeof (t as ThresholdResult).expression === "string",
+    (t): t is ThresholdResult =>
+      typeof t === "object" && t !== null && typeof (t as ThresholdResult).expression === "string",
   );
 }
 
@@ -165,12 +166,21 @@ export function computeVerdict(results: readonly EngineResult[], failOn: FailOn 
   const partial = results.filter((r) => r.status === "partial");
   if (partial.length > 0) reasons.push(`partial results: ${partial.map((r) => r.engine).join(", ")}`);
   reasons.unshift(
-    failOn === "never" ? "completed (--fail-on never)" : `completed: no failing thresholds or findings at or above '${failOn}'`,
+    failOn === "never"
+      ? "completed (--fail-on never)"
+      : `completed: no failing thresholds or findings at or above '${failOn}'`,
   );
   return { passed: true, exitCode: ExitCode.Ok, reasons };
 }
 
-const STATUS_PRECEDENCE: readonly EngineResult["status"][] = ["error", "cancelled", "failed", "partial", "passed", "skipped"];
+const STATUS_PRECEDENCE: readonly EngineResult["status"][] = [
+  "error",
+  "cancelled",
+  "failed",
+  "partial",
+  "passed",
+  "skipped",
+];
 
 function overallStatus(results: readonly EngineResult[]): EngineResult["status"] {
   for (const s of STATUS_PRECEDENCE) if (results.some((r) => r.status === s)) return s;

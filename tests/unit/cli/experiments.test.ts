@@ -20,7 +20,17 @@ describe("experiments flag / config mapping", () => {
   it("applyWhatIfFlags: design, aa, metrics, seed", () => {
     const def = { name: "x", design: { cooldown: "1s" }, workload: { vus: 1 } };
     expect(
-      applyWhatIfFlags(def, { repetitions: "7", order: "randomized-blocks", lifecycle: "per-arm", aa: true, metric: ["p95,p99", "rps"] }, 9),
+      applyWhatIfFlags(
+        def,
+        {
+          repetitions: "7",
+          order: "randomized-blocks",
+          lifecycle: "per-arm",
+          aa: true,
+          metric: ["p95,p99", "rps"],
+        },
+        9,
+      ),
     ).toEqual({
       name: "x",
       workload: { vus: 1 },
@@ -68,7 +78,9 @@ describe("experiments flag / config mapping", () => {
   });
 
   it("whatif.experiments config section; evolution workload defaults to the perf section without target", async () => {
-    expect(ConfigSchema.safeParse({ whatif: { experiments: { pool: { baseline: {} } } } }).success).toBe(true);
+    expect(ConfigSchema.safeParse({ whatif: { experiments: { pool: { baseline: {} } } } }).success).toBe(
+      true,
+    );
     expect(ConfigSchema.safeParse({ whatif: { nope: 1 } }).success).toBe(false);
     const cfg = await loadConfig({
       env: {},
@@ -101,7 +113,18 @@ describe("sw evolve / sw whatif refusal paths (subprocess)", () => {
 
   it("--sandbox process without --yes → exit 3 (SW_SAFETY_APPROVAL_REQUIRED)", async () => {
     const r = await runCli(
-      ["evolve", "--repo", repo.dir, "--candidates", "branch:fix/fast", "--start", "node server.mjs", "--sandbox", "process", "--no-history"],
+      [
+        "evolve",
+        "--repo",
+        repo.dir,
+        "--candidates",
+        "branch:fix/fast",
+        "--start",
+        "node server.mjs",
+        "--sandbox",
+        "process",
+        "--no-history",
+      ],
       { cwd: dir, env, timeoutMs: 60_000 },
     );
     expect(r.exitCode, r.stderr).toBe(3);

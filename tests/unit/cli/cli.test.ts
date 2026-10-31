@@ -20,16 +20,55 @@ const env = { SW_USER_CONFIG_DIR: join(tmpdir(), "sw-no-user-config") };
 describe("program definition (in-process)", () => {
   it("has the expected commands and global flags", () => {
     const p = buildProgram();
-    expect(p.commands.map((c) => c.name())).toEqual(["doctor", "config", "perf", "stress", "inspect", "bugs", "agent", "replay", "reliability", "whatif", "evolve", "model", "analyze", "history", "init"]);
+    expect(p.commands.map((c) => c.name())).toEqual([
+      "doctor",
+      "config",
+      "perf",
+      "stress",
+      "inspect",
+      "bugs",
+      "agent",
+      "replay",
+      "reliability",
+      "whatif",
+      "evolve",
+      "model",
+      "analyze",
+      "history",
+      "init",
+    ]);
     const flags = p.options.map((o) => o.long);
-    for (const f of ["--config", "--profile", "--set", "--format", "--out", "--fail-on", "--seed", "--yes", "--dry-run", "--no-config-code", "--json-logs"]) {
+    for (const f of [
+      "--config",
+      "--profile",
+      "--set",
+      "--format",
+      "--out",
+      "--fail-on",
+      "--seed",
+      "--yes",
+      "--dry-run",
+      "--no-config-code",
+      "--json-logs",
+    ]) {
       expect(flags).toContain(f);
     }
   });
   it("perfInputFromFlags maps flags", () => {
     expect(
-      perfInputFromFlags("http://127.0.0.1:1/x", { rate: "200", duration: "5s", vus: "3", threshold: ["p95<300ms"] }),
-    ).toEqual({ target: "http://127.0.0.1:1/x", rate: 200, duration: "5s", vus: 3, thresholds: { http: ["p95<300ms"] } });
+      perfInputFromFlags("http://127.0.0.1:1/x", {
+        rate: "200",
+        duration: "5s",
+        vus: "3",
+        threshold: ["p95<300ms"],
+      }),
+    ).toEqual({
+      target: "http://127.0.0.1:1/x",
+      rate: 200,
+      duration: "5s",
+      vus: 3,
+      thresholds: { http: ["p95<300ms"] },
+    });
     expect(() => perfInputFromFlags(undefined, { vus: "-1" })).toThrow(/positive integer/);
   });
 });
@@ -71,11 +110,16 @@ describe("sw CLI (subprocess)", () => {
   });
 
   it("config validate / print --resolved --json", async () => {
-    const dir = project({ "sw.config.yaml": "environment: staging\nprofiles:\n  ci: { report: { failOn: never } }\n" });
+    const dir = project({
+      "sw.config.yaml": "environment: staging\nprofiles:\n  ci: { report: { failOn: never } }\n",
+    });
     const v = await runCli(["config", "validate", "--json"], { cwd: dir, env });
     expect(v.exitCode).toBe(0);
     expect(JSON.parse(v.stdout).valid).toBe(true);
-    const p = await runCli(["config", "print", "--resolved", "--json", "-p", "ci", "--set", "safety.maxRps=10"], { cwd: dir, env });
+    const p = await runCli(
+      ["config", "print", "--resolved", "--json", "-p", "ci", "--set", "safety.maxRps=10"],
+      { cwd: dir, env },
+    );
     expect(p.exitCode).toBe(0);
     const j = JSON.parse(p.stdout);
     expect(j.config.environment).toBe("staging");
@@ -85,12 +129,18 @@ describe("sw CLI (subprocess)", () => {
   });
 
   it("config validate checks engine sections (performance) → exit 2", async () => {
-    for (const perf of [{ rate: "not-a-rate" }, { model: "warp" }, { thresholds: { "http.p95": "< banana" } }]) {
+    for (const perf of [
+      { rate: "not-a-rate" },
+      { model: "warp" },
+      { thresholds: { "http.p95": "< banana" } },
+    ]) {
       const dir = project({ "sw.config.json": JSON.stringify({ performance: perf }) });
       const r = await runCli(["config", "validate"], { cwd: dir, env });
       expect(r.exitCode, JSON.stringify(perf)).toBe(2);
     }
-    const ok = project({ "sw.config.json": JSON.stringify({ performance: { rate: "100/s", duration: "5s" } }) });
+    const ok = project({
+      "sw.config.json": JSON.stringify({ performance: { rate: "100/s", duration: "5s" } }),
+    });
     expect((await runCli(["config", "validate"], { cwd: ok, env })).exitCode).toBe(0);
   });
 
@@ -127,10 +177,13 @@ describe("sw CLI (subprocess)", () => {
 
   it("perf against a local server → report + exit 0, files written", async () => {
     const dir = project();
-    const r = await runCli(["-f", "tty,json,md", "perf", url, "--iterations", "20", "--vus", "2", "--threshold", "p95<5s"], {
-      cwd: dir,
-      env,
-    });
+    const r = await runCli(
+      ["-f", "tty,json,md", "perf", url, "--iterations", "20", "--vus", "2", "--threshold", "p95<5s"],
+      {
+        cwd: dir,
+        env,
+      },
+    );
     expect(r.exitCode).toBe(0);
     expect(r.stdout.length).toBeGreaterThan(0);
     const files = readdirSync(join(dir, ".second-world", "reports"));
@@ -139,10 +192,13 @@ describe("sw CLI (subprocess)", () => {
 
   it("perf --json prints the combined report; failing threshold → exit 1", async () => {
     const dir = project();
-    const r = await runCli(["-f", "tty", "perf", url, "--iterations", "10", "--vus", "1", "--threshold", "p95<0.001ms", "--json"], {
-      cwd: dir,
-      env,
-    });
+    const r = await runCli(
+      ["-f", "tty", "perf", url, "--iterations", "10", "--vus", "1", "--threshold", "p95<0.001ms", "--json"],
+      {
+        cwd: dir,
+        env,
+      },
+    );
     expect(r.exitCode).toBe(1);
     const j = JSON.parse(r.stdout);
     expect(j.kind).toBe("second-world-report");

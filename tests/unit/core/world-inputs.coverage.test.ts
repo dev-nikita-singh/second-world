@@ -47,7 +47,9 @@ describe("authHeadersFor", () => {
     writeFileSync(join(dir, "key.txt"), "file-key-123\n");
     const env = { ADMIN_TOKEN: "tok-abc", PW: "p@ss" };
     expect(authHeadersFor(cfg, "admin", env)).toEqual({ authorization: "Bearer tok-abc" });
-    expect(authHeadersFor(cfg, "basic", env)).toEqual({ authorization: `Basic ${Buffer.from("u:p@ss").toString("base64")}` });
+    expect(authHeadersFor(cfg, "basic", env)).toEqual({
+      authorization: `Basic ${Buffer.from("u:p@ss").toString("base64")}`,
+    });
     expect(authHeadersFor(cfg, "key", env)).toEqual({ "x-api-key": "file-key-123" });
   });
 
@@ -66,9 +68,18 @@ describe("authHeadersFor", () => {
 describe("performance / stress inputs", () => {
   it("resolves target names, rate/duration strings, numeric strings, auth roles and defaults", async () => {
     const { cfg } = await cfgOf({
-      targets: { db: { url: "http://127.0.0.1:5432", role: "dependency" }, api: { url: "http://127.0.0.1:3000" } },
+      targets: {
+        db: { url: "http://127.0.0.1:5432", role: "dependency" },
+        api: { url: "http://127.0.0.1:3000" },
+      },
       auth: AUTH,
-      performance: { rate: "100/s", duration: "2s", warmup: "500", auth: "admin", scenarios: [{ name: "a", auth: "basic" }, { name: "b" }, 3] },
+      performance: {
+        rate: "100/s",
+        duration: "2s",
+        warmup: "500",
+        auth: "admin",
+        scenarios: [{ name: "a", auth: "basic" }, { name: "b" }, 3],
+      },
     });
     const p = buildPerformanceInput(cfg, {}, { seed: 9, env: { ADMIN_TOKEN: "t1", PW: "p1" } });
     expect(p.target).toBe("http://127.0.0.1:3000");
@@ -80,14 +91,20 @@ describe("performance / stress inputs", () => {
     expect((p.scenarios as any[])[2]).toBe(3);
     expect(p.seed).toBe(9);
     expect(p.allowHosts).toEqual(cfg.config.safety.allowHosts);
-    const named = buildPerformanceInput(cfg, { target: "db", seed: 1 }, { seed: 9, env: { ADMIN_TOKEN: "t", PW: "p" } });
+    const named = buildPerformanceInput(
+      cfg,
+      { target: "db", seed: 1 },
+      { seed: 9, env: { ADMIN_TOKEN: "t", PW: "p" } },
+    );
     expect(named.target).toBe("http://127.0.0.1:5432");
     expect(named.seed).toBe(1);
   });
 
   it("undefined auth role → SW_CONFIG_AUTH naming the location; missing secret → SW_CONFIG_SECRET", async () => {
     const { cfg } = await cfgOf({ auth: AUTH, performance: { scenarios: [{ auth: "ghost" }] } });
-    expect(() => buildPerformanceInput(cfg, {}, { env: {} })).toThrow(/performance\.scenarios\.0\.auth "ghost"/);
+    expect(() => buildPerformanceInput(cfg, {}, { env: {} })).toThrow(
+      /performance\.scenarios\.0\.auth "ghost"/,
+    );
     const { cfg: c2 } = await cfgOf({ auth: AUTH, stress: { auth: "admin" } });
     try {
       buildStressInput(c2, {}, { env: {} });
@@ -116,7 +133,11 @@ describe("performance / stress inputs", () => {
 
 describe("other builders", () => {
   it("architecture/model resolve paths against the config dir; model picks bugs.contract", async () => {
-    const { cfg } = await cfgOf({ project: { root: "app", name: "svc" }, bugs: { contract: "api.yaml" }, architecture: { tsconfig: "tsconfig.app.json" } });
+    const { cfg } = await cfgOf({
+      project: { root: "app", name: "svc" },
+      bugs: { contract: "api.yaml" },
+      architecture: { tsconfig: "tsconfig.app.json" },
+    });
     const a = buildArchitectureInput(cfg);
     expect(a.project).toBe(resolve(cfg.cwd, "app"));
     expect(a.tsconfig).toBe(resolve(cfg.cwd, "app", "tsconfig.app.json"));
@@ -130,7 +151,10 @@ describe("other builders", () => {
   });
 
   it("whatif and evolution defaults", async () => {
-    const { cfg } = await cfgOf({ performance: { target: "http://127.0.0.1:1", rate: 5 }, evolution: { repo: "sub" } });
+    const { cfg } = await cfgOf({
+      performance: { target: "http://127.0.0.1:1", rate: 5 },
+      evolution: { repo: "sub" },
+    });
     expect(buildWhatIfInput(cfg, { name: "x" })).toEqual({ name: "x", cwd: cfg.cwd });
     expect(buildWhatIfInput(cfg, { cwd: "/elsewhere" }).cwd).toBe("/elsewhere");
     const e = buildEvolutionInput(cfg);
@@ -141,7 +165,10 @@ describe("other builders", () => {
   it("reliability: dependency shorthands, injector defaults, route auth with explicit headers winning", async () => {
     const { cfg } = await cfgOf({
       environment: "staging",
-      targets: { api: { url: "http://127.0.0.1:3000" }, pay: { url: "http://127.0.0.1:4000", role: "dependency" } },
+      targets: {
+        api: { url: "http://127.0.0.1:3000" },
+        pay: { url: "http://127.0.0.1:4000", role: "dependency" },
+      },
       auth: AUTH,
       reliability: {
         injector: "toxiproxy",
@@ -176,7 +203,11 @@ describe("other builders", () => {
       targets: { api: { url: "http://127.0.0.1:3000" } },
       auth: { admin: AUTH.admin, oauth: AUTH.oauth },
       bugs: { contract: "openapi.yaml" },
-      hooks: { reset: { command: "npm run reset", cwd: "x", timeout: 5 }, setup: { http: { url: "http://127.0.0.1:3000/setup" } }, other: { command: "y" } },
+      hooks: {
+        reset: { command: "npm run reset", cwd: "x", timeout: 5 },
+        setup: { http: { url: "http://127.0.0.1:3000/setup" } },
+        other: { command: "y" },
+      },
     });
     const b = buildBugsInput(cfg, {}, { seed: 2, env: { ADMIN_TOKEN: "t" } });
     expect(b.openapi).toBe("openapi.yaml");
@@ -185,7 +216,15 @@ describe("other builders", () => {
     expect((b.auth as any).roles).toEqual({ admin: { type: "bearer", token: "t" } });
     expect((b.hooks as any).reset).toEqual({ command: "npm run reset", cwd: "x", timeout: 5 });
     expect((b.hooks as any).setup).toEqual({ http: { url: "http://127.0.0.1:3000/setup" } });
-    const b2 = buildBugsInput(cfg, { contract: "c.yaml", target: "api", auth: { roles: { r: { type: "bearer", token: { env: "R" } }, s: "raw" } } }, { env: { R: "rt", ADMIN_TOKEN: "t" } });
+    const b2 = buildBugsInput(
+      cfg,
+      {
+        contract: "c.yaml",
+        target: "api",
+        auth: { roles: { r: { type: "bearer", token: { env: "R" } }, s: "raw" } },
+      },
+      { env: { R: "rt", ADMIN_TOKEN: "t" } },
+    );
     expect(b2.openapi).toBe("openapi.yaml"); // section contract wins
     expect((b2.auth as any).roles).toEqual({ r: { type: "bearer", token: "rt" }, s: "raw" });
     expect(() => buildBugsInput(cfg, {}, { env: {} })).toThrow(/ADMIN_TOKEN/);
@@ -194,7 +233,11 @@ describe("other builders", () => {
   it("agent: inherits bugs base, agent.contract → openapi, agent roles resolved", async () => {
     const { cfg } = await cfgOf({
       targets: { api: { url: "http://127.0.0.1:3000" } },
-      agent: { contract: "agent.yaml", target: "api", auth: { roles: { x: { type: "bearer", token: { env: "X" } }, y: "plain" } } },
+      agent: {
+        contract: "agent.yaml",
+        target: "api",
+        auth: { roles: { x: { type: "bearer", token: { env: "X" } }, y: "plain" } },
+      },
     });
     const a = buildAgentInput(cfg, {}, { seed: 1, env: { X: "xv" } });
     expect(a.openapi).toBe("agent.yaml");

@@ -7,7 +7,12 @@ import { createFakeClock } from "../../../src/core/clock.js";
 import { createEngineContext } from "../../../src/core/context.js";
 import { SafetyError } from "../../../src/core/errors.js";
 import { Gcra } from "../../../src/core/safety/gcra.js";
-import { classifyHost, createSafetyGuard, hostMatches, verifyAuditLog } from "../../../src/core/safety/guard.js";
+import {
+  classifyHost,
+  createSafetyGuard,
+  hostMatches,
+  verifyAuditLog,
+} from "../../../src/core/safety/guard.js";
 
 describe("GCRA", () => {
   it("smooth rate: one cell per interval", () => {
@@ -126,15 +131,23 @@ describe("SafetyGuard.checkTarget", () => {
       allowed: false,
       code: "SW_SAFETY_PUBLIC_TARGET",
     });
-    expect(createSafetyGuard({ allowHosts: ["api.example.com"] }, { interactive: false }).checkTarget(u)).toMatchObject({
+    expect(
+      createSafetyGuard({ allowHosts: ["api.example.com"] }, { interactive: false }).checkTarget(u),
+    ).toMatchObject({
       allowed: false,
       code: "SW_SAFETY_PUBLIC_TARGET",
     });
     expect(
-      createSafetyGuard({ allowHosts: ["api.example.com"], allowPublic: true }, { interactive: false }).checkTarget(u),
+      createSafetyGuard(
+        { allowHosts: ["api.example.com"], allowPublic: true },
+        { interactive: false },
+      ).checkTarget(u),
     ).toMatchObject({ allowed: false, code: "SW_SAFETY_APPROVAL_REQUIRED" });
     expect(
-      createSafetyGuard({ allowHosts: ["api.example.com"], allowPublic: true }, { interactive: false, approve: true }).checkTarget(u),
+      createSafetyGuard(
+        { allowHosts: ["api.example.com"], allowPublic: true },
+        { interactive: false, approve: true },
+      ).checkTarget(u),
     ).toEqual({ allowed: true });
   });
   it("rejects non-http protocols and assertTarget throws SafetyError (exit 3)", () => {
@@ -167,7 +180,9 @@ describe("SafetyGuard.checkTarget", () => {
   it("production environment requires approval", async () => {
     const g = createSafetyGuard({ environment: "production" }, { interactive: false });
     expect(g.checkTarget(new URL("http://127.0.0.1")).allowed).toBe(false);
-    await expect(g.preflight("http://127.0.0.1")).rejects.toMatchObject({ code: "SW_SAFETY_APPROVAL_REQUIRED" });
+    await expect(g.preflight("http://127.0.0.1")).rejects.toMatchObject({
+      code: "SW_SAFETY_APPROVAL_REQUIRED",
+    });
     const g2 = createSafetyGuard({ environment: "production" }, { interactive: false, approve: true });
     await g2.preflight("http://127.0.0.1");
   });
@@ -178,12 +193,20 @@ describe("approvals", () => {
     await expect(
       createSafetyGuard({}, { interactive: false }).requireApproval("fault-injection", "latency"),
     ).rejects.toMatchObject({ code: "SW_SAFETY_APPROVAL_REQUIRED" });
-    await createSafetyGuard({}, { interactive: false, approve: true }).requireApproval("fault-injection", "x");
-    await createSafetyGuard({ approveDisruptive: true }, { interactive: false }).requireApproval("high-load", "x");
+    await createSafetyGuard({}, { interactive: false, approve: true }).requireApproval(
+      "fault-injection",
+      "x",
+    );
+    await createSafetyGuard({ approveDisruptive: true }, { interactive: false }).requireApproval(
+      "high-load",
+      "x",
+    );
   });
   it("interactive decline", async () => {
     const g = createSafetyGuard({}, { interactive: true, confirm: async () => false });
-    await expect(g.requireApproval("mutating-requests", "x")).rejects.toMatchObject({ code: "SW_SAFETY_DECLINED" });
+    await expect(g.requireApproval("mutating-requests", "x")).rejects.toMatchObject({
+      code: "SW_SAFETY_DECLINED",
+    });
   });
 });
 

@@ -78,7 +78,9 @@ export function reportError(e: unknown, opts: { color?: boolean } = {}): number 
   }
   const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
   err(`${s.fail} Internal error: ${msg}`);
-  err(`  ${s.dim("hint:")} this is a bug in SECOND WORLD; please report it with the output of \`sw doctor --json\``);
+  err(
+    `  ${s.dim("hint:")} this is a bug in SECOND WORLD; please report it with the output of \`sw doctor --json\``,
+  );
   return ExitCode.Internal;
 }
 

@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { startCalibratedServer } from "../../fixtures/servers/calibrated.js";
-import { type ChildCalibratedServer, startCalibratedServerInChild } from "../../fixtures/servers/calibrated-child.js";
+import {
+  type ChildCalibratedServer,
+  startCalibratedServerInChild,
+} from "../../fixtures/servers/calibrated-child.js";
 
 let child: ChildCalibratedServer | undefined;
 afterEach(async () => {

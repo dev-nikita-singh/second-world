@@ -68,7 +68,10 @@ export function agentBlocks(d: AgentData): Block[] {
     ["contract", `${d.contract.source} (${d.contract.operations} operations)`],
     ["iterations", `${bu.iterations.used}/${bu.iterations.max}`],
     ["requests", `${bu.requests.used}/${bu.requests.max} (${bu.requests.replays} replays)`],
-    ["duration", `${fmtDuration(bu.durationMs.used)}${bu.durationMs.max !== undefined ? ` / ${fmtDuration(bu.durationMs.max)}` : ""}`],
+    [
+      "duration",
+      `${fmtDuration(bu.durationMs.used)}${bu.durationMs.max !== undefined ? ` / ${fmtDuration(bu.durationMs.max)}` : ""}`,
+    ],
     ["stop reason", bu.stopReason],
     ["mutations", d.mutationsAllowed ? "allowed" : { text: "blocked", tone: "muted" }],
   ];
@@ -78,12 +81,21 @@ export function agentBlocks(d: AgentData): Block[] {
   const cov = `${d.coverage.percent.toFixed(1)}% (${d.coverage.documented.observed}/${d.coverage.documented.total} documented status pairs)`;
   if (typeof base === "number") {
     const delta = d.coverage.percent - base;
-    items.push(["coverage", { text: `${cov}, ${delta >= 0 ? "+" : ""}${delta.toFixed(1)} pts vs baseline ${base.toFixed(1)}%`, tone: delta > 0 ? "good" : undefined } as CellLike]);
+    items.push([
+      "coverage",
+      {
+        text: `${cov}, ${delta >= 0 ? "+" : ""}${delta.toFixed(1)} pts vs baseline ${base.toFixed(1)}%`,
+        tone: delta > 0 ? "good" : undefined,
+      } as CellLike,
+    ]);
   } else {
     items.push(["coverage", cov]);
   }
   const bits = d.coverage.bits;
-  items.push(["new coverage bits", `status ${bits.status}, branch ${bits.branch}, param ${bits.param}, transition ${bits.trans}`]);
+  items.push([
+    "new coverage bits",
+    `status ${bits.status}, branch ${bits.branch}, param ${bits.param}, transition ${bits.trans}`,
+  ]);
   b.push({ kind: "kv", items });
 
   // ---- hypotheses tried
@@ -111,22 +123,36 @@ export function agentBlocks(d: AgentData): Block[] {
       kind: "table",
       title: `Rejected proposals (${d.rejectedTotal}; validator reasons)`,
       head: ["source", "arm", "proposal", "reasons"],
-      rows: shown.map((r) => [r.source, r.arm ?? "-", r.title ?? "-", { text: r.reasons.join("; "), tone: "warn" }]),
+      rows: shown.map((r) => [
+        r.source,
+        r.arm ?? "-",
+        r.title ?? "-",
+        { text: r.reasons.join("; "), tone: "warn" },
+      ]),
     });
-    if (d.rejectedTotal > shown.length) b.push({ kind: "text", tone: "muted", text: `${d.rejectedTotal - shown.length} more rejected proposal(s) not shown (deduplicated list in the JSON report).` });
+    if (d.rejectedTotal > shown.length)
+      b.push({
+        kind: "text",
+        tone: "muted",
+        text: `${d.rejectedTotal - shown.length} more rejected proposal(s) not shown (deduplicated list in the JSON report).`,
+      });
   }
 
   // ---- findings + reproductions
   if (d.findings.length > 0) {
     const fs = [...d.findings].sort(
-      (a, z) => (a.classification === z.classification ? 0 : a.classification === "reproduced-defect" ? -1 : 1) || (a.operation < z.operation ? -1 : 1),
+      (a, z) =>
+        (a.classification === z.classification ? 0 : a.classification === "reproduced-defect" ? -1 : 1) ||
+        (a.operation < z.operation ? -1 : 1),
     );
     b.push({
       kind: "table",
       title: `Agent findings (${fs.length})`,
       head: ["classification", "severity", "rule", "operation", "technique", "replays", "title"],
       rows: fs.map((f) => [
-        f.classification === "reproduced-defect" ? { text: f.classification, tone: "bad" } : { text: f.classification, tone: "muted" },
+        f.classification === "reproduced-defect"
+          ? { text: f.classification, tone: "bad" }
+          : { text: f.classification, tone: "muted" },
         f.severity,
         f.ruleId,
         f.operation,
@@ -141,9 +167,19 @@ export function agentBlocks(d: AgentData): Block[] {
       b.push({ kind: "heading", level: 3, text: "Reproductions" });
       b.push({ kind: "text", tone: "muted", text: REPRO_AUTH_HINT });
       for (const f of withCurl.slice(0, 10)) {
-        b.push({ kind: "code", title: `${f.ruleId} on ${f.operation} — hypothesis: ${f.hypothesis}${f.message ? ` — ${f.message}` : ""}`, lines: f.curl.map(scrubSecrets), lang: "sh" });
+        b.push({
+          kind: "code",
+          title: `${f.ruleId} on ${f.operation} — hypothesis: ${f.hypothesis}${f.message ? ` — ${f.message}` : ""}`,
+          lines: f.curl.map(scrubSecrets),
+          lang: "sh",
+        });
       }
-      if (withCurl.length > 10) b.push({ kind: "text", tone: "muted", text: `${withCurl.length - 10} more reproduction(s) in the JSON report.` });
+      if (withCurl.length > 10)
+        b.push({
+          kind: "text",
+          tone: "muted",
+          text: `${withCurl.length - 10} more reproduction(s) in the JSON report.`,
+        });
     }
   }
 
@@ -158,9 +194,15 @@ export function agentBlocks(d: AgentData): Block[] {
     for (const t of d.suggestedTests.slice(0, 5)) {
       const lines = scrubSecrets(t.vitest).split("\n");
       const preview = lines.slice(0, PREVIEW_LINES);
-      if (lines.length > PREVIEW_LINES) preview.push(`// … ${lines.length - PREVIEW_LINES} more line(s): sw agent --export-tests <dir>`);
+      if (lines.length > PREVIEW_LINES)
+        preview.push(`// … ${lines.length - PREVIEW_LINES} more line(s): sw agent --export-tests <dir>`);
       b.push({ kind: "code", title: `${t.filename} (preview)`, lines: preview, lang: "ts" });
-      b.push({ kind: "code", title: "agent.regression config snippet", lines: scrubSecrets(t.config).split("\n"), lang: "ts" });
+      b.push({
+        kind: "code",
+        title: "agent.regression config snippet",
+        lines: scrubSecrets(t.config).split("\n"),
+        lang: "ts",
+      });
     }
   }
   return b;

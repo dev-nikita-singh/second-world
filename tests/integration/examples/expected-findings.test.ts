@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
-import { EngineIdSchema, CategorySchema, SeveritySchema } from "../../../src/core/evidence/schemas.js";
+import { CategorySchema, EngineIdSchema, SeveritySchema } from "../../../src/core/evidence/schemas.js";
 import { REPO_ROOT } from "../../helpers/cli.js";
 
 const EXTRA_ENGINES = new Set(["evolution"]); // planned engine ids beyond EngineIdSchema today
@@ -13,7 +13,13 @@ for (const app of ["shop-express", "shop-fastify"]) {
     const dir = path.join(REPO_ROOT, "examples", app);
     const doc = JSON.parse(readFileSync(path.join(dir, "expected-findings.json"), "utf8")) as {
       app: string;
-      defects: { id: string; engine: string; category: string; severity: string; location: { file: string; line: number } }[];
+      defects: {
+        id: string;
+        engine: string;
+        category: string;
+        severity: string;
+        location: { file: string; line: number };
+      }[];
     };
 
     it("has unique ids and valid engine/category/severity", () => {
@@ -29,7 +35,10 @@ for (const app of ["shop-express", "shop-fastify"]) {
     });
 
     it("location.symbol names a function declared in that file and the line lies inside it", () => {
-      for (const d of doc.defects as { id: string; location: { file: string; line: number; symbol?: string } }[]) {
+      for (const d of doc.defects as {
+        id: string;
+        location: { file: string; line: number; symbol?: string };
+      }[]) {
         if (!d.location.symbol) continue;
         const lines = readFileSync(path.join(dir, d.location.file), "utf8").split(/\r?\n/);
         const declLine = lines.findIndex((l) => new RegExp(`function ${d.location.symbol}\\b`).test(l)) + 1;
@@ -39,9 +48,13 @@ for (const app of ["shop-express", "shop-fastify"]) {
     });
 
     it("locations point at the line after each SEEDED-DEFECT marker", async () => {
-      const r = await execa(process.execPath, [path.join(REPO_ROOT, "examples", "_tools", "sync-expected-findings.mjs"), dir, "--check"], {
-        reject: false,
-      });
+      const r = await execa(
+        process.execPath,
+        [path.join(REPO_ROOT, "examples", "_tools", "sync-expected-findings.mjs"), dir, "--check"],
+        {
+          reject: false,
+        },
+      );
       expect(r.stderr).toBe("");
       expect(r.exitCode).toBe(0);
     });

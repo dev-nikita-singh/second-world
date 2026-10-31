@@ -29,10 +29,23 @@ describe("DiGraph structure", () => {
       fc.property(edges, node, (es, victim) => {
         const g = build(es);
         const rr = g.reverse().reverse();
-        expect(rr.edges().map((e) => `${e.from}>${e.to}`).sort()).toEqual(g.edges().map((e) => `${e.from}>${e.to}`).sort());
+        expect(
+          rr
+            .edges()
+            .map((e) => `${e.from}>${e.to}`)
+            .sort(),
+        ).toEqual(
+          g
+            .edges()
+            .map((e) => `${e.from}>${e.to}`)
+            .sort(),
+        );
         const csr = g.toCsr();
         for (let i = 0; i < csr.ids.length; i++) {
-          const outs = Array.from(csr.targets.slice(csr.offsets[i], csr.offsets[i + 1]), (t) => csr.ids[t]).sort();
+          const outs = Array.from(
+            csr.targets.slice(csr.offsets[i], csr.offsets[i + 1]),
+            (t) => csr.ids[t],
+          ).sort();
           expect(outs).toEqual(g.successors(csr.ids[i] as string).sort());
           expect(csr.rOffsets[i + 1]! - csr.rOffsets[i]!).toBe(g.inDegree(csr.ids[i] as string));
         }
@@ -98,7 +111,8 @@ describe("topological order and SCCs", () => {
           expect(cyc).not.toBeNull();
           // consecutive nodes of the cycle are edges, and it closes
           const c2 = cyc as string[];
-          for (let i = 0; i < c2.length; i++) expect(g.hasEdge(c2[i] as string, c2[(i + 1) % c2.length] as string)).toBe(true);
+          for (let i = 0; i < c2.length; i++)
+            expect(g.hasEdge(c2[i] as string, c2[(i + 1) % c2.length] as string)).toBe(true);
           expect(findCycles(g).length).toBeGreaterThan(0);
         } else {
           expect(shortestCycle(g)).toBeNull();
@@ -108,10 +122,23 @@ describe("topological order and SCCs", () => {
   });
 
   it("self loops and bounded source search", () => {
-    const g = build([["a", "a"], ["b", "c"], ["c", "b"]]);
+    const g = build([
+      ["a", "a"],
+      ["b", "c"],
+      ["c", "b"],
+    ]);
     expect(shortestCycle(g)).toEqual(["a"]);
     expect(shortestCycle(g, ["b", "c"], { maxSources: 1 })?.length).toBe(2);
-    expect(shortestCycle(build([["b", "c"], ["c", "b"]]), undefined, { maxSources: 0 })).toBeNull();
+    expect(
+      shortestCycle(
+        build([
+          ["b", "c"],
+          ["c", "b"],
+        ]),
+        undefined,
+        { maxSources: 0 },
+      ),
+    ).toBeNull();
   });
 });
 
@@ -138,7 +165,12 @@ describe("traversal", () => {
   });
 
   it("bfs/dfs options and bounds", () => {
-    const g = build([["a", "b"], ["b", "c"], ["c", "d"], ["a", "c"]]);
+    const g = build([
+      ["a", "b"],
+      ["b", "c"],
+      ["c", "d"],
+      ["a", "c"],
+    ]);
     expect(bfs(g, ["a"], { maxDepth: 1 }).order.sort()).toEqual(["a", "b", "c"]);
     expect(bfs(g, "d", { reverse: true } as never).order.length).toBeGreaterThan(1);
     expect(dfs(g, "a").preorder[0]).toBe("a");

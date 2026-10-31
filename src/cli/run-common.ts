@@ -50,7 +50,11 @@ export function assertReportDirWritable(world: World): void {
       st = undefined;
     }
     if (st) {
-      const why = !st.isDirectory() ? `${p} is not a directory` : canWrite(p) ? undefined : `${p} is not writable`;
+      const why = !st.isDirectory()
+        ? `${p} is not a directory`
+        : canWrite(p)
+          ? undefined
+          : `${p} is not writable`;
       if (why)
         throw new ConfigError("SW_CONFIG_OUTDIR", `Cannot write reports to ${outDir}: ${why}`, {
           hint: "Pass a writable -o/--out-dir (or report.outDir in sw.config)",
@@ -108,7 +112,14 @@ export function attachProgress(world: World, g: GlobalOptions, o: { json?: boole
   const tty = process.stderr.isTTY === true;
   let last = 0;
   world.on("perf.tick", (p) => {
-    const t = p as { elapsedS?: number; phase?: string; rps?: number; p95?: number; errors?: number; inFlight?: number };
+    const t = p as {
+      elapsedS?: number;
+      phase?: string;
+      rps?: number;
+      p95?: number;
+      errors?: number;
+      inFlight?: number;
+    };
     const now = Date.now();
     if (!tty && now - last < 5000) return;
     last = now;
@@ -119,7 +130,15 @@ export function attachProgress(world: World, g: GlobalOptions, o: { json?: boole
     );
   });
   world.on("stress.stage.end", (p) => {
-    const t = p as { stage?: number; label?: string; level?: number; status?: string; p95?: number; throughput?: number; errorRate?: number };
+    const t = p as {
+      stage?: number;
+      label?: string;
+      level?: number;
+      status?: string;
+      p95?: number;
+      throughput?: number;
+      errorRate?: number;
+    };
     err(
       s.dim(
         `stage ${t.stage ?? "?"} ${t.label ?? ""} level=${t.level ?? ""} → ${t.status ?? ""} p95=${(t.p95 ?? 0).toFixed(1)}ms tput=${(t.throughput ?? 0).toFixed(1)}/s err=${((t.errorRate ?? 0) * 100).toFixed(2)}%`,
@@ -138,20 +157,38 @@ export interface FinishOptions {
 }
 
 /** Renders/writes reports, auto-saves history, sets process.exitCode. */
-export async function finishRun(world: World, result: EngineResult, g: GlobalOptions, o: FinishOptions): Promise<void> {
+export async function finishRun(
+  world: World,
+  result: EngineResult,
+  g: GlobalOptions,
+  o: FinishOptions,
+): Promise<void> {
   const s = style(colorEnabled(g));
   const reporting = await import("../engines/reporting/index.js");
   const cfg = world.config.config;
   const failOn = cfg.report.failOn;
-  const meta = { runId: result.runId, toolVersion: VERSION, command: ["sw", ...process.argv.slice(2)].join(" ") };
+  const meta = {
+    runId: result.runId,
+    toolVersion: VERSION,
+    command: ["sw", ...process.argv.slice(2)].join(" "),
+  };
   const supported = reporting.REPORT_FORMATS as readonly string[];
-  const formats = cfg.report.formats.filter((f) => supported.includes(f)) as Array<(typeof reporting.REPORT_FORMATS)[number]>;
+  const formats = cfg.report.formats.filter((f) => supported.includes(f)) as Array<
+    (typeof reporting.REPORT_FORMATS)[number]
+  >;
   const dropped = cfg.report.formats.filter((f) => !supported.includes(f));
   if (dropped.length && !g.quiet) err(`${s.warn} report format(s) not supported yet: ${dropped.join(", ")}`);
   if (!o.suppressStdout) {
     if (o.json) out(reporting.renderReport(result, "json", { failOn, meta }));
     else if (formats.includes("tty")) {
-      out(reporting.renderReport(result, "tty", { failOn, meta, color: colorEnabled(g), ascii: !unicodeEnabled() }));
+      out(
+        reporting.renderReport(result, "tty", {
+          failOn,
+          meta,
+          color: colorEnabled(g),
+          ascii: !unicodeEnabled(),
+        }),
+      );
     }
   }
   const fileFormats = formats.filter((f) => f !== "tty");

@@ -50,7 +50,13 @@ const OPENAPI_CANDIDATES = [
 
 /** Read-only project detection. Never throws on malformed package.json. */
 export function detectProject(root: string): ProjectDetection {
-  let pkg: { name?: string; packageManager?: string; scripts?: Record<string, string>; dependencies?: Record<string, string>; devDependencies?: Record<string, string> } = {};
+  let pkg: {
+    name?: string;
+    packageManager?: string;
+    scripts?: Record<string, string>;
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  } = {};
   try {
     pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8").replace(/^﻿/, ""));
   } catch {
@@ -130,12 +136,18 @@ export function renderConfig(d: ProjectDetection, a: InitAnswers): string {
   lines.push("  },");
   lines.push('  stress: { mode: "step", stages: [10, 25, 50, 100], hold: "20s" },');
   const archInclude = d.typescript ? '["src/**/*.ts"]' : '["src/**/*.js", "src/**/*.ts"]';
-  lines.push(`  architecture: { include: ${archInclude}${d.tsconfig ? `, tsconfig: ${q(d.tsconfig)}` : ""} },`);
+  lines.push(
+    `  architecture: { include: ${archInclude}${d.tsconfig ? `, tsconfig: ${q(d.tsconfig)}` : ""} },`,
+  );
   if (d.openapi) lines.push(`  bugs: { target: "api", openapi: ${q(`./${d.openapi}`)} },`);
-  lines.push('  report: { formats: ["tty", "json", "md"], outDir: ".second-world/reports", failOn: "high" },');
+  lines.push(
+    '  report: { formats: ["tty", "json", "md"], outDir: ".second-world/reports", failOn: "high" },',
+  );
   lines.push('  history: { dir: ".second-world/history" },');
   lines.push("  profiles: {");
-  lines.push('    ci: { performance: { rate: 20, duration: "60s" }, report: { formats: ["json", "junit", "md"] } },');
+  lines.push(
+    '    ci: { performance: { rate: 20, duration: "60s" }, report: { formats: ["json", "junit", "md"] } },',
+  );
   lines.push("  },");
   lines.push("};");
   lines.push("");
@@ -156,11 +168,18 @@ export function ensureGitignore(root: string): boolean {
   const has = text.split(/\r?\n/).some((l) => /^\/?\.second-world\/?\s*$/.test(l.trim()));
   if (has) return false;
   const sep = text === "" || text.endsWith("\n") ? "" : "\n";
-  writeFileSync(p, `${text}${sep}# SECOND WORLD artifacts (reports, history, cache, audit log)\n.second-world/\n`, "utf8");
+  writeFileSync(
+    p,
+    `${text}${sep}# SECOND WORLD artifacts (reports, history, cache, audit log)\n.second-world/\n`,
+    "utf8",
+  );
   return true;
 }
 
-export async function initCommand(o: { force?: boolean; json?: boolean; target?: string }, g: GlobalOptions): Promise<void> {
+export async function initCommand(
+  o: { force?: boolean; json?: boolean; target?: string },
+  g: GlobalOptions,
+): Promise<void> {
   const root = process.cwd();
   const s = style(colorEnabled(g));
   const d = detectProject(root);
@@ -171,7 +190,8 @@ export async function initCommand(o: { force?: boolean; json?: boolean; target?:
   }
   const defaults: InitAnswers = { targetUrl: o.target ?? "http://127.0.0.1:3000", healthPath: "/healthz" };
   let answers = defaults;
-  const interactive = !g.yes && process.stdin.isTTY === true && process.stdout.isTTY === true && !process.env.CI;
+  const interactive =
+    !g.yes && process.stdin.isTTY === true && process.stdout.isTTY === true && !process.env.CI;
   if (interactive) {
     const p = await import("@clack/prompts");
     p.intro("SECOND WORLD init");
@@ -223,7 +243,9 @@ export async function initCommand(o: { force?: boolean; json?: boolean; target?:
   } else {
     out(`${s.ok} wrote ${file}`);
     if (gi) out(`${s.ok} added .second-world/ to .gitignore`);
-    out(`${s.info} detected: ${d.packageManager}${d.frameworks.length ? `, ${d.frameworks.join(", ")}` : ""}${d.openapi ? `, OpenAPI ${d.openapi}` : ""}`);
+    out(
+      `${s.info} detected: ${d.packageManager}${d.frameworks.length ? `, ${d.frameworks.join(", ")}` : ""}${d.openapi ? `, OpenAPI ${d.openapi}` : ""}`,
+    );
     out("next: start your service, then `sw doctor` and `sw perf`");
     err(s.dim("SECOND WORLD is for testing systems you own or are explicitly authorised to test."));
   }

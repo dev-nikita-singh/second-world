@@ -20,7 +20,10 @@ const ARTIFACTS_DIR = join(".second-world", "artifacts");
 function list(v: unknown): string[] | undefined {
   if (v === undefined) return undefined;
   const arr = Array.isArray(v) ? v : [v];
-  const out = arr.flatMap((x) => String(x).split(",")).map((x) => x.trim()).filter(Boolean);
+  const out = arr
+    .flatMap((x) => String(x).split(","))
+    .map((x) => x.trim())
+    .filter(Boolean);
   return out.length ? out : undefined;
 }
 
@@ -31,19 +34,27 @@ export function parseInvariant(spec: string): Record<string, unknown> | string {
   if (kind === "linearizable") {
     const model = parts[1] ?? "stock";
     if (!["stock", "counter", "register", "set"].includes(model)) {
-      throw new ConfigError("SW_CONFIG_FLAG", `--invariant linearizable model must be stock|counter|register|set, got "${model}"`);
+      throw new ConfigError(
+        "SW_CONFIG_FLAG",
+        `--invariant linearizable model must be stock|counter|register|set, got "${model}"`,
+      );
     }
     const inv: Record<string, unknown> = { kind: "linearizable", model };
     if (parts[2] !== undefined) {
       const n = Number(parts[2]);
-      if (!Number.isFinite(n)) throw new ConfigError("SW_CONFIG_FLAG", `--invariant initial value must be a number, got "${parts[2]}"`);
+      if (!Number.isFinite(n))
+        throw new ConfigError(
+          "SW_CONFIG_FLAG",
+          `--invariant initial value must be a number, got "${parts[2]}"`,
+        );
       inv.initial = n;
     }
     return inv;
   }
   if (kind === "max-success") {
     const n = Number(parts[1]);
-    if (!Number.isInteger(n) || n < 0) throw new ConfigError("SW_CONFIG_FLAG", `--invariant max-success:<n> needs an integer, got "${spec}"`);
+    if (!Number.isInteger(n) || n < 0)
+      throw new ConfigError("SW_CONFIG_FLAG", `--invariant max-success:<n> needs an integer, got "${spec}"`);
     return { kind: "max-success", max: n };
   }
   if (kind === "same-response") return { kind: "same-response" };
@@ -111,7 +122,8 @@ export function parseMix(spec: string): Record<string, unknown> {
     const v = t.slice(eq + 1);
     if (k === "count") {
       const n = Number(v);
-      if (!Number.isInteger(n) || n < 1 || n > 64) throw mixError(spec, `count must be an integer 1..64, got "${v}"`);
+      if (!Number.isInteger(n) || n < 1 || n > 64)
+        throw mixError(spec, `count must be an integer 1..64, got "${v}"`);
       entry.count = n;
     } else if (k === "as") {
       if (!MIX_AS.includes(v)) throw mixError(spec, `as must be ${MIX_AS.join("|")}, got "${v}"`);
@@ -120,7 +132,8 @@ export function parseMix(spec: string): Record<string, unknown> {
       if (!MIX_PHASES.includes(v)) throw mixError(spec, `phase must be before|during|after, got "${v}"`);
       entry.phase = v;
     } else if (k === "pointer") {
-      if (v !== "" && !v.startsWith("/")) throw mixError(spec, `pointer must be a JSON pointer ("/stock"), got "${v}"`);
+      if (v !== "" && !v.startsWith("/"))
+        throw mixError(spec, `pointer must be a JSON pointer ("/stock"), got "${v}"`);
       entry.pointer = v;
     } else if (k === "value" || k === "role") {
       entry[k] = v;
@@ -131,12 +144,24 @@ export function parseMix(spec: string): Record<string, unknown> {
     } else if (pathNames.has(k)) {
       pathParams[k] = scalar(v, false) as string | number;
     } else {
-      const known = ["as", "count", "phase", "pointer", "value", "role", "body", "query.<k>", "header.<k>", ...pathNames];
+      const known = [
+        "as",
+        "count",
+        "phase",
+        "pointer",
+        "value",
+        "role",
+        "body",
+        "query.<k>",
+        "header.<k>",
+        ...pathNames,
+      ];
       throw mixError(spec, `unknown key "${k}" (known: ${known.join(", ")})`);
     }
   }
   if (entry.as === undefined) {
-    if (method !== "GET" && method !== "HEAD") throw mixError(spec, `as=<${MIX_AS.join("|")}> is required for ${method}`);
+    if (method !== "GET" && method !== "HEAD")
+      throw mixError(spec, `as=<${MIX_AS.join("|")}> is required for ${method}`);
     entry.as = "read";
   }
   if (Object.keys(pathParams).length) entry.pathParams = pathParams;
@@ -158,12 +183,16 @@ export function bugsInputFromFlags(o: Record<string, unknown>, cwd = process.cwd
     ["maxReplays", "maxReplays"],
     ["propertyRuns", "propertyRuns"],
   ] as const) {
-    const n = int(flag.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`), o[flag]);
+    const n = int(
+      flag.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`),
+      o[flag],
+    );
     if (n !== undefined) input[key] = n;
   }
   const include = list(o.include);
   const exclude = list(o.exclude);
-  if (include || exclude) input.operations = { ...(include ? { include } : {}), ...(exclude ? { exclude } : {}) };
+  if (include || exclude)
+    input.operations = { ...(include ? { include } : {}), ...(exclude ? { exclude } : {}) };
   if (o.allowMutations === true) input.allowMutations = true;
   if (o.timeout !== undefined) input.timeout = o.timeout;
   const ops = list(o.concurrencyTest);
@@ -189,7 +218,10 @@ export function bugsInputFromFlags(o: Record<string, unknown>, cwd = process.cwd
       ...(mix.length ? { mix } : {}),
     }));
   } else if (o.burst !== undefined || o.invariant !== undefined || mixSpecs.length > 0) {
-    throw new ConfigError("SW_CONFIG_FLAG", "--burst/--invariant/--mix require --concurrency-test \"METHOD /path\"");
+    throw new ConfigError(
+      "SW_CONFIG_FLAG",
+      '--burst/--invariant/--mix require --concurrency-test "METHOD /path"',
+    );
   }
   return input;
 }
@@ -200,11 +232,14 @@ export function bugsInputFromFlags(o: Record<string, unknown>, cwd = process.cwd
  * Called after the pending artifacts dir is renamed to the runId, so no reference points at a gone path.
  */
 export function relocateArtifacts(result: EngineResult, from: string, to: string): void {
-  const move = (p: string): string => (p === from || p.startsWith(from + sep) || p.startsWith(`${from}/`) ? to + p.slice(from.length) : p);
+  const move = (p: string): string =>
+    p === from || p.startsWith(from + sep) || p.startsWith(`${from}/`) ? to + p.slice(from.length) : p;
   result.artifacts = result.artifacts.map((a) => ({ ...a, path: move(a.path) }));
   for (const f of result.findings) {
     if (f.reproduction) f.reproduction = { ...f.reproduction, artifacts: f.reproduction.artifacts.map(move) };
-    f.evidence = f.evidence.map((e) => ("artifact" in e && typeof e.artifact === "string" ? { ...e, artifact: move(e.artifact) } : e));
+    f.evidence = f.evidence.map((e) =>
+      "artifact" in e && typeof e.artifact === "string" ? { ...e, artifact: move(e.artifact) } : e,
+    );
   }
 }
 
@@ -224,8 +259,23 @@ export async function bugsCommand(o: Record<string, unknown>, g: GlobalOptions):
     if (g.dryRun) {
       const { parseBugsInput } = await import("../../engines/bugs/index.js");
       const parsed = parseBugsInput(plan);
-      const view = { ...parsed, auth: parsed.auth ? { ...parsed.auth, roles: Object.keys(parsed.auth.roles ?? {}) } : undefined };
-      if (o.json) out(JSON.stringify(world.redactor.redactObject({ dryRun: true, target: plan.target, safety: "allowed", input: view }), null, 2));
+      const view = {
+        ...parsed,
+        auth: parsed.auth ? { ...parsed.auth, roles: Object.keys(parsed.auth.roles ?? {}) } : undefined,
+      };
+      if (o.json)
+        out(
+          JSON.stringify(
+            world.redactor.redactObject({
+              dryRun: true,
+              target: plan.target,
+              safety: "allowed",
+              input: view,
+            }),
+            null,
+            2,
+          ),
+        );
       else {
         out(`${s.ok} config valid, ${s.ok} safety check passed for ${plan.target}`);
         out(JSON.stringify(world.redactor.redactObject(view), null, 2));
@@ -242,7 +292,11 @@ export async function bugsCommand(o: Record<string, unknown>, g: GlobalOptions):
     if (!g.quiet && !o.json) {
       world.on("bugs.technique", (p) => {
         const t = p as { technique?: string; requests?: number; findings?: number; ms?: number };
-        err(s.dim(`technique ${t.technique ?? "?"}: ${t.requests ?? 0} requests, ${t.findings ?? 0} finding(s), ${((t.ms ?? 0) / 1000).toFixed(1)}s`));
+        err(
+          s.dim(
+            `technique ${t.technique ?? "?"}: ${t.requests ?? 0} requests, ${t.findings ?? 0} finding(s), ${((t.ms ?? 0) / 1000).toFixed(1)}s`,
+          ),
+        );
       });
     }
     const result = (await world.bugs.run(flags)) as EngineResult;
@@ -255,7 +309,11 @@ export async function bugsCommand(o: Record<string, unknown>, g: GlobalOptions):
         // keep the pending dir; replay searches every artifacts subdir
       }
     }
-    await finishRun(world, result, g, { json: o.json === true, history: o.history as boolean | undefined, label: "bugs" });
+    await finishRun(world, result, g, {
+      json: o.json === true,
+      history: o.history as boolean | undefined,
+      label: "bugs",
+    });
   } finally {
     removeSignals();
     await world.close();
@@ -269,7 +327,10 @@ interface FoundArtifact {
 }
 
 /** Finds reproductions by fingerprint prefix: artifacts dirs first (newest first), then history. */
-async function findReproduction(world: Awaited<ReturnType<typeof worldFromGlobals>>, prefix: string): Promise<FoundArtifact> {
+async function findReproduction(
+  world: Awaited<ReturnType<typeof worldFromGlobals>>,
+  prefix: string,
+): Promise<FoundArtifact> {
   const matches = new Map<string, FoundArtifact>();
   const root = resolve(world.config.cwd, ARTIFACTS_DIR);
   if (existsSync(root)) {
@@ -301,9 +362,11 @@ async function findReproduction(world: Awaited<ReturnType<typeof worldFromGlobal
       for (const e of await store.list({ engine: "bugs", limit: 50 })) {
         const run = await store.get(e.id);
         for (const r of run?.results ?? []) {
-          const reps = (r.data as { reproductions?: Record<string, unknown> } | undefined)?.reproductions ?? {};
+          const reps =
+            (r.data as { reproductions?: Record<string, unknown> } | undefined)?.reproductions ?? {};
           for (const fp of Object.keys(reps)) {
-            if (fp.startsWith(prefix.toLowerCase()) && !matches.has(fp)) matches.set(fp, { fingerprint: fp, data: r.data });
+            if (fp.startsWith(prefix.toLowerCase()) && !matches.has(fp))
+              matches.set(fp, { fingerprint: fp, data: r.data });
           }
         }
         if (matches.size > 0) break;
@@ -313,30 +376,51 @@ async function findReproduction(world: Awaited<ReturnType<typeof worldFromGlobal
     }
   }
   if (matches.size === 0) {
-    throw new SecondWorldError("SW_REPLAY_NOT_FOUND", `No recorded reproduction matches "${prefix}"`, ExitCode.ConfigInvalid, {
-      hint: "Run `sw bugs` first; reproductions are stored in .second-world/artifacts/<runId>/ and in history",
-    });
+    throw new SecondWorldError(
+      "SW_REPLAY_NOT_FOUND",
+      `No recorded reproduction matches "${prefix}"`,
+      ExitCode.ConfigInvalid,
+      {
+        hint: "Run `sw bugs` first; reproductions are stored in .second-world/artifacts/<runId>/ and in history",
+      },
+    );
   }
   if (matches.size > 1) {
-    throw new SecondWorldError("SW_REPLAY_AMBIGUOUS", `"${prefix}" matches ${matches.size} findings: ${[...matches.keys()].slice(0, 5).join(", ")}`, ExitCode.ConfigInvalid, {
-      hint: "Use a longer fingerprint prefix",
-    });
+    throw new SecondWorldError(
+      "SW_REPLAY_AMBIGUOUS",
+      `"${prefix}" matches ${matches.size} findings: ${[...matches.keys()].slice(0, 5).join(", ")}`,
+      ExitCode.ConfigInvalid,
+      {
+        hint: "Use a longer fingerprint prefix",
+      },
+    );
   }
   return [...matches.values()][0] as FoundArtifact;
 }
 
-export async function replayCommand(fingerprint: string, o: Record<string, unknown>, g: GlobalOptions): Promise<void> {
+export async function replayCommand(
+  fingerprint: string,
+  o: Record<string, unknown>,
+  g: GlobalOptions,
+): Promise<void> {
   const s = style(colorEnabled(g));
   if (!/^[0-9a-f]{4,}$/i.test(fingerprint)) {
-    throw new ConfigError("SW_CONFIG_FLAG", `Invalid fingerprint "${fingerprint}"`, { hint: "Use the hex fingerprint (or a ≥ 4-char prefix) shown in the report" });
+    throw new ConfigError("SW_CONFIG_FLAG", `Invalid fingerprint "${fingerprint}"`, {
+      hint: "Use the hex fingerprint (or a ≥ 4-char prefix) shown in the report",
+    });
   }
   const world = await worldFromGlobals(g);
   const removeSignals = installSignals(world, g);
   try {
     const found = await findReproduction(world, fingerprint);
-    const input = world.buildInput("bugs", bugsInputFromFlags(o, world.config.invocationCwd ?? world.config.cwd));
+    const input = world.buildInput(
+      "bugs",
+      bugsInputFromFlags(o, world.config.invocationCwd ?? world.config.cwd),
+    );
     if (typeof input.target !== "string") {
-      throw new ConfigError("SW_CONFIG_NO_TARGET", "No target to replay against", { hint: "Pass --target or set bugs.target / targets in sw.config" });
+      throw new ConfigError("SW_CONFIG_NO_TARGET", "No target to replay against", {
+        hint: "Pass --target or set bugs.target / targets in sw.config",
+      });
     }
     await world.safety.preflight(input.target);
     const runs = int("runs", o.runs);
@@ -359,14 +443,27 @@ export async function replayCommand(fingerprint: string, o: Record<string, unkno
     };
     if (o.json) out(JSON.stringify(summary, null, 2));
     else if (r.classification === "inconclusive") {
-      out(`${s.fail} ${r.ruleId} ${r.operation}: replay inconclusive (${r.reason ?? "check could not be evaluated"})`);
+      out(
+        `${s.fail} ${r.ruleId} ${r.operation}: replay inconclusive (${r.reason ?? "check could not be evaluated"})`,
+      );
     } else {
       const repro = r.classification === "reproduced-defect";
-      out(`${repro ? s.fail : s.ok} ${r.ruleId} ${r.operation}: ${repro ? "still reproduces" : "does not reproduce"} (${r.failures}/${r.runs} failing${r.flaky ? ", flaky" : ""})`);
-      out(s.dim(`rate ${(r.rate * 100).toFixed(0)}%  Wilson 95% [${(r.wilson.lower * 100).toFixed(0)}%, ${(r.wilson.upper * 100).toFixed(0)}%]  source: ${found.path ?? "history"}`));
+      out(
+        `${repro ? s.fail : s.ok} ${r.ruleId} ${r.operation}: ${repro ? "still reproduces" : "does not reproduce"} (${r.failures}/${r.runs} failing${r.flaky ? ", flaky" : ""})`,
+      );
+      out(
+        s.dim(
+          `rate ${(r.rate * 100).toFixed(0)}%  Wilson 95% [${(r.wilson.lower * 100).toFixed(0)}%, ${(r.wilson.upper * 100).toFixed(0)}%]  source: ${found.path ?? "history"}`,
+        ),
+      );
     }
     // 1 = still reproduces, 2 = inconclusive (never report "fixed" when the check was not evaluated), 0 = does not reproduce.
-    process.exitCode = r.classification === "reproduced-defect" ? 1 : r.classification === "inconclusive" ? ExitCode.ConfigInvalid : 0;
+    process.exitCode =
+      r.classification === "reproduced-defect"
+        ? 1
+        : r.classification === "inconclusive"
+          ? ExitCode.ConfigInvalid
+          : 0;
   } finally {
     removeSignals();
     await world.close();

@@ -4,7 +4,7 @@
  * classification edges, allow-list matching, audit chain recovery, approvals, budgets,
  * DNS pinning error paths and redirect escapes.
  */
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, appendFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import fc from "fast-check";
@@ -68,7 +68,15 @@ describe("classifyHost — properties", () => {
   });
 
   it("addresses just outside the private ranges are public", () => {
-    for (const h of ["172.15.255.255", "172.32.0.0", "100.63.255.255", "100.128.0.0", "11.0.0.0", "192.169.0.1", "8.8.8.8"]) {
+    for (const h of [
+      "172.15.255.255",
+      "172.32.0.0",
+      "100.63.255.255",
+      "100.128.0.0",
+      "11.0.0.0",
+      "192.169.0.1",
+      "8.8.8.8",
+    ]) {
       expect(classifyHost(h), h).toBe("public");
     }
   });
@@ -246,8 +254,17 @@ describe("audit chain", () => {
 describe("target checks", () => {
   it("rejects invalid URLs, non-http protocols and invalid hosts", () => {
     const g = createSafetyGuard();
-    expect(g.checkTarget("::nope" as unknown as URL)).toMatchObject({ allowed: false, code: "SW_SAFETY_INVALID_URL" });
-    for (const u of ["file:///etc/passwd", "ftp://127.0.0.1/", "gopher://127.0.0.1:70/", "javascript:alert(1)", "data:text/plain,x"]) {
+    expect(g.checkTarget("::nope" as unknown as URL)).toMatchObject({
+      allowed: false,
+      code: "SW_SAFETY_INVALID_URL",
+    });
+    for (const u of [
+      "file:///etc/passwd",
+      "ftp://127.0.0.1/",
+      "gopher://127.0.0.1:70/",
+      "javascript:alert(1)",
+      "data:text/plain,x",
+    ]) {
       expect(g.checkTarget(new URL(u)), u).toMatchObject({ allowed: false, code: "SW_SAFETY_PROTOCOL" });
     }
     expect(() => g.assertTarget("not a url")).toThrow(/Invalid URL/);
@@ -273,23 +290,38 @@ describe("target checks", () => {
   it("production environment requires explicit approval even for loopback", async () => {
     const g = createSafetyGuard({ environment: "production" });
     expect(g.checkTarget(new URL("http://127.0.0.1/"))).toMatchObject({ code: "SW_SAFETY_PRODUCTION" });
-    await expect(g.preflight("http://127.0.0.1/")).rejects.toMatchObject({ code: "SW_SAFETY_APPROVAL_REQUIRED" });
+    await expect(g.preflight("http://127.0.0.1/")).rejects.toMatchObject({
+      code: "SW_SAFETY_APPROVAL_REQUIRED",
+    });
     // approveDisruptive in config does NOT approve production targets
     const g2 = createSafetyGuard({ environment: "production", approveDisruptive: true });
     await expect(g2.requireApproval("production-target", "")).rejects.toBeInstanceOf(SafetyError);
     const g3 = createSafetyGuard({ environment: "production" }, { interactive: false, approve: true });
     await g3.preflight("http://127.0.0.1/");
-    const g4 = createSafetyGuard({ environment: "production" }, { interactive: true, confirm: async () => true });
+    const g4 = createSafetyGuard(
+      { environment: "production" },
+      { interactive: true, confirm: async () => true },
+    );
     await g4.preflight("http://127.0.0.1/");
     expect(g4.checkTarget(new URL("http://127.0.0.1/"))).toEqual({ allowed: true });
   });
 
   it("public targets: listed without allowPublic, approval required, interactive confirm and decline", async () => {
     const r = dns({ "api.example.com": ["93.184.216.34"] });
-    const g = createSafetyGuard({ allowHosts: ["api.example.com"] }, { interactive: false, resolver: r.resolver });
-    expect(g.checkTarget(new URL("https://api.example.com/"))).toMatchObject({ code: "SW_SAFETY_PUBLIC_TARGET" });
-    const g2 = createSafetyGuard({ allowHosts: ["api.example.com"], allowPublic: true }, { interactive: false, resolver: r.resolver });
-    await expect(g2.preflight("https://api.example.com/")).rejects.toMatchObject({ code: "SW_SAFETY_APPROVAL_REQUIRED" });
+    const g = createSafetyGuard(
+      { allowHosts: ["api.example.com"] },
+      { interactive: false, resolver: r.resolver },
+    );
+    expect(g.checkTarget(new URL("https://api.example.com/"))).toMatchObject({
+      code: "SW_SAFETY_PUBLIC_TARGET",
+    });
+    const g2 = createSafetyGuard(
+      { allowHosts: ["api.example.com"], allowPublic: true },
+      { interactive: false, resolver: r.resolver },
+    );
+    await expect(g2.preflight("https://api.example.com/")).rejects.toMatchObject({
+      code: "SW_SAFETY_APPROVAL_REQUIRED",
+    });
     const asked: string[] = [];
     const g3 = createSafetyGuard(
       { allowHosts: ["api.example.com"], allowPublic: true },
@@ -303,7 +335,9 @@ describe("target checks", () => {
       { allowHosts: ["api.example.com"], allowPublic: true },
       { interactive: true, resolver: r.resolver, confirm: async () => false },
     );
-    await expect(g4.preflight("https://api.example.com/")).rejects.toMatchObject({ code: "SW_SAFETY_APPROVAL_REQUIRED" });
+    await expect(g4.preflight("https://api.example.com/")).rejects.toMatchObject({
+      code: "SW_SAFETY_APPROVAL_REQUIRED",
+    });
   });
 
   it("private hosts not listed get a wildcard hint", () => {
@@ -330,7 +364,9 @@ describe("approvals", () => {
   it("interactive prompt: declined throws SW_SAFETY_DECLINED, accepted is cached", async () => {
     let n = 0;
     const no = createSafetyGuard({}, { interactive: true, confirm: async () => (n++, false) });
-    await expect(no.requireApproval("fault-injection", "")).rejects.toMatchObject({ code: "SW_SAFETY_DECLINED" });
+    await expect(no.requireApproval("fault-injection", "")).rejects.toMatchObject({
+      code: "SW_SAFETY_DECLINED",
+    });
     const yes = createSafetyGuard({}, { interactive: true, confirm: async () => (n++, true) });
     await yes.requireApproval("fault-injection", "d");
     await yes.requireApproval("fault-injection", "d");
@@ -340,7 +376,9 @@ describe("approvals", () => {
 
   it("interactive without a TTY or confirm hook cannot prompt", async () => {
     const g = createSafetyGuard({}, { interactive: true });
-    await expect(g.requireApproval("fault-injection", "")).rejects.toMatchObject({ code: "SW_SAFETY_APPROVAL_REQUIRED" });
+    await expect(g.requireApproval("fault-injection", "")).rejects.toMatchObject({
+      code: "SW_SAFETY_APPROVAL_REQUIRED",
+    });
   });
 });
 
@@ -411,7 +449,10 @@ describe("DNS pinning error paths", () => {
     const r = dns({ "a.internal": [], "b.internal": ["10.0.0.2"] });
     const g = createSafetyGuard({ allowHosts: ["*.internal"] }, { interactive: false, resolver: r.resolver });
     await expect(g.pinHost("http://a.internal")).rejects.toBeInstanceOf(TargetError);
-    const [p1, p2] = await Promise.all([g.pinHost("http://b.internal"), g.pinHost(new URL("http://B.internal"))]);
+    const [p1, p2] = await Promise.all([
+      g.pinHost("http://b.internal"),
+      g.pinHost(new URL("http://B.internal")),
+    ]);
     expect(p1).toBe(p2);
     expect(r.calls.filter((h) => h === "b.internal")).toHaveLength(1);
     expect(await g.pinHost("http://[::1]:80/")).toBeNull();
@@ -420,16 +461,24 @@ describe("DNS pinning error paths", () => {
 
   it("private name whose addresses are all CIDR-listed may resolve to public IPs", async () => {
     const r = dns({ myservice: ["8.8.8.8"] });
-    const g = createSafetyGuard({ allowHosts: ["myservice", "8.8.8.0/24"], allowPublic: true }, { interactive: false, approve: true, resolver: r.resolver });
+    const g = createSafetyGuard(
+      { allowHosts: ["myservice", "8.8.8.0/24"], allowPublic: true },
+      { interactive: false, approve: true, resolver: r.resolver },
+    );
     const pin = await g.pinHost("http://myservice/");
     expect(pin?.cls).toBe("public");
   });
 
   it("DNS rebinding of a listed private name to a public IP is blocked at pin time with an audit entry", async () => {
     const r = dns({ "app.internal": ["10.0.0.1", "93.184.216.34"] });
-    const g = createSafetyGuard({ allowHosts: ["app.internal"] }, { interactive: false, resolver: r.resolver });
+    const g = createSafetyGuard(
+      { allowHosts: ["app.internal"] },
+      { interactive: false, resolver: r.resolver },
+    );
     await expect(g.preflight("http://app.internal/")).rejects.toMatchObject({ code: "SW_SAFETY_DNS_CLASS" });
-    expect(g.auditEntries().some((e) => e.action === "safety.blocked" && e.detail?.code === "SW_SAFETY_DNS_CLASS")).toBe(true);
+    expect(
+      g.auditEntries().some((e) => e.action === "safety.blocked" && e.detail?.code === "SW_SAFETY_DNS_CLASS"),
+    ).toBe(true);
     expect(g.pins()).toHaveLength(0);
   });
 
@@ -439,10 +488,17 @@ describe("DNS pinning error paths", () => {
     expect(await lookupP(g, "v4.internal")).toEqual({ address: "10.0.0.9", family: 4 });
     expect(await lookupP(g, "v4.internal", { family: "IPv4" })).toEqual({ address: "10.0.0.9", family: 4 });
     await expect(lookupP(g, "v4.internal", { family: "IPv6" })).rejects.toMatchObject({ code: "ENOTFOUND" });
-    await expect(lookupP(g, "v4.internal", { family: 6, all: true })).rejects.toThrow(/no IPv6 address pinned/);
+    await expect(lookupP(g, "v4.internal", { family: 6, all: true })).rejects.toThrow(
+      /no IPv6 address pinned/,
+    );
     await expect(lookupP(g, "missing.internal")).rejects.toMatchObject({ code: "SW_TARGET_DNS" });
-    expect(await lookupP(g, "10.1.1.1", { all: true })).toEqual({ address: [{ address: "10.1.1.1", family: 4 }], family: undefined });
-    await expect(lookupP(g, "pub.example.org", { all: true })).rejects.toMatchObject({ code: "SW_SAFETY_PUBLIC_TARGET" });
+    expect(await lookupP(g, "10.1.1.1", { all: true })).toEqual({
+      address: [{ address: "10.1.1.1", family: 4 }],
+      family: undefined,
+    });
+    await expect(lookupP(g, "pub.example.org", { all: true })).rejects.toMatchObject({
+      code: "SW_SAFETY_PUBLIC_TARGET",
+    });
   });
 
   it("recheckDns: unknown host is a no-op; transient resolver failure keeps the pin", async () => {
@@ -455,7 +511,10 @@ describe("DNS pinning error paths", () => {
     expect(g.killSwitch.aborted).toBe(false);
     // public → private rebinding on a public name pinned with approval
     const r2 = dns({ "pub.example.com": ["93.184.216.34"] });
-    const g2 = createSafetyGuard({ allowHosts: ["pub.example.com"], allowPublic: true }, { interactive: false, approve: true, resolver: r2.resolver });
+    const g2 = createSafetyGuard(
+      { allowHosts: ["pub.example.com"], allowPublic: true },
+      { interactive: false, approve: true, resolver: r2.resolver },
+    );
     await g2.preflight("https://pub.example.com");
     r2.table["pub.example.com"] = ["169.254.169.254"];
     await expect(g2.recheckDns("pub.example.com")).rejects.toMatchObject({ code: "SW_SAFETY_DNS_REBIND" });

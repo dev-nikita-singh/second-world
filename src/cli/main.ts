@@ -1,11 +1,11 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 /**
  * `sw` / `second-world` CLI entry. See docs/09-cli-and-api.md §1.
  * Kept light: only commander is imported eagerly; every command loads its code with a
  * dynamic import inside its action so `sw --help` stays fast.
  */
 import module from "node:module";
-import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { Command, CommanderError, Option } from "commander";
 
@@ -51,7 +51,15 @@ export function buildProgram(): Command {
     .option("--set <key=value>", "override any config key (repeatable)", collect)
     .option("-f, --format <list>", "report formats: tty,json,md,junit,sarif,html")
     .option("-o, --out <dir>", "report output dir")
-    .addOption(new Option("--fail-on <sev>", "exit 1 threshold").choices(["critical", "high", "medium", "low", "never"]))
+    .addOption(
+      new Option("--fail-on <sev>", "exit 1 threshold").choices([
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "never",
+      ]),
+    )
     .option("--seed <n>", "global seed")
     .option("--label <name>", "history label for this run (also filters `history diff last:N`)")
     .option("--yes", "non-interactive approval of confirmations (logged to audit)")
@@ -114,7 +122,9 @@ export function buildProgram(): Command {
     .option("--ramp-up <dur>", "ramp-up duration")
     .option("--warmup <dur>", "warm-up duration (excluded from results)")
     .option("--timeout <dur>", "request timeout")
-    .addOption(new Option("--arrival <kind>", "arrival process (open model)").choices(["constant", "poisson"]))
+    .addOption(
+      new Option("--arrival <kind>", "arrival process (open model)").choices(["constant", "poisson"]),
+    )
     .option("--max-in-flight <n>", "cap on concurrent requests (open model)")
     .option("--workers <n|auto>", 'generator threads (worker_threads shards); "auto" = min(CPUs - 1, 8)')
     .option("--threshold <expr>", 'threshold, e.g. "p95<300ms" (repeatable)', collect)
@@ -130,7 +140,9 @@ export function buildProgram(): Command {
     .description("Stress & Capacity Lab: step/ramp/spike/soak/breakpoint load to find tested capacity")
     .argument("[target]", "target URL or target name from config")
     .option("-t, --target <url>", "target URL or name")
-    .addOption(new Option("--mode <mode>", "stress mode").choices(["step", "ramp", "spike", "soak", "breakpoint"]))
+    .addOption(
+      new Option("--mode <mode>", "stress mode").choices(["step", "ramp", "spike", "soak", "breakpoint"]),
+    )
     .option("--steps <list>", "stage levels, e.g. 10,25,50,100 (VUs, or rates with --rate)")
     .option("--hold <dur>", "hold time per stage, e.g. 30s")
     .option("--settle <dur>", "settle time before each stage (load runs, excluded)")
@@ -157,7 +169,13 @@ export function buildProgram(): Command {
     .argument("[path]", "project root (default: config project.root or .)")
     .option("--tsconfig <file>", "tsconfig path (relative to the project)")
     .option("--rule <id=level>", "override a rule level, e.g. ARCH004=off (repeatable)", collect)
-    .addOption(new Option("--graph <format>", "print the dependency graph instead of the report").choices(["dot", "mermaid", "json"]))
+    .addOption(
+      new Option("--graph <format>", "print the dependency graph instead of the report").choices([
+        "dot",
+        "mermaid",
+        "json",
+      ]),
+    )
     .addOption(new Option("--view <view>", "graph view").choices(["components", "modules", "all"]))
     .option("--no-cache", "ignore and do not write the analysis cache")
     .option("--cache-dir <dir>", "analysis cache directory")
@@ -173,16 +191,29 @@ export function buildProgram(): Command {
     .description("API Bug Hunter: contract, boundary, property, stateful, concurrency and auth testing")
     .option("-t, --target <url>", "target URL or name")
     .option("--openapi <file>", "OpenAPI contract (default: bugs.contract from config; absent → discovery)")
-    .option("--techniques <list>", "contract,boundary,equivalence,pairwise,property,negative,stateful,concurrency,auth")
+    .option(
+      "--techniques <list>",
+      "contract,boundary,equivalence,pairwise,property,negative,stateful,concurrency,auth",
+    )
     .option("--replays <n>", "replays per failing case (classification)")
     .option("--max-replays <n>", "upper bound on replays (flaky cases)")
     .option("--property-runs <n>", "property-based runs per operation")
     .option("--include <ops>", 'only operations, e.g. "GET /products/*" (repeatable)', collect)
     .option("--exclude <ops>", "skip operations (repeatable)", collect)
-    .option("--allow-mutations", "send POST/PUT/PATCH/DELETE (also needs approval: --yes or safety.allowMutations)")
-    .option("--concurrency-test <op>", 'concurrency burst on an operation, e.g. "POST /orders" (repeatable)', collect)
+    .option(
+      "--allow-mutations",
+      "send POST/PUT/PATCH/DELETE (also needs approval: --yes or safety.allowMutations)",
+    )
+    .option(
+      "--concurrency-test <op>",
+      'concurrency burst on an operation, e.g. "POST /orders" (repeatable)',
+      collect,
+    )
     .option("--burst <n>", "parallel requests per concurrency burst (default 10)")
-    .option("--invariant <spec>", "linearizable:<stock|counter|register|set>[:initial] | max-success:<n> | same-response | ./module.ts")
+    .option(
+      "--invariant <spec>",
+      "linearizable:<stock|counter|register|set>[:initial] | max-success:<n> | same-response | ./module.ts",
+    )
     .option("--role <name>", "auth role for concurrency bursts")
     .option("--body <json>", "request body for concurrency bursts")
     .option(
@@ -200,17 +231,26 @@ export function buildProgram(): Command {
 
   program
     .command("agent")
-    .description("Adversarial Test Agent: proposes, validates and runs extra API test cases (QA test-case generator)")
+    .description(
+      "Adversarial Test Agent: proposes, validates and runs extra API test cases (QA test-case generator)",
+    )
     .option("-t, --target <url>", "target URL or name (default: agent/bugs target)")
     .option("--openapi <file>", "OpenAPI contract (default: agent/bugs contract)")
     .addOption(new Option("--bandit <kind>", "arm selection").choices(["ucb1", "thompson"]))
     .option("--budget <spec>", "requests=N,iterations=N,time=30s,patience=N (also rps=, concurrency=)")
-    .option("--techniques <list>", "status-gap,param-gap,boundary,idempotency,idempotency-concurrent,ownership,privilege,lifecycle,concurrency,history,arch-risk")
+    .option(
+      "--techniques <list>",
+      "status-gap,param-gap,boundary,idempotency,idempotency-concurrent,ownership,privilege,lifecycle,concurrency,history,arch-risk",
+    )
     .option("--include <ops>", 'only operations, e.g. "GET /orders/*" (repeatable)', collect)
     .option("--exclude <ops>", "skip operations (repeatable)", collect)
     .option("--allow-mutations", "send POST/PUT/PATCH (also needs --yes or safety.allowMutations)")
     .option("--allow-destructive", "allow destructive operations (DELETE, …); requires --yes")
-    .option("--context <report>", "earlier report.json (bugs / inspect / agent) to seed hypotheses (repeatable)", collect)
+    .option(
+      "--context <report>",
+      "earlier report.json (bugs / inspect / agent) to seed hypotheses (repeatable)",
+      collect,
+    )
     .option("--export-tests <dir>", "write a Vitest file per confirmed defect into <dir>")
     .option("--json", "print the combined report JSON on stdout")
     .option("--no-history", "do not save this run to history")
@@ -232,13 +272,17 @@ export function buildProgram(): Command {
       return replayCommand(fp, o, cmd.optsWithGlobals<GlobalOptions>());
     });
 
-  const reliability = program.command("reliability").description("Reliability Lab: fault injection experiments");
+  const reliability = program
+    .command("reliability")
+    .description("Reliability Lab: fault injection experiments");
   const rel = () => import("./commands/reliability.js");
   reliability
     .command("list")
     .description("built-in fault scenarios")
     .option("--json", "JSON output")
-    .action(async (o, cmd: Command) => (await rel()).reliabilityList(o, cmd.optsWithGlobals<GlobalOptions>()));
+    .action(async (o, cmd: Command) =>
+      (await rel()).reliabilityList(o, cmd.optsWithGlobals<GlobalOptions>()),
+    );
   reliability
     .command("run")
     .description("run a fault scenario (disruptive: needs --approve-disruptive / --yes)")
@@ -255,7 +299,10 @@ export function buildProgram(): Command {
     .option("--route <name=METHOD /path>", 'workload route, e.g. orders="POST /orders" (repeatable)', collect)
     .option("--repeat <n>", "repeat the experiment N times (reproduced-defect needs ≥ 2)")
     .option("--abort-error-rate <pct>", "abort when the error rate exceeds this, e.g. 50%")
-    .option("--allow-production", "allow fault injection when environment is production (still needs approval)")
+    .option(
+      "--allow-production",
+      "allow fault injection when environment is production (still needs approval)",
+    )
     .option("--json", "print the combined report JSON on stdout")
     .option("--no-history", "do not save this run to history")
     .action(async (scenario: string, o: Record<string, unknown>, cmd: Command) =>
@@ -264,16 +311,26 @@ export function buildProgram(): Command {
   reliability
     .command("cleanup")
     .description("revert leftover faults (in-process stack + persistent ledger)")
-    .option("--ledger <file>", "fault ledger path (default $SW_FAULT_LEDGER or <tmp>/second-world/fault-ledger.json)")
+    .option(
+      "--ledger <file>",
+      "fault ledger path (default $SW_FAULT_LEDGER or <tmp>/second-world/fault-ledger.json)",
+    )
     .option("--json", "JSON output")
-    .action(async (o, cmd: Command) => (await rel()).reliabilityCleanup(o, cmd.optsWithGlobals<GlobalOptions>()));
+    .action(async (o, cmd: Command) =>
+      (await rel()).reliabilityCleanup(o, cmd.optsWithGlobals<GlobalOptions>()),
+    );
 
   program
     .command("whatif")
     .description("What-If: compare a baseline and variants with interleaved, repeated runs and statistics")
-    .argument("<experiment>", "name in whatif.experiments, or a .ts/.js/.json/.yaml file exporting experiment({...})")
+    .argument(
+      "<experiment>",
+      "name in whatif.experiments, or a .ts/.js/.json/.yaml file exporting experiment({...})",
+    )
     .option("--repetitions <n>", "runs per arm (≥ 5 recommended)")
-    .addOption(new Option("--order <order>", "run order").choices(["interleaved", "randomized-blocks", "sequential"]))
+    .addOption(
+      new Option("--order <order>", "run order").choices(["interleaved", "randomized-blocks", "sequential"]),
+    )
     .addOption(new Option("--lifecycle <l>", "app lifecycle").choices(["per-run", "per-arm"]))
     .option("--aa", "A/A run (baseline vs itself) to measure the noise floor")
     .option("--metric <name>", "metric to compare, e.g. p95 (repeatable)", collect)
@@ -296,8 +353,14 @@ export function buildProgram(): Command {
     .option("--repo <dir>", "git repository to evolve (default: the config directory)")
     .option("--baseline <ref>", "baseline git ref (default HEAD)")
     .option("--finding <id>", "finding this evolution targets")
-    .addOption(new Option("--sandbox <kind>", "sandbox (process needs --yes)").choices(["auto", "docker", "process"]))
-    .option("--replay <artifact>", "Bug Hunter reproduction artifact to replay as a gate (repeatable)", collect)
+    .addOption(
+      new Option("--sandbox <kind>", "sandbox (process needs --yes)").choices(["auto", "docker", "process"]),
+    )
+    .option(
+      "--replay <artifact>",
+      "Bug Hunter reproduction artifact to replay as a gate (repeatable)",
+      collect,
+    )
     .option("--metric <name>", "metric to rank by (repeatable)", collect)
     .option("--json", "print the combined report JSON on stdout")
     .option("--no-history", "do not save this run to history")
@@ -306,25 +369,44 @@ export function buildProgram(): Command {
       return evolveCommand(o, cmd.optsWithGlobals<GlobalOptions>());
     });
 
-  const model = program.command("model").description("System Model: one graph from code, contracts, config and telemetry");
+  const model = program
+    .command("model")
+    .description("System Model: one graph from code, contracts, config and telemetry");
   const mod = () => import("./commands/model.js");
   model
     .command("build")
     .description("build the model and save a snapshot (.second-world/model/latest.json)")
     .argument("[path]", "project root (default: config project.root)")
     .option("--openapi <file>", "OpenAPI contract (default: bugs.contract from config)")
-    .option("--config-file <file>", "infra/config file to include, e.g. docker-compose.yml (repeatable)", collect)
+    .option(
+      "--config-file <file>",
+      "infra/config file to include, e.g. docker-compose.yml (repeatable)",
+      collect,
+    )
     .option("--no-discover", "do not auto-discover config files")
-    .option("--traces <file>", "OTLP traces or metrics: JSON/JSONL or protobuf (.pb) files (repeatable)", collect)
+    .option(
+      "--traces <file>",
+      "OTLP traces or metrics: JSON/JSONL or protobuf (.pb) files (repeatable)",
+      collect,
+    )
     .option("--prometheus <file|url>", "Prometheus text exposition (repeatable)", collect)
-    .option("--receive <seconds>", "run a local OTLP/HTTP JSON receiver for N seconds and include what it gets")
+    .option(
+      "--receive <seconds>",
+      "run a local OTLP/HTTP JSON receiver for N seconds and include what it gets",
+    )
     .option("--service-name <name>", "primary service name")
     .addOption(new Option("--detail <level>", "node detail").choices(["components", "full"]))
     .option("--no-architecture", "skip the static architecture source")
     .option("--from-history", "reuse the latest architecture run from history instead of re-inspecting")
     .option("--no-cache", "ignore the architecture analysis cache")
     .option("--cache-dir <dir>", "architecture analysis cache directory")
-    .addOption(new Option("--graph <fmt>", "print the graph instead of the summary").choices(["dot", "mermaid", "json"]))
+    .addOption(
+      new Option("--graph <fmt>", "print the graph instead of the summary").choices([
+        "dot",
+        "mermaid",
+        "json",
+      ]),
+    )
     .option("--json", "canonical JSON")
     .option("--no-history", "do not save this build to history")
     .action(async (path: string | undefined, o: Record<string, unknown>, cmd: Command) =>
@@ -338,18 +420,24 @@ export function buildProgram(): Command {
     .option("--node <id>", "neighbourhood / impact / reaching routes of one node")
     .option("--k <n>", "neighbourhood hops (default 2)")
     .option("--json", "canonical JSON")
-    .action(async (snap: string, o: Record<string, unknown>, cmd: Command) => (await mod()).modelShow(snap, o, cmd.optsWithGlobals<GlobalOptions>()));
+    .action(async (snap: string, o: Record<string, unknown>, cmd: Command) =>
+      (await mod()).modelShow(snap, o, cmd.optsWithGlobals<GlobalOptions>()),
+    );
   model
     .command("diff")
     .description("compare two model snapshots (informational, exit 0)")
     .argument("<before>", "snapshot path or 'latest'")
     .argument("<after>", "snapshot path or 'latest'")
     .option("--json", "JSON output")
-    .action(async (a: string, b: string, o: Record<string, unknown>, cmd: Command) => (await mod()).modelDiff(a, b, o, cmd.optsWithGlobals<GlobalOptions>()));
+    .action(async (a: string, b: string, o: Record<string, unknown>, cmd: Command) =>
+      (await mod()).modelDiff(a, b, o, cmd.optsWithGlobals<GlobalOptions>()),
+    );
 
   program
     .command("analyze")
-    .description("deterministic summary over previous reports: counts, strongest evidence, top findings (no AI, no network)")
+    .description(
+      "deterministic summary over previous reports: counts, strongest evidence, top findings (no AI, no network)",
+    )
     .argument("[reports...]", "report.json files from previous runs")
     .option("--last", "include the latest run in history")
     .option("--top <n>", "number of top findings to list (default 5)")
@@ -373,7 +461,9 @@ export function buildProgram(): Command {
     .description("show one run")
     .argument("<id>", "run id, unique prefix, or baseline:<name>")
     .option("--json", "JSON output")
-    .action(async (id: string, o, cmd: Command) => (await hist()).historyShow(id, o, cmd.optsWithGlobals<GlobalOptions>()));
+    .action(async (id: string, o, cmd: Command) =>
+      (await hist()).historyShow(id, o, cmd.optsWithGlobals<GlobalOptions>()),
+    );
   history
     .command("diff")
     .description("compare two runs (exit 1 on significant regressions)")
@@ -381,7 +471,9 @@ export function buildProgram(): Command {
     .argument("<current>", "id[,id…] | last:N | label:<name>[:N] | baseline:<name>")
     .option("--engine <id>", "only runs of this engine (for last:N / label:)")
     .option("--json", "JSON output (same as -f json); use the global -f tty|json|md|html for other formats")
-    .action(async (a: string, b: string, o, cmd: Command) => (await hist()).historyDiff(a, b, o, cmd.optsWithGlobals<GlobalOptions>()));
+    .action(async (a: string, b: string, o, cmd: Command) =>
+      (await hist()).historyDiff(a, b, o, cmd.optsWithGlobals<GlobalOptions>()),
+    );
   const baseline = history.command("baseline").description("named baselines");
   baseline
     .command("set")
@@ -393,7 +485,9 @@ export function buildProgram(): Command {
   baseline
     .command("list")
     .option("--json", "JSON output")
-    .action(async (o, cmd: Command) => (await hist()).historyBaselineList(o, cmd.optsWithGlobals<GlobalOptions>()));
+    .action(async (o, cmd: Command) =>
+      (await hist()).historyBaselineList(o, cmd.optsWithGlobals<GlobalOptions>()),
+    );
   history
     .command("trend")
     .description("metric trend with anomaly / change-point detection")
@@ -437,7 +531,12 @@ export async function main(argv: string[] = process.argv): Promise<number> {
     return typeof process.exitCode === "number" ? process.exitCode : 0;
   } catch (e) {
     if (e instanceof CommanderError) {
-      if (e.code === "commander.helpDisplayed" || e.code === "commander.version" || e.code === "commander.help") return 0;
+      if (
+        e.code === "commander.helpDisplayed" ||
+        e.code === "commander.version" ||
+        e.code === "commander.help"
+      )
+        return 0;
       // usage errors (unknown option, bad choice, missing argument) → config/usage error
       return 2;
     }
@@ -450,7 +549,10 @@ function isEntry(): boolean {
   const argv1 = process.argv[1];
   if (!argv1) return false;
   try {
-    return import.meta.url === pathToFileURL(realpathSync(argv1)).href || import.meta.url === pathToFileURL(argv1).href;
+    return (
+      import.meta.url === pathToFileURL(realpathSync(argv1)).href ||
+      import.meta.url === pathToFileURL(argv1).href
+    );
   } catch {
     return false;
   }

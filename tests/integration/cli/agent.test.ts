@@ -8,8 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type RunningExample, startExample } from "../../helpers/examples.js";
 import { REPO_ROOT, runCli } from "../../helpers/cli.js";
+import { type RunningExample, startExample } from "../../helpers/examples.js";
 
 const env = { SW_USER_CONFIG_DIR: join(tmpdir(), "sw-no-user-config"), SW_TEST_ALICE: "alice-token" };
 const EXAMPLE = join(REPO_ROOT, "examples", "shop-express");
@@ -69,7 +69,9 @@ describe("sw agent (subprocess, shop-express)", () => {
     expect(budget.requests.used).toBeLessThanOrEqual(150);
     expect(budget.iterations.used).toBeLessThanOrEqual(80);
     expect(res.data.planner).toBe("heuristic");
-    expect(r.exitCode).toBe(res.findings.some((f: { classification: string }) => f.classification === "reproduced-defect") ? 1 : 0);
+    expect(r.exitCode).toBe(
+      res.findings.some((f: { classification: string }) => f.classification === "reproduced-defect") ? 1 : 0,
+    );
 
     const suggested = res.data.suggestedTests as Array<{ filename: string }>;
     const files = readdirSync(out);

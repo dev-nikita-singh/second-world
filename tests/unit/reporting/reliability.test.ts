@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { renderReport } from "../../../src/engines/reporting/index.js";
-import { checkSummaries, detectorSummaries, invariantRows, isReliabilityData } from "../../../src/engines/reporting/reliability.js";
+import {
+  checkSummaries,
+  detectorSummaries,
+  invariantRows,
+  isReliabilityData,
+} from "../../../src/engines/reporting/reliability.js";
 import { logicalLocation } from "../../../src/engines/reporting/sarif.js";
-import { makeBugsData, makeFinding, makeReliabilityData, makeResult, makeStressData } from "../../fixtures/reports.js";
+import {
+  makeBugsData,
+  makeFinding,
+  makeReliabilityData,
+  makeResult,
+  makeStressData,
+} from "../../fixtures/reports.js";
 
 const relFindings = () => [
   makeFinding({
@@ -68,14 +79,28 @@ describe("reliability helpers", () => {
   });
 
   it("logicalLocation strips the dependency: prefix for the name", () => {
-    expect(logicalLocation("dependency:payments")).toEqual({ name: "payments", fullyQualifiedName: "dependency:payments", kind: "resource" });
-    expect(logicalLocation("POST /orders")).toEqual({ name: "POST /orders", fullyQualifiedName: "POST /orders", kind: "resource" });
+    expect(logicalLocation("dependency:payments")).toEqual({
+      name: "payments",
+      fullyQualifiedName: "dependency:payments",
+      kind: "resource",
+    });
+    expect(logicalLocation("POST /orders")).toEqual({
+      name: "POST /orders",
+      fullyQualifiedName: "POST /orders",
+      kind: "resource",
+    });
   });
 });
 
 describe("reliability rendering — tty", () => {
   const s = renderReport(
-    [relResult(makeReliabilityData(), { limitations: [{ code: "injector-unavailable", message: "docker: daemon not running", impact: "invalidates" }] })],
+    [
+      relResult(makeReliabilityData(), {
+        limitations: [
+          { code: "injector-unavailable", message: "docker: daemon not running", impact: "invalidates" },
+        ],
+      }),
+    ],
     "tty",
     { color: false },
   );
@@ -106,7 +131,9 @@ describe("reliability rendering — tty", () => {
   it("steady-state and hypothesis verdicts with thresholds", () => {
     expect(s).toContain("Steady state & hypothesis");
     expect(s).toMatch(/steady state\s+│ http\.error_rate < 1%\s+│\s+0 \/ 0 │ held/);
-    expect(s).toMatch(/hypothesis \(during fault\) │ http\.error_rate < 5%\s+│\s+0\.600 \/ 0\.600 │ VIOLATED/);
+    expect(s).toMatch(
+      /hypothesis \(during fault\) │ http\.error_rate < 5%\s+│\s+0\.600 \/ 0\.600 │ VIOLATED/,
+    );
   });
 
   it("recovery time per run and detectors", () => {
@@ -129,13 +156,24 @@ describe("reliability rendering — tty", () => {
   });
 
   it("single repetition note, cancelled/not-applied runs, no-windows case", () => {
-    const one = makeReliabilityData({ repeat: 1, runs: [makeReliabilityData().runs[0]!], reproduced: [{ ruleId: "reliability/retry-without-backoff", hits: 1, runs: 1 }] });
+    const one = makeReliabilityData({
+      repeat: 1,
+      runs: [makeReliabilityData().runs[0]!],
+      reproduced: [{ ruleId: "reliability/retry-without-backoff", hits: 1, runs: 1 }],
+    });
     const t = renderReport([relResult(one)], "tty", { color: false });
     expect(t).toContain("Single repetition: detector hits are observations");
     expect(t).not.toContain("(run 1)");
     const notApplied = makeReliabilityData({
       verdict: "inconclusive",
-      runs: [{ ...makeReliabilityData().runs[0]!, fault: { applied: false, durationMs: 0, abortedEarly: null }, steadyOk: false, windows: [] }],
+      runs: [
+        {
+          ...makeReliabilityData().runs[0]!,
+          fault: { applied: false, durationMs: 0, abortedEarly: null },
+          steadyOk: false,
+          windows: [],
+        },
+      ],
     });
     const u = renderReport([relResult(notApplied)], "tty", { color: false });
     expect(u).toContain("inconclusive (steady state not met or run cancelled)");
@@ -153,7 +191,17 @@ describe("reliability rendering — tty", () => {
 });
 
 describe("reliability rendering — duplicate-operation invariants", () => {
-  const ops = { ops: 30, confirmed: 20, rejected: 1, ambiguous: 9, unsent: 0, aborted: 0, retried: 9, attempts: 48, retriedDuringFault: 8 };
+  const ops = {
+    ops: 30,
+    confirmed: 20,
+    rejected: 1,
+    ambiguous: 9,
+    unsent: 0,
+    aborted: 0,
+    retried: 9,
+    attempts: 48,
+    retriedDuringFault: 8,
+  };
   const base = makeReliabilityData();
   const run0 = {
     ...base.runs[0]!,
@@ -168,14 +216,38 @@ describe("reliability rendering — duplicate-operation invariants", () => {
         extraResources: 3,
         checked: 32,
         duplicates: [
-          { key: "sw-abc-r0-7", count: 3, ids: ["o1", "o2", "o3"], route: "orders", attempts: 3, statuses: [0, 0, 201], phase: "fault" as const, outcome: "ok" as const },
+          {
+            key: "sw-abc-r0-7",
+            count: 3,
+            ids: ["o1", "o2", "o3"],
+            route: "orders",
+            attempts: 3,
+            statuses: [0, 0, 201],
+            phase: "fault" as const,
+            outcome: "ok" as const,
+          },
         ],
       },
-      { name: "stock", type: "conserved" as const, status: "held" as const, detail: "sum 100 → 80 (Δ -20), allowed Δ -29..-20" },
-      { name: "count", type: "count-matches" as const, status: "error" as const, detail: "not evaluated: GET /orders: HTTP 500", error: "GET /orders: HTTP 500" },
+      {
+        name: "stock",
+        type: "conserved" as const,
+        status: "held" as const,
+        detail: "sum 100 → 80 (Δ -20), allowed Δ -29..-20",
+      },
+      {
+        name: "count",
+        type: "count-matches" as const,
+        status: "error" as const,
+        detail: "not evaluated: GET /orders: HTTP 500",
+        error: "GET /orders: HTTP 500",
+      },
     ],
   };
-  const data = makeReliabilityData({ repeat: 1, runs: [run0], reproduced: [{ ruleId: "reliability/duplicate-operation", hits: 1, runs: 1 }] });
+  const data = makeReliabilityData({
+    repeat: 1,
+    runs: [run0],
+    reproduced: [{ ruleId: "reliability/duplicate-operation", hits: 1, runs: 1 }],
+  });
 
   it("invariantRows: one row per invariant with verdict and duplicated keys", () => {
     const rows = invariantRows(data);
@@ -184,7 +256,9 @@ describe("reliability rendering — duplicate-operation invariants", () => {
       ["stock", "conserved", "held"],
       ["count", "count-matches", "error"],
     ]);
-    expect(rows[0]![3]).toBe("2 key(s) have more than one resource (3 extra of 32); e.g. sw-abc-r0-7×3 (fault)");
+    expect(rows[0]![3]).toBe(
+      "2 key(s) have more than one resource (3 extra of 32); e.g. sw-abc-r0-7×3 (fault)",
+    );
     expect(invariantRows(makeReliabilityData())).toEqual([]);
   });
 
@@ -206,8 +280,12 @@ describe("reliability rendering — md / html / json", () => {
     const md = renderReport([relResult()], "md");
     expect(md).toContain("#### Experiment timeline");
     expect(md).toContain("| fault (run 1) | 3.0s | 20 | 60.00% | 0 | 300ms | 900ms | 10 |");
-    expect(md).toMatch(/error rate per second \(run 1 of 2\): \S+ \(0\.\.60 %\) — fault window \(3\.0s\): windows 4–6 of 9/);
-    expect(md).toContain("| hypothesis (during fault) | http.error\\_rate &lt; 5% | 0.600 / 0.600 | VIOLATED |");
+    expect(md).toMatch(
+      /error rate per second \(run 1 of 2\): \S+ \(0\.\.60 %\) — fault window \(3\.0s\): windows 4–6 of 9/,
+    );
+    expect(md).toContain(
+      "| hypothesis (during fault) | http.error\\_rate &lt; 5% | 0.600 / 0.600 | VIOLATED |",
+    );
     expect(md).toContain("| reliability/retry-without-backoff | 2/2 | reproduced-defect |");
     expect(md).toContain("- **amplification**: proxy arrivals / client requests");
   });
@@ -225,14 +303,20 @@ describe("reliability rendering — md / html / json", () => {
   it("json keeps ReliabilityData intact", () => {
     const j = JSON.parse(renderReport([relResult()], "json"));
     expect(j.results[0].data.runs).toHaveLength(2);
-    expect(j.results[0].data.reproduced[0]).toEqual({ ruleId: "reliability/retry-without-backoff", hits: 2, runs: 2 });
+    expect(j.results[0].data.reproduced[0]).toEqual({
+      ruleId: "reliability/retry-without-backoff",
+      hits: 2,
+      runs: 2,
+    });
   });
 });
 
 describe("reliability rendering — junit / sarif", () => {
   it("junit: one testcase per condition and per detector", () => {
     const xml = renderReport([relResult()], "junit", { failOn: "high" });
-    const names = [...xml.matchAll(/<testcase name="([^"]+)" classname="([^"]+)"/g)].map((m) => `${m[2]}::${m[1]}`);
+    const names = [...xml.matchAll(/<testcase name="([^"]+)" classname="([^"]+)"/g)].map(
+      (m) => `${m[2]}::${m[1]}`,
+    );
     expect(names).toEqual([
       "reliability.steady-state::steady state: http.error_rate &lt; 1%",
       "reliability.hypothesis::hypothesis (during fault): http.error_rate &lt; 5%",
@@ -244,8 +328,12 @@ describe("reliability rendering — junit / sarif", () => {
       "reliability.detectors::recovery",
     ]);
     expect(xml).toContain('tests="8" failures="2" errors="0" skipped="2"');
-    expect(xml).toContain('<failure message="http.error_rate &lt; 5% violated during the fault" type="hypothesis-violated">');
-    expect(xml).toContain('<failure message="[high] reliability/retry-without-backoff" type="reproduced-defect">');
+    expect(xml).toContain(
+      '<failure message="http.error_rate &lt; 5% violated during the fault" type="hypothesis-violated">',
+    );
+    expect(xml).toContain(
+      '<failure message="[high] reliability/retry-without-backoff" type="reproduced-defect">',
+    );
     // circuit breaker flagged but only medium → passes at fail-on high, explained in system-out
     expect(xml).toContain("(flagged, but below fail-on &apos;high&apos;)");
     const med = renderReport([relResult()], "junit", { failOn: "medium" });
@@ -254,7 +342,9 @@ describe("reliability rendering — junit / sarif", () => {
 
   it("sarif: dependency and route as logical locations", () => {
     const sarif = JSON.parse(renderReport([relResult()], "sarif"));
-    const storm = (sarif.runs[0].results as any[]).find((r) => r.ruleId === "reliability/retry-without-backoff");
+    const storm = (sarif.runs[0].results as any[]).find(
+      (r) => r.ruleId === "reliability/retry-without-backoff",
+    );
     expect(storm.locations[0].logicalLocations).toEqual([
       { name: "payments", fullyQualifiedName: "dependency:payments", kind: "resource" },
       { name: "POST /orders", fullyQualifiedName: "POST /orders", kind: "resource" },

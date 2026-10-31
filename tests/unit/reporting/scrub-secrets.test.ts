@@ -27,10 +27,18 @@ const REDACT: [input: string, expected: string, secret: string][] = [
   [`-H "authorization: Basic dXNlcjpwYXNz"`, `-H "authorization: Basic [REDACTED]"`, "dXNlcjpwYXNz"],
   [`-H 'Authorization: rawtoken987'`, `-H 'Authorization: [REDACTED]'`, "rawtoken987"],
   [`-H 'Authorization: Token tk_live_42'`, `-H 'Authorization: Token [REDACTED]'`, "tk_live_42"],
-  [`-H 'Authorization: Digest username="u", response="r1hash"'`, `-H 'Authorization: Digest [REDACTED]'`, "r1hash"],
+  [
+    `-H 'Authorization: Digest username="u", response="r1hash"'`,
+    `-H 'Authorization: Digest [REDACTED]'`,
+    "r1hash",
+  ],
   // unquoted: the value runs to the end of the line (over-redaction is the safe side)
   [`Authorization: Bearer plain42 (log line)`, `Authorization: Bearer [REDACTED]`, "plain42"],
-  [`-H 'authorization: Bearer $SW_AUTH_USER extra-literal'`, `-H 'authorization: Bearer [REDACTED]'`, "extra-literal"],
+  [
+    `-H 'authorization: Bearer $SW_AUTH_USER extra-literal'`,
+    `-H 'authorization: Bearer [REDACTED]'`,
+    "extra-literal",
+  ],
   [`-H 'x-api-key: k-9f8e7d'`, `-H 'x-api-key: [REDACTED]'`, "k-9f8e7d"],
   [`-H 'X-Auth-Token: xat-1'`, `-H 'X-Auth-Token: [REDACTED]'`, "xat-1"],
   [`-H 'Cookie: sid=s3cr3t; theme=dark'`, `-H 'Cookie: [REDACTED]'`, "s3cr3t"],
@@ -48,7 +56,9 @@ describe("scrubSecrets — table", () => {
 
   it("the sw-qa case: scheme word never replaced next to a placeholder", () => {
     expect(scrubSecrets(`-H "authorization: $SW_AUTH_USER"`)).not.toContain("[REDACTED]");
-    expect(scrubSecrets(`-H "Authorization: Bearer $SW_AUTH_USER"`)).toBe(`-H "Authorization: Bearer $SW_AUTH_USER"`);
+    expect(scrubSecrets(`-H "Authorization: Bearer $SW_AUTH_USER"`)).toBe(
+      `-H "Authorization: Bearer $SW_AUTH_USER"`,
+    );
   });
 
   it.each(REDACT)("redacts %s", (input, expected, secret) => {
@@ -71,14 +81,20 @@ describe("scrubSecrets — every rendered format", () => {
   ];
   const result = makeResult({ engine: "bugs", data });
 
-  it.each(["tty", "md", "html"] as const)("%s keeps the placeholder header whole and redacts the literal one", (fmt) => {
-    const out = renderReport([result], fmt, { color: false });
-    expect(out).not.toContain("leakedtoken42");
-    expect(out).not.toMatch(/\[REDACTED\]\s*\$SW_AUTH/);
-    const placeholder = fmt === "html" ? "authorization: $SW_AUTH_OTHER&quot;" : 'authorization: $SW_AUTH_OTHER"';
-    expect(out).toContain(placeholder);
-    expect(out).toContain(fmt === "html" ? "authorization: Bearer [REDACTED]&quot;" : 'authorization: Bearer [REDACTED]"');
-  });
+  it.each(["tty", "md", "html"] as const)(
+    "%s keeps the placeholder header whole and redacts the literal one",
+    (fmt) => {
+      const out = renderReport([result], fmt, { color: false });
+      expect(out).not.toContain("leakedtoken42");
+      expect(out).not.toMatch(/\[REDACTED\]\s*\$SW_AUTH/);
+      const placeholder =
+        fmt === "html" ? "authorization: $SW_AUTH_OTHER&quot;" : 'authorization: $SW_AUTH_OTHER"';
+      expect(out).toContain(placeholder);
+      expect(out).toContain(
+        fmt === "html" ? "authorization: Bearer [REDACTED]&quot;" : 'authorization: Bearer [REDACTED]"',
+      );
+    },
+  );
 
   it("hint text tells users the env var holds the full header value", () => {
     expect(REPRO_AUTH_HINT).toContain("export SW_AUTH_<ROLE>='<full header value, e.g. Bearer …>'");
@@ -87,10 +103,18 @@ describe("scrubSecrets — every rendered format", () => {
 });
 
 describe("scrubSecrets — property", () => {
-  const token = fc.stringMatching(/^[A-Za-z0-9._~+\/-]{6,40}$/).map((t) => `zq${t}`); // prefix: never a scheme word or placeholder
+  const token = fc.stringMatching(/^[A-Za-z0-9._~+/-]{6,40}$/).map((t) => `zq${t}`); // prefix: never a scheme word or placeholder
   const role = fc.stringMatching(/^[A-Z][A-Z0-9_]{0,12}$/);
   const scheme = fc.constantFrom("", "Bearer ", "bearer ", "Basic ", "Token ", "Digest ");
-  const header = fc.constantFrom("authorization", "Authorization", "AUTHORIZATION", "proxy-authorization", "x-api-key", "Cookie", "X-Auth-Token");
+  const header = fc.constantFrom(
+    "authorization",
+    "Authorization",
+    "AUTHORIZATION",
+    "proxy-authorization",
+    "x-api-key",
+    "Cookie",
+    "X-Auth-Token",
+  );
   const quote = fc.constantFrom(`'`, `"`);
 
   it("generated literal tokens never survive", () => {
@@ -104,7 +128,9 @@ describe("scrubSecrets — property", () => {
     fc.assert(
       fc.property(token, token, (user, pass) => {
         expect(scrubSecrets(`curl -u ${user}:${pass} http://h/`)).not.toContain(pass);
-        expect(scrubSecrets(`curl 'http://h/?token=${encodeURIComponent(pass)}'`)).not.toContain(encodeURIComponent(pass));
+        expect(scrubSecrets(`curl 'http://h/?token=${encodeURIComponent(pass)}'`)).not.toContain(
+          encodeURIComponent(pass),
+        );
       }),
       { numRuns: 200 },
     );

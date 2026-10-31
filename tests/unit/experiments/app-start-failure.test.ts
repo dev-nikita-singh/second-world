@@ -15,10 +15,15 @@ import { fakeResult } from "../../fixtures/experiments/fake-perf.js";
 
 const HINT = "docker sandbox: the app must listen on $HOST";
 
-function unhealthy(code: "SW_ENGINE_WHATIF_HEALTH_TIMEOUT" | "SW_ENGINE_WHATIF_APP_EXITED", starts: string[]) {
+function unhealthy(
+  code: "SW_ENGINE_WHATIF_HEALTH_TIMEOUT" | "SW_ENGINE_WHATIF_APP_EXITED",
+  starts: string[],
+) {
   return async (o: StartAppOptions) => {
     starts.push(String(o.env?.VARIANT ?? "base"));
-    throw Object.assign(new Error(`not healthy within 30000 ms${o.healthHint ? `. ${o.healthHint}` : ""}`), { code });
+    throw Object.assign(new Error(`not healthy within 30000 ms${o.healthHint ? `. ${o.healthHint}` : ""}`), {
+      code,
+    });
   };
 }
 
@@ -27,7 +32,14 @@ const workload: WorkloadRunner = async (input) => fakeResult(String(input.target
 describe("app start failures", () => {
   it("the health-timeout message carries the sandbox hint", async () => {
     const clock = createFakeClock(0);
-    const p = waitHealthy("http://127.0.0.1:9/healthz", { path: "/healthz", timeoutMs: 0, intervalMs: 1 }, clock, undefined, undefined, HINT);
+    const p = waitHealthy(
+      "http://127.0.0.1:9/healthz",
+      { path: "/healthz", timeoutMs: 0, intervalMs: 1 },
+      clock,
+      undefined,
+      undefined,
+      HINT,
+    );
     await expect(p).rejects.toThrow(/within 0 ms\. docker sandbox: the app must listen on \$HOST/);
   });
 
@@ -36,14 +48,21 @@ describe("app start failures", () => {
     const run = runExperiment(
       {
         name: "never-healthy",
-        baseline: { start: ["node", "app.js"], workload: { scenarios: [{ name: "s", steps: [{ path: "/" }] }] } },
+        baseline: {
+          start: ["node", "app.js"],
+          workload: { scenarios: [{ name: "s", steps: [{ path: "/" }] }] },
+        },
         variants: [{ name: "v", env: { VARIANT: "v" } }],
         metrics: ["p95"],
         design: { repetitions: 5 },
         bootstrap: 200,
       },
       {},
-      { runWorkload: workload, startApp: unhealthy("SW_ENGINE_WHATIF_HEALTH_TIMEOUT", starts), healthHint: HINT },
+      {
+        runWorkload: workload,
+        startApp: unhealthy("SW_ENGINE_WHATIF_HEALTH_TIMEOUT", starts),
+        healthHint: HINT,
+      },
     );
     const err = await run.then(
       () => undefined,
@@ -64,7 +83,10 @@ describe("app start failures", () => {
     const res = await runExperiment(
       {
         name: "variant-broken",
-        baseline: { start: ["node", "app.js"], workload: { scenarios: [{ name: "s", steps: [{ path: "/" }] }] } },
+        baseline: {
+          start: ["node", "app.js"],
+          workload: { scenarios: [{ name: "s", steps: [{ path: "/" }] }] },
+        },
         variants: [{ name: "v", env: { VARIANT: "v" } }],
         metrics: ["p95"],
         design: { repetitions: 5 },
@@ -76,9 +98,20 @@ describe("app start failures", () => {
         startApp: async (o) => {
           const who = String(o.env?.VARIANT ?? "base");
           starts.push(who);
-          if (who === "v") throw Object.assign(new Error("app exited before becoming healthy"), { code: "SW_ENGINE_WHATIF_APP_EXITED" });
+          if (who === "v")
+            throw Object.assign(new Error("app exited before becoming healthy"), {
+              code: "SW_ENGINE_WHATIF_APP_EXITED",
+            });
           const p = port++;
-          return { url: `http://127.0.0.1:${p}`, port: p, pid: undefined, argv: [], output: () => "", stop: async () => {}, exited: false };
+          return {
+            url: `http://127.0.0.1:${p}`,
+            port: p,
+            pid: undefined,
+            argv: [],
+            output: () => "",
+            stop: async () => {},
+            exited: false,
+          };
         },
       },
     );
