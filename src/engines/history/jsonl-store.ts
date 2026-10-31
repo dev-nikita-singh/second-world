@@ -72,6 +72,11 @@ export interface JsonlStoreOptions {
   isoNow?: () => string;
   /** Capture git metadata on append when not given. Default true. */
   captureGit?: boolean;
+  /**
+   * Called (once per distinct problem per store instance) when a read skips unreadable index lines,
+   * e.g. a record cut short by a crash mid-append. Reads never fail because of such lines.
+   */
+  onWarning?: (message: string) => void;
 }
 
 export class HistoryError extends Error {
@@ -125,10 +130,25 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
         corrupt.push({ line: i + 1, text: line.slice(0, 120) });
       }
     }
+    if (corrupt.length > 0 && opts.onWarning) warnCorrupt(corrupt, text.endsWith("\n"));
     const entries = [...byId.values()].sort((a, b) =>
       a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1,
     );
     return { entries, corrupt };
+  }
+
+  const warned = new Set<string>();
+  function warnCorrupt(corrupt: IndexRead["corrupt"], endsWithNewline: boolean): void {
+    const fresh = corrupt.filter((c) => !warned.has(`${c.line}:${c.text}`));
+    if (fresh.length === 0) return;
+    for (const c of fresh) warned.add(`${c.line}:${c.text}`);
+    const last = corrupt[corrupt.length - 1] as IndexRead["corrupt"][number];
+    const trailing = !endsWithNewline && fresh.includes(last);
+    opts.onWarning?.(
+      `history index ${indexFile}: skipped ${fresh.length} unreadable line(s) (line ${fresh.map((c) => c.line).join(", ")})` +
+        (trailing ? "; the last record is incomplete (interrupted write)" : "") +
+        "; run `sw history verify` for details",
+    );
   }
 
   async function readBaselines(): Promise<Record<string, BaselineRef>> {
@@ -420,6 +440,13 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
               if (f.includes(TMP_MARKER)) await unlink(path.join(runsDir, f)).catch(() => {});
           } catch {
             // no runs dir
+          }
+          // ...and lock-creation temps (`.lock.tmp-*`) of writers killed while taking the lock.
+          try {
+            for (const f of await readdir(dir))
+              if (f.startsWith(`.lock${TMP_MARKER}`)) await unlink(path.join(dir, f)).catch(() => {});
+          } catch {
+            // no dir
           }
         }
         return { kept: keep.size, compacted, removed, dryRun };

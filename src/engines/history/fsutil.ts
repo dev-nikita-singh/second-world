@@ -4,7 +4,17 @@
  * docs/06-environments-and-portability.md §2 (Windows rename-over-existing: retry on EPERM/EBUSY).
  */
 import { randomBytes } from "node:crypto";
-import { type FileHandle, mkdir, open, readFile, rename, stat, unlink } from "node:fs/promises";
+import {
+  type FileHandle,
+  link,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { hostname } from "node:os";
 import path from "node:path";
 
@@ -119,12 +129,105 @@ async function readLock(file: string): Promise<LockInfo | null> {
   }
 }
 
+/**
+ * Locks are created with their content (createLockFile), so a lock that is still empty/garbled after
+ * this long was left by a writer that died inside the O_EXCL fallback, or by an older version.
+ */
+const UNREADABLE_GRACE_MS = 2_000;
+
 async function unreadableLockIsStale(file: string, staleMs: number): Promise<boolean> {
   try {
     const st = await stat(file);
     return Date.now() - st.mtimeMs > staleMs;
   } catch {
     return true; // vanished: retry immediately
+  }
+}
+
+/**
+ * Creates the lock file with its content in one step: write a private temp file, then hard-link it to
+ * the lock path (link fails with EEXIST when the lock exists, like O_EXCL). A holder killed between
+ * `open("wx")` and its write used to leave an EMPTY lock that every waiter could only judge by mtime
+ * (60 s) — longer than their 10 s timeout, so history saves failed for a minute after such a crash
+ * (tests/integration/concurrency/cli-parallel.test.ts "history writer killed mid-write").
+ * When link fails for another reason (no hard links on FAT/some shares) it falls back to O_EXCL + write. Returns false when the lock is held.
+ */
+async function createLockFile(file: string, info: LockInfo): Promise<boolean> {
+  const tmp = `${file}${TMP_MARKER}${process.pid}-${info.token}`;
+  await writeFile(tmp, JSON.stringify(info), { flag: "wx" });
+  try {
+    await link(tmp, file);
+    return true;
+  } catch (e) {
+    if (code(e) === "EEXIST") return false;
+    // no hard links here (FAT, some network shares) or a transient refusal: O_EXCL is still correct
+  } finally {
+    await unlink(tmp).catch(() => {});
+  }
+  try {
+    const fh = await open(file, "wx");
+    try {
+      await fh.writeFile(JSON.stringify(info));
+    } finally {
+      await fh.close();
+    }
+    return true;
+  } catch (e) {
+    if (code(e) === "EEXIST") return false;
+    throw e;
+  }
+}
+
+/** Like unreadableLockIsStale, but a vanished lock is not "old" (there is nothing to remove). */
+async function unreadableLockIsOld(file: string, staleMs: number): Promise<boolean> {
+  try {
+    return Date.now() - (await stat(file)).mtimeMs > staleMs;
+  } catch {
+    return false;
+  }
+}
+
+/** A `.break` file older than this was left by a breaker that died inside its few-ms critical section. */
+const BREAK_STALE_MS = 5_000;
+
+/**
+ * Removes a stale lock without ever removing a live one. Waiters that judged the same lock stale are
+ * serialised through `<lock>.break` (O_EXCL) and re-check staleness under it: the first removes the
+ * stale lock, a later one finds the fresh lock of whoever won the next `wx` open and leaves it alone.
+ * (Renaming the lock away without this guard let a late breaker remove the winner's fresh lock:
+ * tests/unit/concurrency/history-lock.test.ts saw 3 simultaneous holders.)
+ */
+async function breakStaleLock(
+  file: string,
+  seen: LockInfo | null,
+  now: () => number,
+  staleMs: number,
+): Promise<void> {
+  const breaker = `${file}.break`;
+  let fh: FileHandle;
+  try {
+    fh = await open(breaker, "wx");
+  } catch (e) {
+    if (code(e) !== "EEXIST" && !RETRY_CODES.has(code(e) ?? "")) throw e;
+    // Another waiter is breaking it right now; clear a breaker file abandoned by a crashed process.
+    try {
+      const st = await stat(breaker);
+      if (Date.now() - st.mtimeMs > BREAK_STALE_MS) await unlink(breaker).catch(() => {});
+    } catch {
+      // gone already
+    }
+    await delay(1);
+    return;
+  }
+  try {
+    await fh.close();
+    const cur = await readLock(file);
+    const stillStale = cur
+      ? (seen === null || cur.token === seen.token) && isStale(cur, now(), staleMs)
+      : await unreadableLockIsOld(file, Math.min(staleMs, UNREADABLE_GRACE_MS));
+    if (stillStale) await unlink(file).catch(() => {});
+  } finally {
+    await unlink(breaker).catch(() => {});
   }
 }
 
@@ -153,15 +256,13 @@ export async function acquireLock(file: string, opts: LockOptions = {}): Promise
   const token = randomBytes(8).toString("hex");
   const deadline = now() + timeoutMs;
   for (let attempt = 0; ; attempt++) {
+    let got = false;
     try {
-      const fh = await open(file, "wx");
-      try {
-        const info: LockInfo = { pid: process.pid, host: hostname(), at: now(), token };
-        await fh.writeFile(JSON.stringify(info));
-        await fh.sync();
-      } finally {
-        await fh.close();
-      }
+      got = await createLockFile(file, { pid: process.pid, host: hostname(), at: now(), token });
+    } catch (e) {
+      if (!RETRY_CODES.has(code(e) ?? "")) throw e;
+    }
+    if (got) {
       let released = false;
       return async () => {
         if (released) return;
@@ -170,21 +271,14 @@ export async function acquireLock(file: string, opts: LockOptions = {}): Promise
         if (cur && cur.token !== token) return; // someone broke our (stale) lock; not ours to delete
         await unlink(file).catch(() => {});
       };
-    } catch (e) {
-      if (code(e) !== "EEXIST" && !RETRY_CODES.has(code(e) ?? "")) throw e;
     }
     const holder = await readLock(file);
     // An unreadable lock may be mid-creation by its holder: judge it by mtime instead.
-    const stale = holder ? isStale(holder, now(), staleMs) : await unreadableLockIsStale(file, staleMs);
+    const stale = holder
+      ? isStale(holder, now(), staleMs)
+      : await unreadableLockIsStale(file, Math.min(staleMs, UNREADABLE_GRACE_MS));
     if (stale) {
-      // Break the stale lock by renaming it away first (atomic), so two breakers cannot both win.
-      const grave = `${file}.stale-${randomBytes(4).toString("hex")}`;
-      try {
-        await rename(file, grave);
-        await unlink(grave).catch(() => {});
-      } catch {
-        // someone else broke or released it
-      }
+      await breakStaleLock(file, holder, now, staleMs);
       continue;
     }
     if (now() >= deadline) throw new LockTimeoutError(file, holder);

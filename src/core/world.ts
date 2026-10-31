@@ -721,6 +721,11 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
       return result;
     } catch (e) {
       events.emit("run.failed", { engine: id, error: isSecondWorldError(e) ? e.code : String(e) });
+      // The safety kill switch also trips on world.cancel()/the caller's signal (Ctrl+C). An engine
+      // that had not reserved its lease yet then throws SW_SAFETY_KILLED, which is a cancellation
+      // (exit 130), not a safety block (exit 3). A real safety.kill() leaves `signal` un-aborted.
+      if (signal.aborted && isSecondWorldError(e) && e.code === "SW_SAFETY_KILLED")
+        throw new DOMException(`${id} cancelled before it started`, { name: "AbortError", cause: e });
       throw e;
     }
   }
@@ -734,6 +739,7 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
           dir: resolvePath(cfg.cwd, cfg.config.history.dir),
           backend: cfg.config.history.backend,
           isoNow: () => clock.isoNow(),
+          onWarning: (m) => log.warn(m),
         }),
       );
       return storePromise;

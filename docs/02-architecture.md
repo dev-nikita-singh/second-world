@@ -196,6 +196,28 @@ SecondWorldError (code, hint, cause)
 
 Errors carry a human **hint** ("Target resolves to ::1 but server listens on 127.0.0.1 — set `target` to `http://127.0.0.1:3000`").
 
+### 4.6 Concurrency model
+
+Several `sw` processes may run at once on one project (two terminals, parallel CI jobs). What is
+guaranteed, with the test that checks it (`tests/unit/concurrency/`, `tests/integration/concurrency/`):
+
+| State | Mechanism | Guarantee | Test |
+|---|---|---|---|
+| History index `runs.jsonl` and run bodies `runs/<id>.json.gz` | Writer lock `.lock` (created with its owner record via temp file + hard link; O_EXCL fallback); body written to a temp file, fsynced and renamed, then one O_APPEND write of the index line, fsynced | No lost, torn or interleaved records; one record per run under its own run id; a body is in place before its index line | `cli-parallel` (4 parallel `sw perf`), `history-writers` (8 parallel `world.history.save`, 8 store instances × 4 appends + live reader) |
+| Stale history lock | Stale = holder pid dead on this host, older than 60 s, or still empty after 2 s; waiters that find the same stale lock serialise through `.lock.break` (O_EXCL) and re-check before removing it | One holder at a time even when several waiters break the same stale lock; a writer killed while holding or creating the lock does not block later saves | `history-lock`, `cli-parallel` ("killed mid-write") |
+| Crash mid-write | Readers skip an unreadable index line (e.g. a record cut short by a kill) and log a warning once; the next append starts on a fresh line; `sw history verify` lists it; `sw history prune` deletes leftover temp files | Later reads and writes keep working; records already acknowledged survive | `history-writers` ("cut off mid-append"), `cli-parallel` |
+| `baselines.json` | Read-modify-write under the history lock, atomic replace | No lost update between concurrent `setBaseline` | `history-writers` |
+| Report files (`report.json`, `.md`, `.junit.xml`, …) | Unique temp file + rename (retry on Windows EPERM/EBUSY) | Each file is always one complete report. Fixed names: with a shared `-o` dir the **last writer wins per file**, so files of one directory can come from different runs. Use a separate `-o` per parallel run. | `history-writers` ("8 writers to the same report file"), `cli-parallel` |
+| Ctrl+C (SIGINT/SIGTERM) | First signal: `world.cancel()` → graceful stop; second: exit 130 at once | First: exit 130, a complete partial report, no temp/lock/`pending-*` files left; an engine interrupted before it started also exits 130 (not 3). `sw evolve`: no git worktree, temp checkout or candidate app process left | `lifecycle`, `evolve-interrupt`, `cancel-before-start` |
+| Process exit | — | `perf`, `stress`, `bugs` exit on their own after finishing (no leaked handle keeps the process alive) | `lifecycle` ("commands exit on their own") |
+| Safety rate cap | One world-wide GCRA (plus a per-lease one when a lease asks for less); decisions are synchronous, so concurrent VUs cannot overshoot | Concurrent callers on one lease, and two concurrent leases together, stay within `maxRps` + burst | `safety-rate` |
+
+Not guaranteed (known, tracked): model snapshots
+and the architecture facts cache use a per-process temp name, so two concurrent saves inside one
+process can fail (`snapshot-writers`, expected-fail). The Ctrl+C tests emulate the signal inside the
+process on every OS (Windows cannot deliver SIGINT to a child); the OS signal itself is tested on
+macOS/Linux in `tests/e2e/cli.test.ts`.
+
 ## 5. Data flow of a single performance run
 
 ```text
