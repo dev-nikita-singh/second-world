@@ -540,9 +540,10 @@ export function authCases(g: GenContext, ops: Operation[], resources: DerivedRes
   const { owner, attacker } = g.roles;
   if (owner !== undefined && attacker !== undefined && owner !== attacker) {
     for (const r of resources) {
-      if (!r.read.secured) continue;
+      // Per operation, not per resource: a public read with owner-only update/delete (blogs,
+      // Conduit) must still get BOLA cases on the writes; a public op is never BOLA-checked.
       for (const op of [r.read, r.update, r.delete]) {
-        if (!op) continue;
+        if (!op?.secured) continue;
         const access = itemTemplate(g, op, r, "rid", attacker);
         if (op === r.update && r.body !== undefined) access.body = { kind: "json", value: r.body };
         out.push({
