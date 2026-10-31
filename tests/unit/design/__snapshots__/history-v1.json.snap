@@ -1,0 +1,100 @@
+{
+  "indexEntry": {
+    "v": 1,
+    "id": "01JFREEZE00000000000000000",
+    "createdAt": "2026-01-01T00:00:11.000Z",
+    "label": "freeze",
+    "tags": [
+      "t"
+    ],
+    "engines": [
+      "performance"
+    ],
+    "status": "failed",
+    "metrics": {
+      "performance.http.requests": 100,
+      "performance.findings": 1
+    },
+    "findings": {
+      "count": 1,
+      "maxSeverity": "high",
+      "fingerprints": [
+        "fp-1"
+      ]
+    },
+    "file": "runs/01JFREEZE00000000000000000.json.gz",
+    "sha256": "<sha256>",
+    "bytes": "<bytes>"
+  },
+  "run": {
+    "schemaVersion": 1,
+    "id": "01JFREEZE00000000000000000",
+    "createdAt": "2026-01-01T00:00:11.000Z",
+    "label": "freeze",
+    "tags": [
+      "t"
+    ],
+    "engines": [
+      "performance"
+    ],
+    "status": "failed",
+    "metrics": {
+      "performance.http.requests": 100,
+      "performance.findings": 1
+    },
+    "results": [
+      {
+        "schemaVersion": 1,
+        "engine": "performance",
+        "runId": "01JFREEZE00000000000000000",
+        "status": "failed",
+        "startedAt": "2026-01-01T00:00:00.000Z",
+        "endedAt": "2026-01-01T00:00:10.000Z",
+        "findings": [
+          {
+            "schemaVersion": 1,
+            "id": "f-1",
+            "fingerprint": "fp-1",
+            "engine": "performance",
+            "ruleId": "perf/threshold",
+            "category": "performance",
+            "title": "p95 above threshold",
+            "description": "",
+            "severity": "high",
+            "classification": "threshold-breach",
+            "status": "open",
+            "confidence": 0.9,
+            "evidence": [
+              {
+                "kind": "threshold",
+                "expression": "http.p95 < 200ms",
+                "actual": 250,
+                "passed": false
+              },
+              {
+                "kind": "measurement",
+                "metric": "http.p95",
+                "value": 250,
+                "unit": "ms"
+              }
+            ],
+            "locations": [],
+            "affected": [],
+            "related": [],
+            "occurrences": 1,
+            "firstSeen": "2026-01-01T00:00:10.000Z",
+            "lastSeen": "2026-01-01T00:00:10.000Z",
+            "tags": []
+          }
+        ],
+        "limitations": [],
+        "artifacts": [],
+        "data": {
+          "totals": {
+            "requests": 100
+          }
+        }
+      }
+    ]
+  }
+}

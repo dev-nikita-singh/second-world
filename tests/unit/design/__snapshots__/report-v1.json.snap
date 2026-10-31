@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "kind": "second-world-report",
+  "runId": "01JFREEZE00000000000000000",
+  "toolVersion": "0.0.0-freeze",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "endedAt": "2026-01-01T00:00:10.000Z",
+  "durationMs": 10000,
+  "status": "failed",
+  "failOn": "high",
+  "verdict": {
+    "passed": false,
+    "exitCode": 1,
+    "reasons": [
+      "1 threshold(s) breached"
+    ]
+  },
+  "results": [
+    {
+      "schemaVersion": 1,
+      "engine": "performance",
+      "runId": "01JFREEZE00000000000000000",
+      "status": "failed",
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "endedAt": "2026-01-01T00:00:10.000Z",
+      "findings": [
+        {
+          "schemaVersion": 1,
+          "id": "f-1",
+          "fingerprint": "fp-1",
+          "engine": "performance",
+          "ruleId": "perf/threshold",
+          "category": "performance",
+          "title": "p95 above threshold",
+          "description": "",
+          "severity": "high",
+          "classification": "threshold-breach",
+          "status": "open",
+          "confidence": 0.9,
+          "evidence": [
+            {
+              "kind": "threshold",
+              "expression": "http.p95 < 200ms",
+              "actual": 250,
+              "passed": false
+            },
+            {
+              "kind": "measurement",
+              "metric": "http.p95",
+              "value": 250,
+              "unit": "ms"
+            }
+          ],
+          "locations": [],
+          "affected": [],
+          "related": [],
+          "occurrences": 1,
+          "firstSeen": "2026-01-01T00:00:10.000Z",
+          "lastSeen": "2026-01-01T00:00:10.000Z",
+          "tags": []
+        }
+      ],
+      "limitations": [],
+      "artifacts": [],
+      "data": {
+        "totals": {
+          "requests": 100
+        }
+      }
+    }
+  ],
+  "command": "sw perf"
+}

@@ -335,9 +335,12 @@ class UndiciExecutor implements HttpExecutor {
           let kept = 0;
           for await (const chunk of res.body as AsyncIterable<Buffer>) {
             bytesIn += chunk.length;
-            if (kept < this.opts.maxBodyBytes) {
-              chunks.push(chunk);
-              kept += chunk.length;
+            const room = this.opts.maxBodyBytes - kept;
+            if (room > 0) {
+              // Never keep more than maxBodyBytes, even when one chunk crosses the cap.
+              const part = chunk.length <= room ? chunk : chunk.subarray(0, room);
+              chunks.push(part);
+              kept += part.length;
             }
           }
           body = Buffer.concat(chunks, kept);

@@ -134,7 +134,8 @@ export function startOtlpReceiver(opts: OtlpReceiverOptions = {}): Promise<OtlpR
     for (const w of parsed.warnings) if (st.warnings.length < 100) st.warnings.push(w);
     if (path === "/v1/traces") {
       st.traceRequests++;
-      spans.push(...parsed.spans);
+      // Loop, not push(...x): a spread of >~120k elements overflows V8's argument stack.
+      for (const s of parsed.spans) spans.push(s);
       st.spans += parsed.spans.length;
       if (spans.length > maxSpans) {
         const drop = spans.length - maxSpans;
@@ -145,7 +146,7 @@ export function startOtlpReceiver(opts: OtlpReceiverOptions = {}): Promise<OtlpR
       send(res, 200, { partialSuccess: {} });
     } else {
       st.metricRequests++;
-      metrics.push(...parsed.metrics);
+      for (const m of parsed.metrics) metrics.push(m);
       st.metrics += parsed.metrics.length;
       if (metrics.length > maxMetrics) {
         const drop = metrics.length - maxMetrics;

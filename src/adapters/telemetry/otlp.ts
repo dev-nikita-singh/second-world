@@ -215,7 +215,10 @@ export function payloadsOf(input: unknown, warnings: string[] = []): Obj[] {
         try {
           const v = JSON.parse(l) as unknown;
           if (isObj(v)) out.push(v);
-          else if (Array.isArray(v)) out.push(...v.filter(isObj));
+          else if (Array.isArray(v)) {
+            // Loop, not push(...x): a spread of >~120k elements overflows V8's argument stack.
+            for (const o of v) if (isObj(o)) out.push(o);
+          }
         } catch {
           if (warnings.length < 50) warnings.push(`line ${i + 1}: not valid JSON`);
         }

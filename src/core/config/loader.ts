@@ -389,8 +389,9 @@ function secretWarnings(data: Obj, label: string): string[] {
           `${p}: value in ${label} looks like a secret; use { env: "NAME" } or { file: "path" } instead`,
         );
       }
-    } else if (Array.isArray(v)) v.forEach((x, i) => stack.push({ v: x, p: `${p}[${i}]` }));
-    else if (isPlainObject(v))
+    } else if (Array.isArray(v)) {
+      for (let i = 0; i < v.length; i++) stack.push({ v: v[i], p: `${p}[${i}]` });
+    } else if (isPlainObject(v))
       for (const [k, x] of Object.entries(v)) stack.push({ v: x, p: p ? `${p}.${k}` : k });
   }
   return out;
@@ -403,24 +404,98 @@ function issuePath(path: ReadonlyArray<PropertyKey>): string {
     .replace(/\.\[/g, "[");
 }
 
+/** Unwraps optional/default/nullable/pipe wrappers of a Zod v4 schema (introspection only). */
+function unwrapSchema(s: unknown): unknown {
+  for (let i = 0; i < 16; i++) {
+    const def = (s as { _zod?: { def?: Record<string, unknown> } } | undefined)?._zod?.def;
+    if (!def) return s;
+    const t = def.type;
+    if (t === "optional" || t === "default" || t === "nullable" || t === "prefault" || t === "readonly")
+      s = def.innerType;
+    else if (t === "pipe") s = def.in;
+    else return s;
+  }
+  return s;
+}
+
+/** Keys the config schema accepts for the object at `path` ([] when it is not a fixed-shape object). */
+export function knownConfigKeys(path: ReadonlyArray<PropertyKey>): string[] {
+  let s = unwrapSchema(ConfigSchema);
+  for (const seg of path) {
+    const def = (s as { _zod?: { def?: Record<string, unknown> } })?._zod?.def;
+    if (def?.type === "object") s = (def.shape as Record<string, unknown>)[String(seg)];
+    else if (def?.type === "record") s = def.valueType;
+    else return [];
+    s = unwrapSchema(s);
+  }
+  const def = (s as { _zod?: { def?: Record<string, unknown> } })?._zod?.def;
+  return def?.type === "object" ? Object.keys(def.shape as Record<string, unknown>) : [];
+}
+
+/** Levenshtein distance (iterative, two rows); inputs are short config keys. */
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min((prev[j] as number) + 1, (cur[j - 1] as number) + 1, (prev[j - 1] as number) + cost);
+    }
+    prev = cur;
+  }
+  return prev[b.length] as number;
+}
+
+/** Closest known key for a typo: same key ignoring case/-/_, else edit distance ≤ 2 (and < half its length). */
+export function suggestKey(key: string, known: readonly string[]): string | undefined {
+  const norm = (k: string): string => k.toLowerCase().replace(/[-_]/g, "");
+  const same = known.find((k) => norm(k) === norm(key));
+  if (same !== undefined) return same;
+  let best: string | undefined;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const k of known) {
+    const d = editDistance(key.toLowerCase(), k.toLowerCase());
+    if (d < bestD) {
+      bestD = d;
+      best = k;
+    }
+  }
+  return bestD <= 2 && bestD < key.length / 2 ? best : undefined;
+}
+
 /** Converts a ZodError into a ConfigError with key paths and their sources. */
 export function zodToConfigError(err: z.ZodError, origins: Record<string, string>): ConfigError {
-  const lines = err.issues.map((i) => {
-    const p = issuePath(i.path);
-    let origin = origins[p];
-    if (!origin) {
-      // look for a parent or child origin
-      const parent = Object.keys(origins).find((k) => p.startsWith(`${k}.`));
-      origin = parent ? origins[parent] : Object.entries(origins).find(([k]) => k.startsWith(`${p}.`))?.[1];
+  const originOf = (p: string): string | undefined => {
+    const own = origins[p];
+    if (own) return own;
+    // look for a parent or child origin
+    const parent = Object.keys(origins).find((k) => p.startsWith(`${k}.`));
+    return parent ? origins[parent] : Object.entries(origins).find(([k]) => k.startsWith(`${p}.`))?.[1];
+  };
+  const lines: string[] = [];
+  const issues: Array<{ path: string; message: string }> = [];
+  for (const i of err.issues) {
+    if (i.code === "unrecognized_keys") {
+      // One line per unknown key, with its full path and a "did you mean" for typos.
+      const known = knownConfigKeys(i.path);
+      for (const key of (i as { keys?: string[] }).keys ?? []) {
+        const p = issuePath([...i.path, key]);
+        const hint = suggestKey(key, known);
+        const msg = `Unknown key${hint ? ` (did you mean "${hint}"?)` : ""}`;
+        const origin = originOf(p);
+        lines.push(`  ${p}: ${msg}${origin ? `   ← from ${origin}` : ""}`);
+        issues.push({ path: p, message: msg });
+      }
+      continue;
     }
-    let msg = i.message;
-    if (i.code === "unrecognized_keys")
-      msg = `Unknown key(s): ${(i as { keys?: string[] }).keys?.join(", ")}`;
-    return `  ${p || "(root)"}: ${msg}${origin ? `   ← from ${origin}` : ""}`;
-  });
+    const p = issuePath(i.path);
+    const origin = originOf(p);
+    lines.push(`  ${p || "(root)"}: ${i.message}${origin ? `   ← from ${origin}` : ""}`);
+    issues.push({ path: p, message: i.message });
+  }
   return new ConfigError("SW_CONFIG_INVALID", `Config error\n${lines.join("\n")}`, {
     hint: "Fix the listed keys. `sw config print --resolved` shows where each value comes from",
-    details: { issues: err.issues.map((i) => ({ path: issuePath(i.path), message: i.message })) },
+    details: { issues },
   });
 }
 

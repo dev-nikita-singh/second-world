@@ -241,6 +241,16 @@ export function parseThresholdEntry(
       t = { ...inner, scope, metric: `${scope}.${inner.stat}` };
     }
   }
+  if (obj.abortOnFail !== undefined && typeof obj.abortOnFail !== "boolean") {
+    throw new ConfigError(
+      "SW_CONFIG_THRESHOLD",
+      `thresholds.${metric}.abortOnFail: expected true or false, got ${JSON.stringify(obj.abortOnFail)}`,
+      {
+        hint: "abortOnFail: true stops the run as soon as the threshold fails",
+        details: { path: `thresholds.${metric}.abortOnFail` },
+      },
+    );
+  }
   let delay = 0;
   if (obj.delayAbortEval !== undefined)
     delay = parseDuration(obj.delayAbortEval, `thresholds.${metric}.delayAbortEval`);
@@ -251,6 +261,16 @@ export function parseThresholdEntry(
 export function parseThresholds(record: Record<string, ThresholdSpec> | undefined): ThresholdEntry[] {
   const out: ThresholdEntry[] = [];
   if (!record) return out;
+  if (typeof record !== "object" || Array.isArray(record)) {
+    throw new ConfigError(
+      "SW_CONFIG_THRESHOLD",
+      `thresholds: expected a mapping of metric → expression, got ${Array.isArray(record) ? "an array" : JSON.stringify(record)}`,
+      {
+        hint: 'Example: thresholds: { "http.p95": "< 300ms", "http.error_rate": "< 1%" }',
+        details: { path: "thresholds" },
+      },
+    );
+  }
   for (const [k, v] of Object.entries(record)) {
     const specs = Array.isArray(v) ? v : [v];
     for (const s of specs) {
@@ -258,7 +278,9 @@ export function parseThresholds(record: Record<string, ThresholdSpec> | undefine
         out.push(parseThresholdEntry(k, s));
       } catch (e) {
         if (e instanceof ConfigError) {
-          throw new ConfigError("SW_CONFIG_THRESHOLD", `thresholds.${k}: ${e.message}`, {
+          // Errors that already name their path (e.g. thresholds.<k>.delayAbortEval) keep it.
+          const msg = e.message.startsWith(`thresholds.${k}`) ? e.message : `thresholds.${k}: ${e.message}`;
+          throw new ConfigError("SW_CONFIG_THRESHOLD", msg, {
             hint: e.hint,
             details: { path: `thresholds.${k}` },
           });

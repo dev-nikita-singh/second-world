@@ -26,6 +26,7 @@ SECOND WORLD helps developers **inspect, load, break, diagnose and improve** sof
 | See the delivery plan and acceptance criteria | [13 – Roadmap](13-roadmap.md) |
 | See what changed from the original plan and why | [14 – Plan review & changes](14-plan-review-and-changes.md) |
 | Look up a term | [15 – Glossary](15-glossary.md) |
+| See the system design as built (layers, errors, timeouts, limits, schemas) | [16 – System design](16-system-design.md) |
 
 ## Folder map
 

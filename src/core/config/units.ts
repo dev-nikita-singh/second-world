@@ -44,7 +44,9 @@ const RATE_UNITS: Record<string, number> = {
 
 function bad(kind: string, v: unknown, example: string, path?: string): ConfigError {
   const where = path ? `${path}: ` : "";
-  return new ConfigError("SW_CONFIG_UNIT", `${where}Invalid ${kind} ${JSON.stringify(v)}`, {
+  // JSON.stringify(NaN) is "null": print non-finite numbers as themselves.
+  const shown = typeof v === "number" && !Number.isFinite(v) ? String(v) : JSON.stringify(v);
+  return new ConfigError("SW_CONFIG_UNIT", `${where}Invalid ${kind} ${shown}`, {
     hint: `Use a ${kind} like ${example}`,
     details: path ? { path } : undefined,
   });
