@@ -418,18 +418,24 @@ function unwrapSchema(s: unknown): unknown {
   return s;
 }
 
-/** Keys the config schema accepts for the object at `path` ([] when it is not a fixed-shape object). */
-export function knownConfigKeys(path: ReadonlyArray<PropertyKey>): string[] {
-  let s = unwrapSchema(ConfigSchema);
+/** Keys `root` accepts for the object at `path` ([] when it is not a fixed-shape object). */
+function objectKeysAt(root: unknown, path: ReadonlyArray<PropertyKey>): string[] {
+  let s = unwrapSchema(root);
   for (const seg of path) {
     const def = (s as { _zod?: { def?: Record<string, unknown> } })?._zod?.def;
     if (def?.type === "object") s = (def.shape as Record<string, unknown>)[String(seg)];
     else if (def?.type === "record") s = def.valueType;
+    else if (def?.type === "array") s = def.element;
     else return [];
     s = unwrapSchema(s);
   }
   const def = (s as { _zod?: { def?: Record<string, unknown> } })?._zod?.def;
   return def?.type === "object" ? Object.keys(def.shape as Record<string, unknown>) : [];
+}
+
+/** Keys the config schema accepts for the object at `path` ([] when it is not a fixed-shape object). */
+export function knownConfigKeys(path: ReadonlyArray<PropertyKey>): string[] {
+  return objectKeysAt(ConfigSchema, path);
 }
 
 /** Levenshtein distance (iterative, two rows); inputs are short config keys. */
@@ -463,6 +469,42 @@ export function suggestKey(key: string, known: readonly string[]): string | unde
   return bestD <= 2 && bestD < key.length / 2 ? best : undefined;
 }
 
+export interface ConfigIssue {
+  /** Full dotted path, e.g. `performance.scenarios[0].steps`; "" for the root. */
+  path: string;
+  message: string;
+}
+
+/**
+ * Readable issues of a ZodError: one per unknown key (full path + "did you mean"), else the issue
+ * path and message. `prefix` is prepended to every path (an engine section such as
+ * `["performance"]`); `schema` is the schema that produced `err` (suggestions come from its keys).
+ * Shared by the config loader and the engines' parse*Input functions (docs/08 §6).
+ */
+export function zodIssueLines(
+  err: z.ZodError,
+  opts: { prefix?: ReadonlyArray<PropertyKey>; schema?: unknown } = {},
+): ConfigIssue[] {
+  const prefix = opts.prefix ?? [];
+  const schema = opts.schema ?? ConfigSchema;
+  const issues: ConfigIssue[] = [];
+  for (const i of err.issues) {
+    if (i.code === "unrecognized_keys") {
+      const known = objectKeysAt(schema, i.path);
+      for (const key of (i as { keys?: string[] }).keys ?? []) {
+        const hint = suggestKey(key, known);
+        issues.push({
+          path: issuePath([...prefix, ...i.path, key]),
+          message: `Unknown key${hint ? ` (did you mean "${hint}"?)` : ""}`,
+        });
+      }
+      continue;
+    }
+    issues.push({ path: issuePath([...prefix, ...i.path]), message: i.message });
+  }
+  return issues;
+}
+
 /** Converts a ZodError into a ConfigError with key paths and their sources. */
 export function zodToConfigError(err: z.ZodError, origins: Record<string, string>): ConfigError {
   const originOf = (p: string): string | undefined => {
@@ -472,31 +514,33 @@ export function zodToConfigError(err: z.ZodError, origins: Record<string, string
     const parent = Object.keys(origins).find((k) => p.startsWith(`${k}.`));
     return parent ? origins[parent] : Object.entries(origins).find(([k]) => k.startsWith(`${p}.`))?.[1];
   };
-  const lines: string[] = [];
-  const issues: Array<{ path: string; message: string }> = [];
-  for (const i of err.issues) {
-    if (i.code === "unrecognized_keys") {
-      // One line per unknown key, with its full path and a "did you mean" for typos.
-      const known = knownConfigKeys(i.path);
-      for (const key of (i as { keys?: string[] }).keys ?? []) {
-        const p = issuePath([...i.path, key]);
-        const hint = suggestKey(key, known);
-        const msg = `Unknown key${hint ? ` (did you mean "${hint}"?)` : ""}`;
-        const origin = originOf(p);
-        lines.push(`  ${p}: ${msg}${origin ? `   ← from ${origin}` : ""}`);
-        issues.push({ path: p, message: msg });
-      }
-      continue;
-    }
-    const p = issuePath(i.path);
-    const origin = originOf(p);
-    lines.push(`  ${p || "(root)"}: ${i.message}${origin ? `   ← from ${origin}` : ""}`);
-    issues.push({ path: p, message: i.message });
-  }
+  const issues = zodIssueLines(err);
+  const lines = issues.map((i) => {
+    const origin = originOf(i.path);
+    return `  ${i.path || "(root)"}: ${i.message}${origin ? `   ← from ${origin}` : ""}`;
+  });
   return new ConfigError("SW_CONFIG_INVALID", `Config error\n${lines.join("\n")}`, {
     hint: "Fix the listed keys. `sw config print --resolved` shows where each value comes from",
     details: { issues },
   });
+}
+
+/**
+ * Runs `fn`; a ConfigError it throws gets `section.` prefixed to its message (unless already
+ * there), so errors raised on an engine's input name the config path (e.g. `stress.thresholds.http`).
+ */
+export function inConfigSection<T>(section: string, fn: () => T): T {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof ConfigError && !e.message.startsWith(`${section}.`)) {
+      throw new ConfigError(e.code as `SW_CONFIG_${string}`, `${section}.${e.message}`, {
+        ...(e.hint !== undefined ? { hint: e.hint } : {}),
+        ...(e.details !== undefined ? { details: e.details } : {}),
+      });
+    }
+    throw e;
+  }
 }
 
 export async function loadConfig(opts: LoadConfigOptions = {}): Promise<ResolvedConfig> {

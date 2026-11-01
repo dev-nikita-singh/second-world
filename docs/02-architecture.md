@@ -40,19 +40,24 @@ flowchart TB
   EVID --> REP & HIST & SUM
 ```
 
-## 2. Layering rules (enforced by lint)
+## 2. Layering rules (enforced by tests)
 
 | Layer | May import | Must not import |
 |---|---|---|
-| `core/*` | Node built-ins, `zod`, tiny utils | Any engine, any adapter |
-| `engines/<x>/*` | `core/*`, `shared/*`, own adapters via interfaces | Other engines directly. Use the registry or events. |
-| `adapters/*` | `core/*` interfaces | Engines |
-| `cli/*` | Public API only | Engine internals |
+| `core/*` | Node built-ins, `zod`, `shared/*`, tiny utils; engines only via `import()` (or type-only) from the composition root (`core/registry.ts`, `core/world.ts`) | `cli`, `adapters`; engines statically |
+| `engines/<x>/*` | `core/*`, `shared/*`, `adapters/*` | `cli`, `src/index.ts`; other engines directly (known exceptions are frozen, see below) |
+| `adapters/*` | `core/*`, `shared/*` | Engines, `cli` |
+| `shared/*` | nothing else from `src/` (leaf) | everything else |
+| `cli/*` | `core/*`, `shared/*`; engines only through `engines/<x>/index.ts`, lazily (`import()`) or type-only | Engine internals |
 
-Enforce with `dependency-cruiser` (or ESLint `import/no-restricted-paths`) in CI. Engines talk to each other only through:
+Enforced in CI by `tests/unit/design/imports.test.ts` (rules R1–R7 over a TypeScript-AST import
+graph, plus "no runtime import cycles"); there is no dependency-cruiser config. Existing
+engine → engine imports (e.g. `stress → performance`, `agent → bugs`) are frozen in that test's
+`KNOWN_CROSS_ENGINE` list: a new pair fails CI (docs/16-system-design.md §1). Otherwise engines talk
+to each other through:
 
 1. **The Evidence Store** (read findings/measurements of other engines).
-2. **The Event Bus** (subscribe to `perf.stage.completed`, etc.).
+2. **The Event Bus** (subscribe to `stress.stage.end`, `finding.created`, etc.; list in §4.3).
 3. **Typed engine outputs** passed by the orchestrator in a workflow.
 
 ## 3. Source layout (v2)
@@ -62,12 +67,13 @@ second-world/
 ├── src/
 │   ├── index.ts                 # public API: createWorld, defineConfig, types
 │   ├── cli/
-│   │   ├── main.ts              # commander program, global flags
+│   │   ├── main.ts              # commander program, global flags (commands loaded lazily)
 │   │   ├── commands/            # perf, stress, inspect, bugs, agent, reliability, model,
-│   │   │                        # whatif, evolve, analyze, report, history, doctor, init
-│   │   └── render/              # TTY renderer, plain renderer, progress
+│   │   │                        # experiments (whatif, evolve), analyze, history, config, doctor, init
+│   │   ├── output.ts            # stdout/stderr, colour and symbols
+│   │   └── run-common.ts        # World from flags, signals, progress, report writing
 │   ├── core/
-│   │   ├── world.ts             # World facade (lazy engine getters)
+│   │   ├── world.ts             # World facade (lazy engine getters), root AbortController
 │   │   ├── orchestrator.ts      # runs workflows (DAG of engine steps)
 │   │   ├── registry.ts          # engine/plugin registry, capability requirements
 │   │   ├── config/              # schemas, loader, profiles, env overlay, units parser
@@ -77,14 +83,15 @@ second-world/
 │   │   ├── probe/               # environment & capability detection
 │   │   ├── clock.ts             # monotonic clock abstraction (testable)
 │   │   ├── rng.ts               # seeded PRNG (xoshiro128**)
-│   │   ├── cancel.ts            # AbortController tree helpers
+│   │   ├── context.ts           # EngineContext factory (test-friendly defaults)
+│   │   ├── types.ts             # Engine, EngineContext, EventBus contracts
 │   │   ├── errors.ts            # error hierarchy with codes
 │   │   └── log/                 # logger + secret redaction
 │   ├── shared/
-│   │   ├── ds/                  # ring buffer, binary heap, deque, semaphore, LRU, union-find
-│   │   ├── stats/               # HDR wrapper, Welford, bootstrap, Mann-Whitney, MAD, EWMA
-│   │   ├── graph/               # directed graph, BFS/DFS, Tarjan, toposort, impact
-│   │   └── util/                # durations, bytes, hashing, ULID, path utils
+│   │   ├── ds/                  # ring buffer, binary heap, semaphore, LRU, union-find, bitset
+│   │   ├── stats/               # HDR wrapper, Welford, bootstrap/compare, MAD + CUSUM, knee, windows
+│   │   ├── graph/               # directed graph, traversal, Tarjan SCC, cycles, toposort, impact
+│   │   └── util/                # atomic write, backoff, hashing, fingerprints, ULID
 │   ├── engines/
 │   │   ├── performance/         # scheduler, executors, workers, metrics, thresholds
 │   │   ├── stress/              # stage planner, capacity analysis, knee detection
@@ -97,17 +104,14 @@ second-world/
 │   │   ├── summary/             # deterministic cross-report summary (sw analyze)
 │   │   ├── reporting/           # aggregators, formatters (tty, json, md, html, junit, sarif)
 │   │   └── history/             # stores (jsonl; sqlite planned), baselines, regression detection
-│   ├── adapters/
-│   │   ├── http/                # undici adapter, fetch adapter (fallback)
-│   │   ├── faults/              # toxiproxy, in-process proxy, docker
-│   │   ├── loadgen/             # optional k6 / artillery bridges
-│   │   └── telemetry/           # OpenTelemetry OTLP receiver/reader
-│   └── types/                   # public type exports
-├── tests/                       # unit, integration, e2e, fixtures, golden reports
-├── examples/                    # sample apps (express, fastify, nest, hono) + configs
-├── schemas/                     # generated JSON Schemas (config, report) for editors/CI
+│   └── adapters/
+│       ├── http/                # undici executor, per-phase timing
+│       ├── faults/              # built-in fault proxy, toxiproxy, docker, cleanup ledger
+│       └── telemetry/           # OTLP receiver/reader, Prometheus
+├── tests/                       # unit, integration, e2e, system, fixtures, helpers
+├── examples/                    # sample apps (shop-express, shop-fastify, conduit-api, payments-fake)
 ├── docs/
-├── package.json  tsconfig.json  vitest.config.ts  biome.json  .dependency-cruiser.cjs
+├── package.json  tsconfig.json  vitest.config.ts  biome.json
 └── README.md  LICENSE  CHANGELOG.md  SECURITY.md  CONTRIBUTING.md
 ```
 
@@ -176,7 +180,7 @@ workflow: {
 
 ### 4.3 Event bus
 
-A typed, synchronous-dispatch, async-safe emitter (no external dep). Events are namespaced: `run.started`, `perf.tick` (1 Hz live stats), `perf.stage.completed`, `finding.created`, `safety.blocked`, `run.cancelled`. Renderers, history and plugins subscribe. **The hot path never awaits listeners**: ticks are pushed into a ring buffer and listeners drain it.
+A typed, synchronous-dispatch, async-safe emitter (no external dep). Events are namespaced. Emitted today: `run.started`, `run.completed`, `run.failed`, `perf.tick` (1 Hz live stats), `stress.stage.start`, `stress.stage.end`, `bugs.technique`, `bugs.done`, `agent.iteration`, `agent.done`, `reliability.fault`, `evolution.gate`, `model.built`, `history.saved`, `finding.created`, `finding.updated`, `world.closed`; a `"*"` listener receives every event. There is no `run.cancelled` event (cancellation is reported in the result, §4.4); a safety refusal is a `SafetyError` plus a `safety.blocked` entry in the audit log, not an event. Renderers, history and plugins subscribe. **The hot path never awaits listeners**: `emit` calls listeners synchronously and ignores their return value; a listener that throws or returns a rejected promise is logged, never propagated to the emitter.
 
 ### 4.4 Cancellation
 

@@ -3,9 +3,12 @@
  * docs/11-safety-security-privacy.md §8 (responsible use). Detection is read-only (package.json,
  * lockfiles, files on disk); nothing is executed. Writes sw.config.ts with local-only safety and
  * adds `.second-world/` to .gitignore. Never overwrites an existing config without --force.
+ * With an OpenAPI contract: the target comes from servers[0] (when local) and the perf scenario is a
+ * GET that needs no auth and no required parameters, so the first `sw perf` measures a real route.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { parse as parseYaml } from "yaml";
 import { CONFIG_FILE_NAMES } from "../../core/config/loader.js";
 import { ConfigError } from "../../core/errors.js";
 import type { GlobalOptions } from "../main.js";
@@ -91,6 +94,132 @@ export function detectProject(root: string): ProjectDetection {
   };
 }
 
+const DEFAULT_ORIGIN = "http://127.0.0.1:3000";
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1", "0.0.0.0"]);
+const HEALTH_RE = /\/(health|healthz|healthcheck|ready|readyz|live|livez|ping)$/i;
+
+/** What `sw init` takes from an OpenAPI contract (all optional; empty when it cannot be read). */
+export interface ContractHints {
+  /** Target URL from servers[0]: variables resolved; relative → default origin; remote → default origin + its path. */
+  serverUrl?: string;
+  /** Why servers[0] was not used as is. */
+  serverNote?: string;
+  /** A health-like GET without parameters (path below the server's base). */
+  healthPath?: string;
+  /** A GET with no auth and no required parameters, for the generated perf scenario. */
+  perfGet?: { path: string; name: string };
+}
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** Resolves a local `$ref` ("#/components/parameters/X"); undefined for remote refs. */
+function deref(doc: Obj, v: unknown): Obj | undefined {
+  if (!isObj(v)) return undefined;
+  const ref = v.$ref;
+  if (typeof ref !== "string") return v;
+  if (!ref.startsWith("#/")) return undefined;
+  let cur: unknown = doc;
+  for (const seg of ref.slice(2).split("/")) {
+    cur = isObj(cur) ? cur[seg.replace(/~1/g, "/").replace(/~0/g, "~")] : undefined;
+  }
+  return isObj(cur) ? cur : undefined;
+}
+
+function serverOf(doc: Obj): Pick<ContractHints, "serverUrl" | "serverNote"> {
+  const servers = Array.isArray(doc.servers) ? doc.servers : [];
+  const first = servers[0];
+  if (!isObj(first) || typeof first.url !== "string") return {};
+  const declared = first.url;
+  const vars = isObj(first.variables) ? first.variables : {};
+  let unresolved = false;
+  const raw = declared.replace(/\{([^}]+)\}/g, (_m, name: string) => {
+    const v = vars[name];
+    if (isObj(v) && typeof v.default === "string") return v.default;
+    unresolved = true;
+    return "";
+  });
+  if (unresolved)
+    return { serverNote: `servers[0] "${declared}" has a variable without a default: not used` };
+  let url: URL;
+  try {
+    url = new URL(raw, `${DEFAULT_ORIGIN}/`);
+  } catch {
+    return { serverNote: `servers[0] "${declared}" is not a valid URL: not used` };
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return {};
+  const path = url.pathname.replace(/\/+$/, "");
+  const absolute = /^[a-z][a-z0-9+.-]*:/i.test(raw);
+  if (absolute && !LOCAL_HOSTS.has(url.hostname)) {
+    return {
+      serverUrl: `${DEFAULT_ORIGIN}${path}`,
+      serverNote: `servers[0] ${url.origin} is not local: target set to ${DEFAULT_ORIGIN}${path} (edit targets.api to point at your local instance)`,
+    };
+  }
+  const host = url.hostname === "0.0.0.0" ? "127.0.0.1" : url.hostname;
+  const serverUrl = `${url.protocol}//${host}${url.port ? `:${url.port}` : ""}${path}`;
+  return absolute
+    ? { serverUrl }
+    : { serverUrl, serverNote: `servers[0] "${declared}" is relative: target set to ${serverUrl}` };
+}
+
+/** True when the operation can be called anonymously (no security, or an empty `{}` alternative). */
+function anonymous(doc: Obj, op: Obj): boolean {
+  const sec = Array.isArray(op.security) ? op.security : Array.isArray(doc.security) ? doc.security : [];
+  return sec.length === 0 || sec.some((r) => isObj(r) && Object.keys(r).length === 0);
+}
+
+/**
+ * What `sw init` can use from an OpenAPI 3.x / Swagger document (YAML or JSON text). Pure and total:
+ * an unreadable contract yields `{}`. Operations are taken in document order, `deprecated` ones are
+ * skipped, and health-like paths are only the perf route when nothing else qualifies.
+ */
+export function contractHints(text: string): ContractHints {
+  let doc: unknown;
+  try {
+    doc = parseYaml(text);
+  } catch {
+    return {};
+  }
+  if (!isObj(doc)) return {};
+  const root = doc;
+  const out: ContractHints = { ...serverOf(root) };
+  const paths = isObj(root.paths) ? root.paths : {};
+  let healthGet: ContractHints["perfGet"];
+  for (const [path, itemRaw] of Object.entries(paths)) {
+    const item = deref(root, itemRaw);
+    const op = item ? deref(root, item.get) : undefined;
+    if (!item || !op || !path.startsWith("/") || path.includes("{") || op.deprecated === true) continue;
+    const params = [
+      ...(Array.isArray(item.parameters) ? item.parameters : []),
+      ...(Array.isArray(op.parameters) ? op.parameters : []),
+    ].map((p) => deref(root, p));
+    if (params.some((p) => p === undefined || p.required === true || p.in === "path")) continue;
+    if (deref(root, op.requestBody)?.required === true) continue;
+    if (!anonymous(root, op)) continue;
+    const name = typeof op.operationId === "string" && op.operationId ? op.operationId : `GET ${path}`;
+    if (HEALTH_RE.test(path)) {
+      out.healthPath ??= path;
+      healthGet ??= { path, name };
+      continue;
+    }
+    out.perfGet ??= { path, name };
+  }
+  if (!out.perfGet && healthGet) out.perfGet = healthGet;
+  return out;
+}
+
+/** The target's base path + an operation path ("/api" + "/articles"); steps starting with "/" are origin-relative. */
+function underBase(targetUrl: string, path: string): string {
+  let base = "";
+  try {
+    base = new URL(targetUrl).pathname.replace(/\/+$/, "");
+  } catch {
+    // invalid URL: the config loader reports it
+  }
+  return `${base}${path}`;
+}
+
 export interface InitAnswers {
   targetUrl: string;
   healthPath: string;
@@ -101,7 +230,7 @@ function q(s: string): string {
 }
 
 /** Renders sw.config.ts (plain object with a type-only import, so it loads even before install). */
-export function renderConfig(d: ProjectDetection, a: InitAnswers): string {
+export function renderConfig(d: ProjectDetection, a: InitAnswers, hints: ContractHints = {}): string {
   const pmRun = d.packageManager === "npm" ? ["npm", "run"] : [d.packageManager, "run"];
   const lines: string[] = [];
   lines.push(
@@ -134,6 +263,14 @@ export function renderConfig(d: ProjectDetection, a: InitAnswers): string {
   lines.push("  performance: {");
   lines.push('    target: "api",');
   lines.push('    rate: 50, duration: "30s", warmup: "5s",');
+  if (hints.perfGet) {
+    lines.push(
+      `    // From ${d.openapi ?? "the OpenAPI contract"}: a GET that needs no auth and no required parameters.`,
+    );
+    lines.push(
+      `    scenarios: [{ name: ${q(hints.perfGet.name)}, steps: [{ method: "GET", path: ${q(underBase(a.targetUrl, hints.perfGet.path))} }] }],`,
+    );
+  }
   lines.push('    thresholds: { "http.p95": "< 300ms", "http.error_rate": "< 1%" },');
   lines.push("  },");
   lines.push('  stress: { mode: "step", stages: [10, 25, 50, 100], hold: "20s" },');
@@ -186,12 +323,17 @@ export function initSummary(
   d: ProjectDetection,
   a: InitAnswers,
   o: { interactive: boolean; targetFlag: boolean },
+  hints?: ContractHints,
 ): string[] {
   const lines: string[] = [];
   lines.push(
     `detected: ${d.packageManager} · frameworks: ${d.frameworks.join(", ") || "none"} · OpenAPI: ${d.openapi ?? "not found"} · start script: ${d.startScript ?? "not found"}`,
   );
-  if (!o.interactive && !o.targetFlag) {
+  const fromServer = hints?.serverUrl !== undefined && hints.serverUrl === a.targetUrl;
+  if (fromServer && hints?.serverNote) lines.push(hints.serverNote);
+  if (fromServer && !hints?.serverNote) {
+    lines.push(`target ${a.targetUrl} (from ${d.openapi} servers[0], health ${a.healthPath})`);
+  } else if (!o.interactive && !o.targetFlag) {
     lines.push(
       `target ${a.targetUrl} (default, health ${a.healthPath}) — edit targets.api in sw.config.ts, or re-run \`sw init --force --target <url>\``,
     );
@@ -205,6 +347,15 @@ export function initSummary(
   }
   if (!d.openapi) {
     lines.push("no OpenAPI file found: `sw bugs` needs one — set bugs.openapi in sw.config.ts");
+  }
+  if (hints?.perfGet) {
+    lines.push(
+      `perf scenario: GET ${underBase(a.targetUrl, hints.perfGet.path)} (from ${d.openapi}; add your own under performance.scenarios)`,
+    );
+  } else if (hints) {
+    lines.push(
+      `perf: ${d.openapi} has no GET without auth or required parameters, so \`sw perf\` sends GET / — add performance.scenarios`,
+    );
   }
   lines.push("next: start your service, then run `sw doctor` and `sw perf`");
   return lines;
@@ -222,7 +373,18 @@ export async function initCommand(
       hint: "Re-run with --force to overwrite it, or edit it directly",
     });
   }
-  const defaults: InitAnswers = { targetUrl: o.target ?? "http://127.0.0.1:3000", healthPath: "/healthz" };
+  let hints: ContractHints | undefined;
+  if (d.openapi) {
+    try {
+      hints = contractHints(readFileSync(join(root, d.openapi), "utf8"));
+    } catch {
+      hints = {};
+    }
+  }
+  const defaults: InitAnswers = {
+    targetUrl: o.target ?? hints?.serverUrl ?? DEFAULT_ORIGIN,
+    healthPath: hints?.healthPath ?? "/healthz",
+  };
   let answers = defaults;
   const interactive =
     !g.yes && process.stdin.isTTY === true && process.stdout.isTTY === true && !process.env.CI;
@@ -270,14 +432,16 @@ export async function initCommand(
     }
   }
   const file = join(root, "sw.config.ts");
-  writeFileSync(file, renderConfig(d, answers), "utf8");
+  writeFileSync(file, renderConfig(d, answers, hints), "utf8");
   const gi = ensureGitignore(root);
   if (o.json) {
-    out(JSON.stringify({ written: file, gitignoreUpdated: gi, detection: d }, null, 2));
+    out(
+      JSON.stringify({ written: file, gitignoreUpdated: gi, detection: d, contract: hints ?? null }, null, 2),
+    );
   } else {
     out(`${s.ok} wrote ${file}`);
     if (gi) out(`${s.ok} added .second-world/ to .gitignore`);
-    for (const line of initSummary(d, answers, { interactive, targetFlag: o.target !== undefined })) {
+    for (const line of initSummary(d, answers, { interactive, targetFlag: o.target !== undefined }, hints)) {
       out(`${s.info} ${line}`);
     }
     err(s.dim("SECOND WORLD is for testing systems you own or are explicitly authorised to test."));

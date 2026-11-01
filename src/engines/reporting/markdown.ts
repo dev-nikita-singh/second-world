@@ -6,7 +6,7 @@
 
 import type { EngineResult } from "../../core/evidence/schemas.js";
 import type { PerformanceData } from "../performance/types.js";
-import { type Block, cellText, isStressData } from "./blocks.js";
+import { type Block, cellText, finiteRange, isStressData, perfErrorKindLabel } from "./blocks.js";
 import { dataBlocks } from "./dispatch.js";
 import { isEvolutionData, isExperimentData } from "./experiments.js";
 import {
@@ -102,6 +102,10 @@ function perfSection(d: PerformanceData, out: string[]): void {
       "",
     );
   }
+  if (d.errors.length > 0) {
+    const rows = d.errors.map((e) => [mdEscape(perfErrorKindLabel(d, e.kind)), String(e.count)]);
+    out.push(table(["error", "count"], rows, ["l", "r"]), "");
+  }
   if (d.generator.saturated) {
     out.push(
       `> **Warning:** load generator saturated: ${mdEscape((d.generator.reasons ?? []).join("; "))}`,
@@ -153,14 +157,14 @@ export function renderBlocksMd(blocks: readonly Block[]): string[] {
         out.push(`**${mdEscape(b.title)}**`, "", `> ${mdEscape(b.text)}`, "");
         break;
       case "spark": {
-        const xs = b.values.filter((v) => Number.isFinite(v));
-        if (xs.length === 0) break;
+        const r = finiteRange(b.values);
+        if (r === null) break;
         const mark =
           b.mark && b.mark.to > b.mark.from
             ? ` — ${mdEscape(b.mark.label)}: windows ${b.mark.from + 1}–${b.mark.to} of ${b.values.length}`
             : "";
         out.push(
-          `${mdEscape(b.title)}: ${sparkline(b.values)} (${fmtNum(Math.min(...xs), 1)}..${fmtNum(Math.max(...xs), 1)} ${mdEscape(b.unit)})${mark}`,
+          `${mdEscape(b.title)}: ${sparkline(b.values)} (${fmtNum(r.lo, 1)}..${fmtNum(r.hi, 1)} ${mdEscape(b.unit)})${mark}`,
           "",
         );
         break;

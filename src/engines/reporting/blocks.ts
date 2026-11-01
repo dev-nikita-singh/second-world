@@ -469,7 +469,7 @@ export function perfBlocks(d: PerformanceData): Block[] {
       title: "Errors",
       head: ["kind", "count"],
       align: ["l", "r"],
-      rows: d.errors.map((e) => [e.kind, String(e.count)]),
+      rows: d.errors.map((e) => [perfErrorKindLabel(d, e.kind), String(e.count)]),
     });
   }
   const g = d.generator;
@@ -479,4 +479,35 @@ export function perfBlocks(d: PerformanceData): Block[] {
     text: `Generator: event-loop p99 ${fmtMs(g.eventLoopDelayP99Ms)}, cpu ${fmtNum(g.cpuPercent, 0)}%, scheduling lag p99 ${fmtMs(g.schedulingLagP99Ms)}${(g.workers ?? 1) > 1 ? `, workers ${g.workers}` : ""}${g.saturated ? ` — SATURATED: ${(g.reasons ?? []).join("; ")}` : ""}`,
   });
   return b;
+}
+
+/**
+ * Min and max of the finite values, in one loop (no `Math.min(...xs)`: spreading a long per-tick
+ * series overflows the call stack above ~120k points). null when there is no finite value.
+ */
+export function finiteRange(values: readonly number[]): { lo: number; hi: number } | null {
+  let lo = Number.POSITIVE_INFINITY;
+  let hi = Number.NEGATIVE_INFINITY;
+  for (const v of values) {
+    if (!Number.isFinite(v)) continue;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  return lo <= hi ? { lo, hi } : null;
+}
+
+/**
+ * Display label of a Performance Lab error kind. "status" (unexpected HTTP status) names the codes
+ * seen in the error samples, e.g. `status (HTTP 404, 500)`; other kinds are shown as they are.
+ */
+export function perfErrorKindLabel(
+  d: Pick<PerformanceData, "errorSamples" | "firstErrors">,
+  kind: string,
+): string {
+  if (kind !== "status") return kind;
+  const codes = new Set<number>();
+  for (const list of [d.firstErrors ?? [], d.errorSamples ?? []]) {
+    for (const s of list) if (s.kind === "status" && s.status > 0) codes.add(s.status);
+  }
+  return codes.size > 0 ? `status (HTTP ${[...codes].sort((a, b) => a - b).join(", ")})` : kind;
 }

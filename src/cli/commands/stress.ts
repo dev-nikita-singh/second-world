@@ -91,8 +91,15 @@ export async function stressCommand(
     }
     await world.safety.preflight(plan.target);
     if (g.dryRun) {
-      const { parseStressInput } = await import("../../engines/stress/index.js");
+      const { checkPerformancePlan, parsePerformanceInput } = await import(
+        "../../engines/performance/index.js"
+      );
+      const { parseStressInput, stagePerfInput } = await import("../../engines/stress/index.js");
       const parsed = parseStressInput(plan);
+      // Same extract/template/step checks the first stage's Performance Lab run would do.
+      checkPerformancePlan(
+        parsePerformanceInput(stagePerfInput(parsed.base, parsed.loadType, 1, 1000, 0, 0)),
+      );
       if (o.json)
         out(
           JSON.stringify(

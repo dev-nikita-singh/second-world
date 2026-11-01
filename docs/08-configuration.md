@@ -92,7 +92,7 @@ export default defineConfig({
     },
   },
 
-  stress: { mode: "step", stages: [50, 100, 200, 400, 800], hold: "45s", settle: "10s", stopWhen: { errorRate: "> 5%" } },
+  stress: { mode: "step", stages: [50, 100, 200, 400, 800], hold: "45s", settle: "10s", stopWhen: { errorRate: 0.05 } },
 
   architecture: {
     include: ["src/**/*.ts"], exclude: ["**/*.test.ts"], tsconfig: "tsconfig.json",

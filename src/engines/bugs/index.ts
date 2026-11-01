@@ -2,6 +2,7 @@
  * API Bug Hunter public entry. docs/03-engines/api-bug-hunter.md §6 (usage), §3 (replay).
  */
 import { readFile } from "node:fs/promises";
+import { zodIssueLines } from "../../core/config/loader.js";
 import { type CreateEngineContextOptions, createEngineContext } from "../../core/context.js";
 import { ConfigError } from "../../core/errors.js";
 import type { EngineResult, Finding } from "../../core/evidence/schemas.js";
@@ -50,13 +51,15 @@ export const bugsEngine: Engine<BugsInput, BugsData> = {
 export function parseBugsInput(input: BugsInputLoose | unknown): BugsInput {
   const r = BugsInputSchema.safeParse(input);
   if (!r.success) {
-    const issues = r.error.issues.map(
-      (i) => `${i.path.length > 0 ? i.path.join(".") : "(root)"}: ${i.message}`,
+    const issues = zodIssueLines(r.error, { prefix: ["bugs"], schema: BugsInputSchema });
+    throw new ConfigError(
+      "SW_CONFIG_BUGS",
+      `Invalid bugs input: ${issues.map((i) => `${i.path}: ${i.message}`).join("; ")}`,
+      {
+        hint: "See docs/03-engines/api-bug-hunter.md for the input fields",
+        details: { issues },
+      },
     );
-    throw new ConfigError("SW_CONFIG_BUGS", `Invalid bugs input: ${issues.join("; ")}`, {
-      hint: "See docs/03-engines/api-bug-hunter.md for the input fields",
-      details: { issues },
-    });
   }
   return r.data;
 }

@@ -54,6 +54,17 @@ export interface DetectorSummary {
   detail: string;
 }
 
+/** One route's isolation verdict; "expected" only when the route is known to depend on `dep`. */
+function isolationVerdict(
+  i: { related: boolean | null; degraded: boolean; isolationFailure: boolean },
+  dep: string,
+): string {
+  if (i.isolationFailure) return `ISOLATION FAILURE (does not depend on ${dep})`;
+  if (!i.degraded) return "ok";
+  if (i.related === true) return `degraded (expected: depends on ${dep})`;
+  return "degraded (relation unknown: declare dependsOn on the route to classify it)";
+}
+
 /** One summary per detector, across runs (first flagged run's detail wins). */
 export function detectorSummaries(d: ReliabilityData): DetectorSummary[] {
   const out: DetectorSummary[] = [];
@@ -114,13 +125,7 @@ export function detectorSummaries(d: ReliabilityData): DetectorSummary[] {
   pick(
     (r) => (r.isolation.length > 0 ? r.isolation : null),
     (iso) => iso.some((i) => i.isolationFailure),
-    (iso) =>
-      iso
-        .map(
-          (i) =>
-            `${i.route}: ${i.isolationFailure ? "ISOLATION FAILURE" : i.degraded ? "degraded (expected, depends on it)" : "ok"}${i.related === null ? " (relation unknown)" : ""}`,
-        )
-        .join("; "),
+    (iso) => iso.map((i) => `${i.route}: ${isolationVerdict(i, d.dependency)}`).join("; "),
     "isolation",
   );
   pick(
@@ -173,7 +178,10 @@ export function checkSummaries(d: ReliabilityData): CheckSummary[] {
     for (const c of r.checks) {
       const key = `${c.phase}|${c.expression}`;
       let s = map.get(key);
-      if (!s) map.set(key, (s = { phase: c.phase, expression: c.expression, passed: true, actuals: [] }));
+      if (!s) {
+        s = { phase: c.phase, expression: c.expression, passed: true, actuals: [] };
+        map.set(key, s);
+      }
       s.actuals.push({ run: r.index, actual: c.actual, passed: c.passed });
       if (!c.passed) s.passed = false;
     }

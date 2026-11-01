@@ -8,7 +8,7 @@
  */
 
 import type { EngineResult } from "../../core/evidence/schemas.js";
-import { type Block, type CellLike, cellText, cellTone, perfBlocks } from "./blocks.js";
+import { type Block, type CellLike, cellText, cellTone, finiteRange, perfBlocks } from "./blocks.js";
 import { dataBlocks } from "./dispatch.js";
 import { methodsOf } from "./markdown.js";
 import {
@@ -71,9 +71,7 @@ export function svgSparkline(
 ): string {
   const pts = values.map((v, i) => [i, v] as const).filter(([, v]) => Number.isFinite(v));
   if (pts.length < 2) return "";
-  const ys = pts.map(([, v]) => v);
-  const lo = Math.min(...ys);
-  const hi = Math.max(...ys);
+  const { lo, hi } = finiteRange(values) as { lo: number; hi: number };
   const n = values.length - 1;
   const xOf = (i: number): number => (n === 0 ? 0 : (i / n) * (w - 4) + 2);
   let band = "";
@@ -136,10 +134,10 @@ export function renderBlocksHtml(blocks: readonly Block[]): string {
       case "spark": {
         const svg = svgSparkline(b.values, b.title, 240, 40, b.mark);
         if (!svg) break;
-        const xs = b.values.filter((v) => Number.isFinite(v));
+        const r = finiteRange(b.values) ?? { lo: 0, hi: 0 };
         const markNote = b.mark && b.mark.to > b.mark.from ? ` · shaded: ${e(b.mark.label)}` : "";
         out.push(
-          `<figure class="spark">${svg}<figcaption>${e(b.title)}: ${e(fmtNum(Math.min(...xs), 1))} .. ${e(fmtNum(Math.max(...xs), 1))} ${e(b.unit)}${markNote}</figcaption></figure>`,
+          `<figure class="spark">${svg}<figcaption>${e(b.title)}: ${e(fmtNum(r.lo, 1))} .. ${e(fmtNum(r.hi, 1))} ${e(b.unit)}${markNote}</figcaption></figure>`,
         );
         break;
       }

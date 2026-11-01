@@ -110,8 +110,17 @@ export async function reliabilityRun(
     }
     await world.safety.preflight(plan.target);
     if (g.dryRun) {
-      const { parseReliabilityInput } = await import("../../engines/reliability/index.js");
+      const { checkReliabilityInput, parseReliabilityInput } = await import(
+        "../../engines/reliability/index.js"
+      );
       const parsed = parseReliabilityInput(plan);
+      checkReliabilityInput(parsed);
+      // The CLI never passes injectors, so the real run needs a declared dependency.
+      if (!parsed.dependencies[parsed.dependency]) {
+        throw new ConfigError("SW_CONFIG_RELIABILITY", `Unknown dependency "${parsed.dependency}"`, {
+          hint: "Declare it under reliability.dependencies.<name> (injector + upstream/listen, toxiproxy or container)",
+        });
+      }
       if (o.json)
         out(
           JSON.stringify(

@@ -71,8 +71,11 @@ export async function perfCommand(
     await world.safety.preflight(plan.target);
 
     if (g.dryRun) {
-      const { parsePerformanceInput } = await import("../../engines/performance/index.js");
+      const { checkPerformancePlan, parsePerformanceInput } = await import(
+        "../../engines/performance/index.js"
+      );
       const parsed = parsePerformanceInput(plan);
+      checkPerformancePlan(parsed);
       const payload = {
         dryRun: true,
         target: plan.target,

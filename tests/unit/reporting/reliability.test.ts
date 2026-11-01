@@ -144,7 +144,9 @@ describe("reliability rendering — tty", () => {
     expect(s).toContain("retry storm");
     expect(s).toMatch(/synchronised retries\s+│ n\/a/);
     expect(s).toMatch(/circuit breaker\s+│ FLAGGED │ no-breaker/);
-    expect(s).toMatch(/isolation\s+│ ok\s+│ orders: degraded \(expected, depends on it\); products: ok/);
+    expect(s).toMatch(
+      /isolation\s+│ ok\s+│ orders: degraded \(expected: depends on payments\); products: ok/,
+    );
   });
 
   it("rule hits k/n: reproduced-defect vs observation; limitations shown", () => {
@@ -342,13 +344,17 @@ describe("reliability rendering — junit / sarif", () => {
 
   it("sarif: dependency and route as logical locations", () => {
     const sarif = JSON.parse(renderReport([relResult()], "sarif"));
-    const storm = (sarif.runs[0].results as any[]).find(
-      (r) => r.ruleId === "reliability/retry-without-backoff",
-    );
-    expect(storm.locations[0].logicalLocations).toEqual([
+    const storm = (
+      sarif.runs[0].results as Array<{
+        ruleId: string;
+        level: string;
+        locations: Array<{ logicalLocations: unknown }>;
+      }>
+    ).find((r) => r.ruleId === "reliability/retry-without-backoff");
+    expect(storm?.locations[0]?.logicalLocations).toEqual([
       { name: "payments", fullyQualifiedName: "dependency:payments", kind: "resource" },
       { name: "POST /orders", fullyQualifiedName: "POST /orders", kind: "resource" },
     ]);
-    expect(storm.level).toBe("error");
+    expect(storm?.level).toBe("error");
   });
 });

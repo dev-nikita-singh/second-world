@@ -12,7 +12,15 @@ import Table from "cli-table3";
 import pc from "picocolors";
 import type { EngineResult, Finding, Severity } from "../../core/evidence/schemas.js";
 import type { PerformanceData } from "../performance/types.js";
-import { type Block, type CellLike, cellText, cellTone, type Tone } from "./blocks.js";
+import {
+  type Block,
+  type CellLike,
+  cellText,
+  cellTone,
+  finiteRange,
+  perfErrorKindLabel,
+  type Tone,
+} from "./blocks.js";
 import { dataBlocks } from "./dispatch.js";
 import {
   type CombinedReport,
@@ -185,7 +193,7 @@ function renderPerformance(ctx: Ctx, d: PerformanceData, out: string[]): void {
 
   if (d.errors.length > 0) {
     out.push(c.bold("Errors"));
-    for (const e of d.errors) out.push(`  ${ctx.sym.bullet} ${e.kind}: ${e.count}`);
+    for (const e of d.errors) out.push(`  ${ctx.sym.bullet} ${perfErrorKindLabel(d, e.kind)}: ${e.count}`);
   }
 
   const g = d.generator;
@@ -214,10 +222,9 @@ const SPARK_ASCII = ["_", ".", "-", "~", "=", "+", "*", "#"];
 /** One-line sparkline (min..max scaled). */
 export function sparkline(values: readonly number[], ascii = false): string {
   const chars = ascii ? SPARK_ASCII : SPARK;
-  const xs = values.filter((v) => Number.isFinite(v));
-  if (xs.length === 0) return "";
-  const lo = Math.min(...xs);
-  const hi = Math.max(...xs);
+  const r = finiteRange(values);
+  if (r === null) return "";
+  const { lo, hi } = r;
   return values
     .map((v) => {
       if (!Number.isFinite(v)) return " ";
@@ -258,9 +265,7 @@ function renderBlocks(ctx: Ctx, blocks: readonly Block[], out: string[]): void {
         out.push(`  ${c.bold(ctx.ascii && b.ascii !== undefined ? b.ascii : b.text)}`);
         break;
       case "spark": {
-        const xs = b.values.filter((v) => Number.isFinite(v));
-        const lo = xs.length > 0 ? Math.min(...xs) : 0;
-        const hi = xs.length > 0 ? Math.max(...xs) : 0;
+        const { lo, hi } = finiteRange(b.values) ?? { lo: 0, hi: 0 };
         out.push(
           `${c.dim(b.title)} ${sparkline(b.values, ctx.ascii)} ${c.dim(`${fmtNum(lo, 1)}..${fmtNum(hi, 1)} ${b.unit}`)}`,
         );
@@ -302,6 +307,7 @@ const ASCII_FOLD: [RegExp, string][] = [
 export function asciiFold(s: string): string {
   let r = s;
   for (const [re, to] of ASCII_FOLD) r = r.replace(re, to);
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: the class is "anything above ASCII"
   return r.replace(/[^\x00-\x7f]/g, "?");
 }
 
