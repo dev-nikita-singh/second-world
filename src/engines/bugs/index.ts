@@ -26,8 +26,8 @@ export {
 export { embedContext, hydrateForReplay } from "./artifact.js";
 export type { BugCase, CaseStep, Check } from "./cases.js";
 export { classifyReplays } from "./classify.js";
-export { type LoadedInvariant, loadInvariant } from "./invariants.js";
 export { loadContract } from "./contract.js";
+export { type LoadedInvariant, loadInvariant } from "./invariants.js";
 export type {
   Assertion,
   BugsInput,
