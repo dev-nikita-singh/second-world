@@ -94,3 +94,17 @@
 2026-10-29T22:20Z sw-coverage -> main: DONE 15 coverage files/206 tests; unit L 81.4→84.11 B 67.38→70.91; 4 bugs reported all fixed; unit green, tsc clean
 2026-10-29T22:45Z sw-qa -> main: DONE wave 5: 12 bugs reported (all functional ones fixed), 5 new test files (32 tests), all it.fails flipped; tsc clean
 2026-10-30T18:10Z sw-exit6 -> main: done — stress all-stage-error → 5/3, all-fail no longer exit 0; evolve git/worktree → 2/4; 27 new tests, 138/138 area tests pass
+2026-11-01T04:40Z sw-ship7 -> main: first-run UX done; out-of-lane: main.ts:544 error colors when piped, no prepack, inspect 0 files exit 0
+2026-11-01T00:20Z sw-real7 -> main: 3 SW bugs from conduit-api: BOLA skipped when read op is public (generate.ts:541); agent ignores stateful.resources idPointer (+latent ownership FP on public reads); docs/08:95 stopWhen errorRate string rejected
+2026-11-01T05:00Z sw-race7 -> main: safety.maxRps is per-lease (guard.ts reserve new Gcra); 2 concurrent leases = 2x cap; repro tests/unit/concurrency/safety-rate.test.ts (it.fails)
+2026-11-01T05:00Z sw-design7 -> main: DONE Plan §B — 6 design test files (47 tests), 4 adapter + 5 config fixes with failing-first tests, docs/16-system-design.md; f1.test.ts fails only due to stray examples/shop-express/.second-world
+2026-11-01T04:58Z sw-ship7 -> main: units 1-5 done, ready for lint pass; notes: lint red until pass, Linux docker/podman risks, docs/11 audit verify mismatch
+2026-11-01T05:05Z sw-real7 -> main: DONE conduit-api example + tests/system/conduit.test.ts (7 pass/2 opt-in pack journey pass); recall 5/5 precision 1.0; final report delivered
+2026-11-01T05:15Z sw-ux8 -> main: request to add zodIssueLines helper to src/core/config/loader.ts for engine input error paths (task 2)
+2026-11-01T05:12Z sw-agent8 -> main: world.ts buildAgentInput needs: forward bugs.stateful.resources -> agent resources (one line after AGENT_FROM_BUGS loop)
+2026-11-01T05:25Z sw-ux8 -> main: src/adapters/faults/docker.ts:63 regex has literal CRLF (parse error), blocks reliability tests
+2026-11-01T05:30Z sw-race7 -> main: src/core/config/loader.ts:522-523 unparseable (literal newlines in strings) breaks every spawned sw; maxRps test flipped to it
+2026-11-01T05:40Z sw-agent8 -> main: DONE (final report via handback); conduit truth needs race op POST favorite + sw agent detectedBy for delete-article-no-ownership
+2026-11-01T07:30Z sw-ux8 -> main: DONE wave 7b ux lane (7 tasks, failing-test-first); report in progress/sw-ux8.md
+2026-11-01T05:40Z sw-infra8 -> main: guard.coverage.test.ts:194 needs update (torn last audit line = warning); audit chain race W10 fixed with lock
+2026-11-01T05:50Z sw-infra8 -> main: final report (4 tasks done)

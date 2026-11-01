@@ -52,9 +52,8 @@ statically and measures it (§14).
   so the list only shrinks.
 - `createWorld()` loads the reporting engine eagerly (`src/core/world.ts`, `await import("../engines/reporting/index.js")`),
   so every World pays for reporting even if it never writes a report.
-- docs/02 §3 lists `src/core/cancel.ts`, `src/adapters/loadgen/` and `.dependency-cruiser.cjs`; none
-  exist. Cancellation lives in `world.ts` (§9); layering is enforced by the tests above instead of
-  dependency-cruiser.
+- (Fixed in wave 7: docs/02 §3 no longer lists files that do not exist; `tests/unit/cli/docs-architecture.test.ts`
+  checks every path in it.)
 
 ## 2. Data flow of one `sw perf` run
 
@@ -183,9 +182,8 @@ reader reported such a line as "not valid JSON".
 - The built-in fault proxy buffers client bytes in memory while a TCP connection is held by a
   black-hole fault (`src/adapters/faults/builtin-proxy.ts`, `pending`); bounded by the fault TTL and by
   the client, not by a byte limit.
-- `Math.min(...xs)` / `Math.max(...xs)` over per-tick series in reporting sparklines
-  (`src/engines/reporting/{tty,markdown,html}.ts`) would hit the same V8 argument limit for a series
-  of more than ~120k points (a 33-hour run at 1 Hz). Not verified with a real run.
+- (Fixed in wave 7: reporting sparklines use a single-loop range, `finiteRange` in
+  `src/engines/reporting/blocks.ts`; tested with a 200k-point series.)
 
 ## 7. Determinism
 
@@ -202,7 +200,9 @@ reader reported such a line as "not valid JSON".
 
 ## 8. Idempotency and crash safety of local state
 
-- Report files: temp file + rename (`src/engines/reporting/json.ts` `writeFileAtomic`).
+- Report files, model snapshots and the architecture cache: unique temp file + rename with Windows
+  retry (`src/shared/util/atomic-write.ts` `writeFileAtomic`); concurrent writers never collide
+  (`tests/unit/concurrency/snapshot-writers.test.ts`). Concurrency guarantees: docs/02 §4.6.
 - History: report `runs/<id>.json.gz` written atomically, then one fsync'd line appended to
   `runs.jsonl`, both under a lock file with stale-lock detection (`src/engines/history/fsutil.ts`,
   `jsonl-store.ts`). Reads skip torn/corrupt index lines; `sw history verify` reports orphans and
@@ -234,13 +234,15 @@ reader reported such a line as "not valid JSON".
   `perf.tick` (1 Hz), `stress.stage.start|end`, `bugs.technique|done`, `agent.iteration|done`,
   `reliability.fault`, `evolution.gate`, `model.built`, `history.saved`, `finding.created|updated`
   (from the evidence store, `src/core/world.ts`), `world.closed`. The CLI renders progress from
-  them (`src/cli/run-common.ts` `attachProgress`). Known gap: docs/02 §4.3 also names
-  `perf.stage.completed`, `safety.blocked` and `run.cancelled` as events; they are not emitted
-  (`safety.blocked` is an audit-log action, a cancelled run ends with `run.completed` and status
-  `cancelled` — not verified for every engine).
+  them (`src/cli/run-common.ts` `attachProgress`). docs/02 §4.3 lists exactly these events
+  (checked by `tests/unit/cli/docs-architecture.test.ts`).
 - Audit log: append-only JSONL with a SHA-256 hash chain of every safety decision, at
   `<config dir>/.second-world/audit.log` when a config file is used; `verifyAuditLog()` finds the
-  first broken line (`src/core/safety/guard.ts`).
+  first broken line (`src/core/safety/guard.ts`). Appends from parallel `sw` processes re-read the
+  chain head under a lock, and `sw history verify` checks the chain (broken → exit 1; a torn last
+  line from a crash is a warning, since a hash chain cannot detect tail truncation — docs/11 §3).
+- Rate cap: `safety.maxRps` is one GCRA per World shared by every engine lease, plus an optional
+  lower per-lease cap (`tests/unit/safety/world-rate-cap.test.ts`).
 - Generator self-check: every perf result says whether the load generator itself was saturated
   (CPU, event-loop lag, scheduling lag) so a slow tool is not reported as a slow target
   (`src/engines/performance/**`).
