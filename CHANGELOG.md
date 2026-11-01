@@ -6,7 +6,10 @@ All notable changes to SECOND WORLD are documented here. The format follows
 
 ## [Unreleased]
 
-Work toward the first release, `0.1.0` (package version is `0.1.0-dev`; nothing is published yet).
+## [0.1.0] - 2026-11-01
+
+First release candidate. Not yet published to npm: publishing needs a GitHub repository and an npm token
+(docs/17-versioning-and-releases.md).
 
 ### Added
 

@@ -1,6 +1,6 @@
 {
   "name": "second-world",
-  "version": "0.1.0-dev",
+  "version": "0.1.0",
   "description": "Intelligent software experimentation, testing and optimization engine",
   "type": "module",
   "license": "MIT",

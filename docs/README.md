@@ -1,7 +1,7 @@
 # SECOND WORLD — Documentation
 
 > An intelligent software experimentation, testing and optimization engine.
-> Status: **specification v2 (pre-development)**. Supersedes `SecondWorld_plan.txt` (v1), which is kept unchanged for reference.
+> Status: **0.1.0 release candidate**: every engine described here is implemented and tested (see [16 – System design](16-system-design.md) for known gaps). Supersedes `SecondWorld_plan.txt` (v1), which is kept unchanged for reference.
 
 SECOND WORLD helps developers **inspect, load, break, diagnose and improve** software *before* changes reach production. Every capability is an independent engine. You can run any one of them alone, or chain them into a full investigation that shares one configuration, one safety layer and one evidence model.
 

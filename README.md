@@ -21,7 +21,7 @@ analysis or code, and the same inputs and seed give the same results.
 | Summary | `sw analyze` | Deterministic summary across earlier reports: counts by severity and classification, top findings, invalidating limitations |
 | Experiment History | `sw history` | JSONL run store, baselines, diffs with statistics, trends |
 
-Status: `0.1.0-dev`, not yet published to npm (see [Install](#install)). The full specification is in [`docs/`](docs/README.md).
+Status: `0.1.0` release candidate, not yet published to npm (see [Install](#install)). The full specification is in [`docs/`](docs/README.md).
 
 ## Install
 
@@ -36,16 +36,16 @@ SECOND WORLD is **not on the npm registry yet**. Build the package tarball once 
 ```bash
 git clone <this repo> second-world && cd second-world
 npm ci
-npm pack                         # → second-world-0.1.0-dev.tgz
+npm pack                         # → second-world-0.1.0.tgz
 ```
 
 Then pick one way to install it (paths below are relative to wherever you put the tarball):
 
 | How | Command | Run it as |
 |---|---|---|
-| Project devDependency (recommended) | `npm i -D ./second-world-0.1.0-dev.tgz` | `npx sw doctor` |
-| Global | `npm i -g ./second-world-0.1.0-dev.tgz` | `sw doctor` |
-| One-off, no install | `npx --yes --package ./second-world-0.1.0-dev.tgz sw doctor` | — |
+| Project devDependency (recommended) | `npm i -D ./second-world-0.1.0.tgz` | `npx sw doctor` |
+| Global | `npm i -g ./second-world-0.1.0.tgz` | `sw doctor` |
+| One-off, no install | `npx --yes --package ./second-world-0.1.0.tgz sw doctor` | — |
 | Docker | `docker build -t second-world .` (in the clone) | `docker run --rm second-world doctor` |
 | GitHub Actions | `uses: <owner>/second-world@<ref>` ([below](#github-actions)) | — |
 
@@ -114,7 +114,7 @@ Other inputs: `sarif-category`, `out-dir` (default `.second-world/action-report`
 ```bash
 # bash / zsh
 sw() { npx tsx /path/to/second-world/src/cli/main.ts "$@"; }
-sw --version          # 0.1.0-dev
+sw --version          # 0.1.0
 ```
 
 ```powershell

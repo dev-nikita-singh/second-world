@@ -140,7 +140,7 @@ $ sw perf --duration 10s
 [1s warmup] rps=87.9 p95=0.0ms errors=0 inFlight=3
 [6s measure] rps=93.0 p95=129.5ms errors=0 inFlight=1
 [11s measure] rps=96.0 p95=17.7ms errors=0 inFlight=1
-SECOND WORLD run 01M62MFGASDQ4JGBPSJDWSYR2Z · 12.0s · 0.1.0-dev
+SECOND WORLD run 01M62MFGASDQ4JGBPSJDWSYR2Z · 12.0s · 0.1.0
 ✔ PASS (exit 0, fail-on high) completed: no failing thresholds or findings at or above 'high'
 
 [performance] passed 12.0s

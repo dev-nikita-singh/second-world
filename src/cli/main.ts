@@ -15,7 +15,7 @@ try {
   // best effort
 }
 
-export const VERSION = "0.1.0-dev";
+export const VERSION = "0.1.0";
 
 export interface GlobalOptions {
   config?: string;
