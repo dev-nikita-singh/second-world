@@ -108,3 +108,11 @@
 2026-11-01T07:30Z sw-ux8 -> main: DONE wave 7b ux lane (7 tasks, failing-test-first); report in progress/sw-ux8.md
 2026-11-01T05:40Z sw-infra8 -> main: guard.coverage.test.ts:194 needs update (torn last audit line = warning); audit chain race W10 fixed with lock
 2026-11-01T05:50Z sw-infra8 -> main: final report (4 tasks done)
+2026-11-01T06:30Z sw-cli-w8 -> main: request export { loadInvariant } from src/engines/bugs/index.ts for bugs --dry-run invariant validation
+2026-11-01T06:30Z sw-sec-w8 -> main: guard DNS timeout (dnsTimeoutMs, 10s) + localhost->LAN pin fix + lookup no-throw; tests/unit/security/{dns-timeout,guard-fuzz}.test.ts
+2026-11-01T07:00Z sw-sec-w8 -> main: replay artifacts import invariant modules outside project (fixed artifact.ts); tests/unit/bugs/artifact.test.ts:276 needs cwd: tmp.path
+2026-11-01T06:50Z sw-robust-w8 -> main: sw inspect exit 70 RangeError (TS createProgram import recursion) on 2000+ file deep-import repo; fix noResolve:true (verified via TS API); also sequential hashing engine.ts:207
+2026-11-01T07:30Z sw-sec-w8 -> main: curl redaction fix applied in bugs/http.ts (shared rule with HAR in redact.ts); integration bugs 28/28
+2026-11-01T07:00Z sw-cli-w8 -> main: final report (T1-T4 done; out-of-lane: R5 run-common.ts import, tsc errors in robust/security tests)
+2026-11-01T07:20Z sw-robust-w8 -> main: DONE, final report via handback
+2026-11-01T07:00Z sw-real2-w8 -> main: 4 SW gaps on orders-jobs-api (stress ignores perf model/rate; misleading RATE-CAP at 98 rps; agent lifecycle lacks update→read; bugs model-based misses stale read) + main's 2 inspect bugs fixed
