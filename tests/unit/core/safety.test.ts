@@ -166,7 +166,13 @@ describe("SafetyGuard.checkTarget", () => {
     const asked: string[] = [];
     const g = createSafetyGuard(
       { allowHosts: ["example.com"], allowPublic: true },
-      { interactive: true, confirm: async (m) => (asked.push(m), true) },
+      {
+        interactive: true,
+        confirm: async (m) => {
+          asked.push(m);
+          return true;
+        },
+      },
     );
     await g.preflight("https://example.com");
     expect(asked).toHaveLength(1);

@@ -8,7 +8,7 @@
 import type { AgentData, AgentFindingSummary, HypothesisRecord } from "../agent/engine.js";
 import type { Block, Cell, CellLike } from "./blocks.js";
 import { REPRO_AUTH_HINT, replayText, scrubSecrets } from "./bugs.js";
-import { fmtDuration, fmtPct } from "./model.js";
+import { fmtDuration } from "./model.js";
 
 export function isAgentData(d: unknown): d is AgentData {
   if (typeof d !== "object" || d === null) return false;

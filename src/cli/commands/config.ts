@@ -87,7 +87,7 @@ export async function validateEngineSections(r: ResolvedConfig): Promise<void> {
   const section: Record<string, unknown> = { ...perf };
   if (typeof section.auth === "string") {
     const name = section.auth;
-    if (!(r.config.auth ?? {})[name]) {
+    if (!r.config.auth?.[name]) {
       throw new ConfigError("SW_CONFIG_AUTH", `performance.auth "${name}" is not defined in config.auth`);
     }
     delete section.auth; // secrets are resolved at run time only

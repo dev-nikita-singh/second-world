@@ -1008,7 +1008,7 @@ export async function executeReliability(
         container: spec?.container,
         network: spec?.network,
       });
-      if (!b || !b.ok) {
+      if (!b?.ok) {
         limitations.push({
           code: "requires-adapter",
           message: b && !b.ok ? b.limitation : "scenario unavailable",

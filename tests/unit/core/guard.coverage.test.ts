@@ -328,7 +328,14 @@ describe("target checks", () => {
     const asked: string[] = [];
     const g3 = createSafetyGuard(
       { allowHosts: ["api.example.com"], allowPublic: true },
-      { interactive: true, resolver: r.resolver, confirm: async (m) => (asked.push(m), true) },
+      {
+        interactive: true,
+        resolver: r.resolver,
+        confirm: async (m) => {
+          asked.push(m);
+          return true;
+        },
+      },
     );
     await g3.preflight("https://api.example.com/");
     expect(asked[0]).toMatch(/PUBLIC host api\.example\.com/);
@@ -366,11 +373,29 @@ describe("approvals", () => {
 
   it("interactive prompt: declined throws SW_SAFETY_DECLINED, accepted is cached", async () => {
     let n = 0;
-    const no = createSafetyGuard({}, { interactive: true, confirm: async () => (n++, false) });
+    const no = createSafetyGuard(
+      {},
+      {
+        interactive: true,
+        confirm: async () => {
+          n++;
+          return false;
+        },
+      },
+    );
     await expect(no.requireApproval("fault-injection", "")).rejects.toMatchObject({
       code: "SW_SAFETY_DECLINED",
     });
-    const yes = createSafetyGuard({}, { interactive: true, confirm: async () => (n++, true) });
+    const yes = createSafetyGuard(
+      {},
+      {
+        interactive: true,
+        confirm: async () => {
+          n++;
+          return true;
+        },
+      },
+    );
     await yes.requireApproval("fault-injection", "d");
     await yes.requireApproval("fault-injection", "d");
     expect(n).toBe(2);

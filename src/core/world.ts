@@ -444,7 +444,7 @@ export function authHeadersFor(
   role: string,
   env?: NodeJS.ProcessEnv,
 ): Record<string, string> | undefined {
-  const ref = (cfg.config.auth ?? {})[role];
+  const ref = cfg.config.auth?.[role];
   if (!isObj(ref) || typeof ref.type !== "string" || !BUGS_AUTH_TYPES.has(ref.type)) return undefined;
   let c: Obj;
   try {

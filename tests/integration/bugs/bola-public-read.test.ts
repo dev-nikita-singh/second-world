@@ -40,7 +40,10 @@ const CONTRACT = {
                 schema: {
                   type: "object",
                   properties: {
-                    note: { type: "object", properties: { slug: { type: "string" }, text: { type: "string" } } },
+                    note: {
+                      type: "object",
+                      properties: { slug: { type: "string" }, text: { type: "string" } },
+                    },
                   },
                 },
               },

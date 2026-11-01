@@ -1,5 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { EngineResult } from "../../../src/core/evidence/schemas.js";
+import { describe, expect, it } from "vitest";
 import { isEvolutionData, isExperimentData } from "../../../src/engines/reporting/experiments.js";
 import { renderReport } from "../../../src/engines/reporting/index.js";
 import {
@@ -7,10 +6,8 @@ import {
   makeEvolutionData,
   makeExperimentData,
   makeFinding,
-  makePerfData,
   makeResult,
 } from "../../fixtures/reports.js";
-import { makeTmpDir, type TmpDir } from "../../helpers/tmp.js";
 
 // ---------------------------------------------------------------- hypotheses in SARIF
 

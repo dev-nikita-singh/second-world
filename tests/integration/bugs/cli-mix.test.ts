@@ -22,9 +22,9 @@ function stockServer(racy: boolean): Promise<{ server: Server; url: string }> {
       res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify(body));
     };
-    let raw = "";
+    let _raw = "";
     req.on("data", (c: Buffer) => {
-      raw += c.toString("utf8");
+      _raw += c.toString("utf8");
     });
     req.on("end", () => {
       if (req.method === "POST" && req.url === "/__reset") {

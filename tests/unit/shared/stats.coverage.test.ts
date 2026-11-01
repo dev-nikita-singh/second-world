@@ -75,8 +75,14 @@ describe("Welford", () => {
         const all = new Welford();
         const wa = new Welford();
         const wb = new Welford();
-        for (const x of a) all.push(x), wa.push(x);
-        for (const x of b) all.push(x), wb.push(x);
+        for (const x of a) {
+          all.push(x);
+          wa.push(x);
+        }
+        for (const x of b) {
+          all.push(x);
+          wb.push(x);
+        }
         wa.merge(wb);
         const xs = [...a, ...b];
         expect(wa.count).toBe(xs.length);
@@ -160,8 +166,14 @@ describe("LatencyHistogram", () => {
           const ha = new LatencyHistogram();
           const hb = new LatencyHistogram();
           const hall = new LatencyHistogram();
-          for (const x of a) ha.record(x), hall.record(x);
-          for (const x of b) hb.record(x), hall.record(x);
+          for (const x of a) {
+            ha.record(x);
+            hall.record(x);
+          }
+          for (const x of b) {
+            hb.record(x);
+            hall.record(x);
+          }
           ha.add(hb);
           // Bucket-wise merges keep counts and percentiles exact; max/mean may move to the
           // bucket's highest-equivalent value (HdrHistogram add semantics), i.e. within 0.1 %.

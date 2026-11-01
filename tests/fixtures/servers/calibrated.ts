@@ -287,7 +287,10 @@ export async function startCalibratedServer(opts: CalibratedServerOptions = {}):
         const ms = num(q.get("ms"), 10);
         const maxQueue = num(q.get("maxQueue"), Number.POSITIVE_INFINITY);
         let pool = pools.get(n);
-        if (!pool) pools.set(n, (pool = { busy: 0, queue: [] }));
+        if (!pool) {
+          pool = { busy: 0, queue: [] };
+          pools.set(n, pool);
+        }
         const t0 = performance.now();
         if (pool.busy >= n) {
           if (pool.queue.length >= maxQueue)
