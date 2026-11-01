@@ -27,6 +27,8 @@ SECOND WORLD helps developers **inspect, load, break, diagnose and improve** sof
 | See what changed from the original plan and why | [14 – Plan review & changes](14-plan-review-and-changes.md) |
 | Look up a term | [15 – Glossary](15-glossary.md) |
 | See the system design as built (layers, errors, timeouts, limits, schemas) | [16 – System design](16-system-design.md) |
+| Know what is stable between versions, and how releases are made | [17 – Versioning & releases](17-versioning-and-releases.md) |
+| Fix an error or a confusing result | [Troubleshooting](troubleshooting.md) |
 
 ## Folder map
 
