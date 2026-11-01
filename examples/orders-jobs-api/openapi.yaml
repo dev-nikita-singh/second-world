@@ -1,0 +1,331 @@
+openapi: 3.1.0
+info:
+  title: orders-jobs-api (intended contract)
+  version: 1.0.0
+  description: >
+    The CORRECT behaviour of orders-jobs-api: orders whose payment runs in a background job queue,
+    a payment provider that confirms captures with webhooks, and a read cache for orders. The
+    implementation in src/ deviates from this contract in seeded, documented ways (see
+    expected-findings.json); this file is what SECOND WORLD's API Bug Hunter checks against.
+    Authentication: `Authorization: Bearer <token>`. Errors: `{ "error": { "code", "message" } }`.
+    Another user's order or job is reported as 404, like a missing one.
+servers:
+  - url: http://127.0.0.1:3200
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  parameters:
+    OrderId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    JobId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+  responses:
+    BadRequest:
+      description: Malformed request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such resource (or not yours)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Invalid:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+    Order:
+      type: object
+      required: [id, sku, quantity, total, note, shippingAddress, paymentJobId, createdAt]
+      properties:
+        id: { type: integer, minimum: 1 }
+        sku: { type: string, enum: [TEA-001, MUG-002, BAG-003] }
+        quantity: { type: integer, minimum: 1, maximum: 10 }
+        total: { type: integer, minimum: 0, description: Price x quantity, in cents }
+        note: { type: string, maxLength: 200 }
+        shippingAddress: { type: string, minLength: 1, maxLength: 200 }
+        paymentJobId: { type: [integer, "null"] }
+        createdAt: { type: string, format: date-time }
+    NewOrder:
+      type: object
+      required: [sku, quantity, shippingAddress]
+      properties:
+        sku: { type: string, enum: [TEA-001, MUG-002, BAG-003] }
+        quantity: { type: integer, minimum: 1, maximum: 10 }
+        shippingAddress: { type: string, minLength: 1, maxLength: 200 }
+        note: { type: string, maxLength: 200 }
+    OrderUpdate:
+      type: object
+      description: The editable fields of an order (both are replaced).
+      required: [shippingAddress, note]
+      properties:
+        shippingAddress: { type: string, minLength: 1, maxLength: 200 }
+        note: { type: string, maxLength: 200 }
+    OrderPage:
+      type: object
+      required: [orders, total]
+      properties:
+        orders:
+          type: array
+          items: { $ref: "#/components/schemas/Order" }
+        total: { type: integer, minimum: 0 }
+    Job:
+      type: object
+      required: [id, orderId, status, attempts, lastError, createdAt, finishedAt]
+      properties:
+        id: { type: integer, minimum: 1 }
+        orderId: { type: integer, minimum: 1 }
+        status: { type: string, enum: [queued, running, succeeded, failed] }
+        attempts: { type: integer, minimum: 0 }
+        lastError: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+        finishedAt: { type: [string, "null"], format: date-time }
+    Payment:
+      type: object
+      required: [orderId, status, amountDue, amountPaid, chargeId, job, provider]
+      properties:
+        orderId: { type: integer, minimum: 1 }
+        status: { type: string, enum: [pending, paid, failed] }
+        amountDue: { type: integer, minimum: 0 }
+        amountPaid:
+          type: integer
+          minimum: 0
+          description: Never more than amountDue (a payment is counted once).
+        chargeId: { type: [string, "null"] }
+        job:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [id, status, attempts]
+              properties:
+                id: { type: integer }
+                status: { type: string, enum: [queued, running, succeeded, failed] }
+                attempts: { type: integer, minimum: 0 }
+        provider:
+          description: The charge's state at the provider (only with refresh=true and a charge).
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [status]
+              properties:
+                status: { type: string }
+    PaymentEvent:
+      type: object
+      required: [type, data]
+      properties:
+        type: { type: string, enum: [charge.succeeded, charge.failed] }
+        data:
+          type: object
+          required: [orderId, chargeId, amount]
+          properties:
+            orderId: { type: integer, minimum: 1, maximum: 1000000000 }
+            chargeId: { type: string, pattern: "^ch_[A-Za-z0-9_]{1,60}$" }
+            amount: { type: integer, minimum: 1, maximum: 100000000 }
+    EventRecord:
+      type: object
+      required: [id, type, orderId, chargeId, amount, receivedAt]
+      properties:
+        id: { type: integer, minimum: 1 }
+        type: { type: string }
+        orderId: { type: integer }
+        chargeId: { type: string }
+        amount: { type: integer }
+        receivedAt: { type: string, format: date-time }
+paths:
+  /healthz:
+    get:
+      operationId: health
+      security: []
+      responses:
+        "200":
+          description: Liveness
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+  /orders:
+    get:
+      operationId: listOrders
+      summary: The caller's orders, newest first
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 }
+      responses:
+        "200":
+          description: A page of orders
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    post:
+      operationId: createOrder
+      summary: Place an order; its payment is queued as a background job (paymentJobId)
+      description: >
+        The payment job is processed asynchronously. When the payment backlog is full the API
+        sheds load with 503 + Retry-After instead of accepting work it cannot process in time.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewOrder" }
+      responses:
+        "201":
+          description: Created; the payment job is queued
+          headers:
+            Location:
+              required: true
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Invalid" }
+        "503":
+          description: Payment backlog full, retry later
+          headers:
+            Retry-After:
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/OrderId"
+    get:
+      operationId: getOrder
+      summary: One of the caller's orders (served from a read cache; always reflects the last update)
+      responses:
+        "200":
+          description: The order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateOrder
+      summary: Replace the note and the shipping address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderUpdate" }
+      responses:
+        "200":
+          description: The updated order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    delete:
+      operationId: deleteOrder
+      summary: Delete (cancel) one of the caller's orders
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /orders/{id}/payment:
+    parameters:
+      - $ref: "#/components/parameters/OrderId"
+    get:
+      operationId: getPayment
+      summary: Payment state of an order; refresh=true also asks the provider (bounded by a timeout)
+      parameters:
+        - name: refresh
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Payment summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+  /jobs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    get:
+      operationId: getJob
+      summary: A payment job; wait=<ms> long-polls until it has finished (at most 5 s)
+      parameters:
+        - name: wait
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 5000, default: 0 }
+      responses:
+        "200":
+          description: The job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+  /webhooks/payments:
+    post:
+      operationId: paymentWebhook
+      summary: Payment event from the provider (at-least-once delivery)
+      description: >
+        Idempotent per Idempotency-Key: a redelivery with the same key returns the stored event
+        record and has no further effect. The event must name one of our orders and its exact total.
+      security: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: The provider's event id; redeliveries carry the same key.
+          schema: { type: string, pattern: "^[A-Za-z0-9_.:-]{1,100}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentEvent" }
+      responses:
+        "200":
+          description: Event recorded (or the stored record of an earlier delivery)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventRecord" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }

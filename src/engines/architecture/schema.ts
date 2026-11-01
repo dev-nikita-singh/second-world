@@ -14,7 +14,7 @@ export const RuleConfigEntrySchema = z.union([
 ]);
 export type RuleConfigEntry = z.infer<typeof RuleConfigEntrySchema>;
 
-export const FRAMEWORK_IDS = ["express", "fastify", "nest", "hono", "koa", "next"] as const;
+export const FRAMEWORK_IDS = ["express", "fastify", "nest", "hono", "koa", "next", "node-http"] as const;
 export type FrameworkId = (typeof FRAMEWORK_IDS)[number];
 
 export const ArchitectureInputSchema = z.object({

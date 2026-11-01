@@ -26,7 +26,11 @@ export interface AnalyzeRequest {
 export interface AnalyzeResult {
   facts: FileFacts[];
   /** Adapter/tool version info, part of the cache key. */
-  limitations: { code: string; message: string }[];
+  limitations: {
+    code: string;
+    message: string;
+    impact?: "informational" | "reduces-confidence" | "invalidates";
+  }[];
 }
 
 export interface SourceAnalyzer {

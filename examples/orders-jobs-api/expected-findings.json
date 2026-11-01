@@ -1,0 +1,180 @@
+{
+  "$comment": "Ground truth for SECOND WORLD recall/precision on orders-jobs-api (docs/12-testing-and-quality.md §3). Same format as examples/conduit-api/expected-findings.json: location.line = the line after the SEEDED-DEFECT marker (refresh with `node examples/_tools/sync-expected-findings.mjs examples/orders-jobs-api`); detectedBy = the CLI commands that find the defect with exactly this folder's sw.config.ts (finding ruleId + operation, title fragment or location); several entries for one command are alternative rules for the same defect. `observations` = documented findings that are not defects. Checked by tests/system/orders-jobs.test.ts.",
+  "schemaVersion": 1,
+  "app": "orders-jobs-api",
+  "framework": "node:http + node:sqlite + background job queue",
+  "defects": [
+    {
+      "id": "retry-storm-no-jitter",
+      "engine": "reliability",
+      "alsoDetectableBy": ["architecture"],
+      "category": "reliability",
+      "ruleId": "reliability/retry-storm",
+      "severity": "high",
+      "title": "Payment worker retries with a fixed 100 ms delay: no exponential backoff, no jitter, no circuit breaker",
+      "endpoint": "POST /orders (payment job)",
+      "reproduction": "Make the provider answer 503: each payment job sends 8 charge attempts 100 ms apart, 4 workers in lock-step (≈5x the steady-state calls per request)",
+      "fix": "Exponential backoff with full jitter (delay = random(0, min(cap, base * 2^attempt))), a retry budget and a circuit breaker per provider",
+      "location": {
+        "file": "src/provider-client.ts",
+        "line": 82,
+        "symbol": "ProviderClient.createCharge"
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw reliability run dependency-5xx",
+          "ruleId": "reliability/retry-storm"
+        },
+        {
+          "command": "sw reliability run dependency-5xx",
+          "ruleId": "reliability/retry-without-jitter"
+        },
+        {
+          "command": "sw reliability run dependency-5xx",
+          "ruleId": "reliability/retry-without-backoff"
+        },
+        {
+          "command": "sw reliability run dependency-5xx",
+          "ruleId": "reliability/no-circuit-breaker"
+        },
+        {
+          "command": "sw inspect",
+          "ruleId": "ARCH002",
+          "location": true
+        }
+      ]
+    },
+    {
+      "id": "refresh-no-timeout",
+      "engine": "reliability",
+      "alsoDetectableBy": ["architecture"],
+      "category": "reliability",
+      "ruleId": "reliability/outbound-no-timeout",
+      "severity": "high",
+      "title": "GET /orders/{id}/payment?refresh=true calls the provider without a timeout",
+      "endpoint": "GET /orders/{id}/payment",
+      "reproduction": "Black-hole the provider: GET /orders/1/payment?refresh=true hangs until the provider answers again",
+      "fix": "fetch(url, { signal: AbortSignal.timeout(2000) }) and answer from local state (provider: unavailable) on timeout",
+      "location": {
+        "file": "src/provider-client.ts",
+        "line": 91,
+        "symbol": "ProviderClient.getCharge",
+        "handler": "GET /orders/:id/payment"
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw reliability run dependency-timeout",
+          "ruleId": "reliability/outbound-no-timeout"
+        },
+        {
+          "command": "sw inspect",
+          "ruleId": "ARCH001",
+          "location": true
+        }
+      ]
+    },
+    {
+      "id": "webhook-replay-not-idempotent",
+      "engine": "bugs",
+      "alsoDetectableBy": ["agent"],
+      "category": "bug",
+      "ruleId": "bugs/idempotency-key-ignored",
+      "severity": "high",
+      "title": "Payment webhook is not idempotent: a redelivered event (same Idempotency-Key) is recorded and counted again",
+      "endpoint": "POST /webhooks/payments",
+      "reproduction": "POST the same charge.succeeded event twice with Idempotency-Key evt_x: two event records (different ids), order 1 amountPaid 2500 → 7500",
+      "fix": "Look the key up first (or INSERT … ON CONFLICT(idempotency_key) DO NOTHING) and return the stored record; apply the payment only on the pending → paid transition",
+      "location": {
+        "file": "src/routes/webhooks.ts",
+        "line": 59,
+        "symbol": "webhookRoutes.paymentEvent",
+        "handler": "POST /webhooks/payments"
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/idempotency-key-ignored",
+          "operation": "POST /webhooks/payments"
+        },
+        {
+          "command": "sw agent",
+          "ruleId": "bugs/idempotency-key-ignored",
+          "operation": "POST /webhooks/payments"
+        },
+        {
+          "command": "sw agent",
+          "ruleId": "agent/idempotency-key-race",
+          "operation": "POST /webhooks/payments"
+        }
+      ]
+    },
+    {
+      "id": "unbounded-queue",
+      "engine": "stress",
+      "alsoDetectableBy": [],
+      "category": "capacity",
+      "ruleId": "STRESS-FIRST-BREACH",
+      "severity": "high",
+      "title": "Unbounded payment job queue: under load the API keeps accepting orders while every job waits longer",
+      "endpoint": "POST /orders",
+      "reproduction": "48 checkouts+browses/s (≈24 orders/s) against ≈13 jobs/s of worker capacity: job wait p95 grows past 3 s within 6 s and keeps growing; no 503 is ever returned",
+      "fix": "Bound the queue (e.g. 50 jobs): answer 503 + Retry-After when it is full (load shedding), as the contract says",
+      "location": {
+        "file": "src/queue.ts",
+        "line": 46,
+        "symbol": "JobQueue.enqueue"
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw stress",
+          "ruleId": "STRESS-FIRST-BREACH",
+          "titleIncludes": "GET /jobs"
+        },
+        {
+          "command": "sw stress",
+          "ruleId": "STRESS-KNEE"
+        }
+      ],
+      "description": "Needs the job-wait SLO in performance.thresholds (endpoint.GET /jobs/{{job}}.p95 < 2000ms, measured by the checkout scenario's long-poll): latency of the HTTP API alone does not show a growing backlog."
+    },
+    {
+      "id": "stale-cache-after-update",
+      "engine": "bugs",
+      "alsoDetectableBy": [],
+      "category": "bug",
+      "ruleId": "bugs/race-lost-update",
+      "severity": "medium",
+      "title": "Stale read after update: PUT /orders/{id} does not invalidate the order read cache",
+      "endpoint": "GET /orders/{id}",
+      "reproduction": "GET /orders/1 (cached), PUT /orders/1 { note: 'new' } → 200, GET /orders/1 → old note (for up to 30 s)",
+      "fix": "cache.delete(`${user.id}:${id}`) after the UPDATE (as DELETE does), or write the new view through",
+      "location": {
+        "file": "src/routes/orders.ts",
+        "line": 152,
+        "symbol": "orderRoutes.updateOrder",
+        "handler": "PUT /orders/:id"
+      },
+      "detectableFromConfig": true,
+      "detectedBy": [
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/race-lost-update",
+          "operation": "PUT /orders/{id}",
+          "titleIncludes": "order note"
+        }
+      ],
+      "description": "Found by the register-model concurrency test in bugs.concurrency (read → updates → read). The model-based stateful technique (create/read/update/delete) did not find it in its default 4 runs (nor with 25), and sw agent's lifecycle probe only checks create → read-back (no update → read): reported to main as SECOND WORLD gaps."
+    }
+  ],
+  "observations": [
+    {
+      "command": "sw reliability run",
+      "ruleId": "reliability/experiment",
+      "reason": "Per-run experiment summary (info). Not a defect."
+    }
+  ]
+}

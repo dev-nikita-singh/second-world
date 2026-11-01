@@ -108,9 +108,12 @@ const BASE_LIMITATIONS: Limitation[] = [
 
 /** Frameworks / libraries the TypeScript extractors recognise (keep in sync with analyzer/ts/extractors). */
 export const SUPPORTED_ROUTE_FRAMEWORKS =
-  "Express, Fastify, Hono, Koa (@koa/router), NestJS decorators, Next.js route handlers";
+  "Express, Fastify, Hono, Koa (@koa/router), NestJS decorators, Next.js route handlers, and hand-written node:http dispatch (project router objects, route tables, if/switch on method and path)";
 export const SUPPORTED_DB_LIBRARIES =
   "pg, mysql2, Prisma, TypeORM, Drizzle, Mongoose, Knex, node:sqlite, better-sqlite3, and project classes named *Db/*Repository/*Dao/*Store";
+
+/** Files read and hashed concurrently. */
+const HASH_CONCURRENCY = 16;
 
 const NODE_HTTP = new Set(["http", "node:http", "https", "node:https", "http2", "node:http2"]);
 
@@ -128,7 +131,7 @@ export function coverageLimitations(facts: readonly FileFacts[]): Limitation[] {
       message:
         `No HTTP routes recognised in ${facts.length} source file(s)` +
         (nodeHttp
-          ? " (the project uses node:http directly; hand-written request dispatch is not recognised)"
+          ? " (the project uses node:http directly; its request dispatch did not match a recognised hand-written pattern)"
           : "") +
         `. Supported: ${SUPPORTED_ROUTE_FRAMEWORKS}. Route-level checks (ARCH007 route without auth, ARCH008 handler fan-out, route reachability) did not run, and findings are located by function rather than by route`,
       impact: "reduces-confidence",
@@ -203,14 +206,24 @@ export async function runArchitecture(
   if (ctx.signal.aborted) return cancelled();
 
   // hash
+  // Bounded parallel reads (HASH_CONCURRENCY at a time): sequential awaits left the disk idle.
   const hashes = new Map<string, string>();
-  for (const f of disc.files) {
-    try {
-      hashes.set(f, sha256(await readFile(path.join(root, f))));
-    } catch {
-      // vanished between discovery and read
+  const hashed = new Array<string | undefined>(disc.files.length);
+  let next = 0;
+  const hashWorker = async () => {
+    for (let i = next++; i < disc.files.length; i = next++) {
+      try {
+        hashed[i] = sha256(await readFile(path.join(root, disc.files[i] as string)));
+      } catch {
+        // vanished between discovery and read
+      }
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(HASH_CONCURRENCY, disc.files.length) }, hashWorker));
+  disc.files.forEach((f, i) => {
+    const h = hashed[i];
+    if (h !== undefined) hashes.set(f, h);
+  });
   const files = disc.files.filter((f) => hashes.has(f));
   const projectSet = new Set(files);
 

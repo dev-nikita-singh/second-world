@@ -28,6 +28,8 @@ export interface EdgeData {
 const MAX_EVIDENCE_PER_EDGE = 10;
 const REPO_CLASS = /(^Db$|^DB$|Database$|Db$|DB$|Repo$|Repository$|Dao$|DAO$|Store$|DataSource$)/;
 const AUTH_RE = new RegExp(AUTH_RE_SOURCE, "i");
+const OPTIONAL_AUTH_RE = /(optional|maybe)_?(user|auth|login|session|viewer|account)/i;
+const ISSUES_CREDENTIALS_RE = /^(new|create|start|open|issue|make|generate|sign)/i;
 
 export const moduleId = (file: string) => `module:${file}`;
 export const unitNodeId = (unitId: string) => `fn:${unitId}`;
@@ -374,10 +376,18 @@ export function buildGraph(facts: readonly FileFacts[]): BuildResult {
             chain.push({ o: p.parent, sub: pathAtParent });
           }
         }
-        // handler-level auth: the handler directly calls an auth-named function
+        // handler-level auth: the handler directly calls an auth-named function; a call to an
+        // optional-auth helper (`optionalUser`, `maybeAuth`) marks the route intentionally public.
+        let isPublic = !!r.public;
         if (!auth && r.handler) {
-          const hu = units.get(r.handler);
-          if (hu?.calls.some((c) => AUTH_RE.test(c.target.slice(c.target.indexOf("#") + 1)))) auth = true;
+          // last name segment (`UserRepository.newSession` → `newSession`); helpers that create a
+          // session/token (login, register) are not guards.
+          const called = (units.get(r.handler)?.calls ?? []).map((c) =>
+            c.target.slice(c.target.indexOf("#") + 1),
+          );
+          const last = (n: string) => n.slice(n.lastIndexOf(".") + 1);
+          if (called.some((n) => OPTIONAL_AUTH_RE.test(last(n)))) isPublic = true;
+          else if (called.some((n) => AUTH_RE.test(n) && !ISSUES_CREDENTIALS_RE.test(last(n)))) auth = true;
         }
         const id = routeNodeId(r.method, full);
         const rr: ResolvedRoute = {
@@ -390,7 +400,7 @@ export function buildGraph(facts: readonly FileFacts[]): BuildResult {
           file: f.file,
           line: r.line,
           fact: r,
-          public: !!r.public,
+          public: isPublic,
         };
         if (r.handler) rr.handler = r.handler;
         routes.push(rr);

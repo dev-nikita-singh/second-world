@@ -4,11 +4,7 @@
 - (start) read plans, conduit conventions, engine rule ids.
 
 ## In progress
-- Unit 1: inspect node:http route detection (src/engines/architecture/analyzer/ts/extractors/node-http.ts).
-
-## Next
-- Unit 2: examples/orders-jobs-api (app + in-example provider fake + openapi + sw.config.ts + expected-findings).
-- Unit 3: tests/system/orders-jobs.test.ts (+ helpers), packed journey opt-in.
+- none (DONE, see Final).
 
 ## Decisions
 - Defects (planned): retry fixed delay no jitter (worker), no timeout on sync charge refresh, webhook replay
@@ -30,3 +26,11 @@
   (pack, SW_SYSTEM_PACK=1), 66 s. Recall/precision 1.0 for inspect 2/2, bugs 2/2, agent 1/1, perf 0/0, stress 1/1,
   reliability 5xx 1/1, timeout 1/1.
 - Next: README, run requested suites, SW_SYSTEM_PACK=1 run, report gaps to main.
+
+## Final (07:10)
+- README written. SW_SYSTEM_PACK=1 orders-jobs journey: 1 passed, 72 s (doctor/validate 0, inspect 1, bugs 1, stress 1,
+  reliability timeout 1, agent 1, perf 0, model 0, analyze 0, history list/verify 0, cleanup 0).
+- tests/integration/examples 96 passed; tests/system conduit + shop-*-cli 18 passed/2 skipped (conduit inspect 1/1, bugs 4/4,
+  agent 1/1); tests/unit/architecture 69 passed; tsc 0 errors; biome --error-on-warnings clean on my paths.
+- Gaps sent to main (messages.log 07:00Z).
+- Note: sync-expected-findings.mjs (non --check) rewrites JSON in JSON.stringify layout; run `npx biome check --write` after.

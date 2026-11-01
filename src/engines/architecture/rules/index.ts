@@ -266,7 +266,9 @@ export const ARCH007: ArchRule = {
     const ratio = typeof ctx.options.ratio === "number" ? ctx.options.ratio : 0.5;
     const groups = new Map<string, ResolvedRoute[]>();
     for (const r of ctx.routes) {
-      const seg = r.path.split("/").filter(Boolean)[0] ?? "";
+      // Group by the first resource segment: a shared `/api` or `/v1` prefix is not a resource.
+      const segs = r.path.split("/").filter(Boolean);
+      const seg = segs.find((x) => !/^(api|rest|v\d+)$/i.test(x)) ?? segs[0] ?? "";
       const key = `${r.framework}|${seg}`;
       let l = groups.get(key);
       if (!l) {
@@ -312,7 +314,19 @@ export const ARCH008: ArchRule = {
     const max = typeof ctx.options.max === "number" ? ctx.options.max : 4;
     const out: RuleReport[] = [];
     for (const r of ctx.routes) {
-      const deps = ctx.graph.dependenciesOf(r.id, { kinds: ["datastore", "external", "cache", "queue"] });
+      const all = ctx.graph.dependenciesOf(r.id, { kinds: ["datastore", "external", "cache", "queue"] });
+      // Heuristic datastores (project classes named *Repository/*Db) wrap a real store: they count
+      // as one system together, and not at all when a driver-identified datastore is reached.
+      const isHeurStore = (id: string) => {
+        const n = ctx.graph.node(id);
+        return n?.kind === "datastore" && n.heuristic === true;
+      };
+      const concrete = all.filter((d) => !isHeurStore(d));
+      const heur = all.filter(isHeurStore);
+      const deps =
+        heur.length > 0 && !concrete.some((d) => d.startsWith("datastore:"))
+          ? [...concrete, heur[0] as string]
+          : concrete;
       if (deps.length < max) continue;
       out.push({
         ruleId: "ARCH008",

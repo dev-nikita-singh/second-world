@@ -10,9 +10,10 @@ const NODE_HTTP_SERVER = `
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { listArticles } from "./articles.js";
 type Handler = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
-const routes: Record<string, Handler> = {
-  "GET /api/articles": async (_req, res) => { res.end(JSON.stringify(await listArticles())); },
-};
+// Keys built at run time: not one of the hand-written dispatch patterns inspect recognises.
+const routes: Record<string, Handler> = {};
+function on(key: string, h: Handler) { routes[key] = h; }
+on(["GET", "/api/articles"].join(" "), async (_req, res) => { res.end(JSON.stringify(await listArticles())); });
 export const server = createServer((req, res) => {
   const h = routes[\`\${req.method} \${req.url}\`];
   if (h) void h(req, res); else { res.statusCode = 404; res.end(); }

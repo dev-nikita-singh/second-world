@@ -16,6 +16,7 @@ import { TsFileContext, type TsModule } from "./context.js";
 import { detectorsExtractor, growthBoundExtractor } from "./detectors.js";
 import { cacheQueueExtractor, dbClientExtractor, httpClientExtractor } from "./extractors/clients.js";
 import { callsExtractor, importsExtractor } from "./extractors/core.js";
+import { nodeHttpExtractor } from "./extractors/node-http.js";
 import { callRoutesExtractor, nestExtractor, nextExtractor } from "./extractors/routes.js";
 import { buildDispatch, type TsExtractor, walkFile } from "./walker.js";
 
@@ -28,6 +29,7 @@ export const BUILTIN_TS_EXTRACTORS: readonly TsExtractor[] = [
   callRoutesExtractor,
   nestExtractor,
   nextExtractor,
+  nodeHttpExtractor,
   httpClientExtractor,
   dbClientExtractor,
   cacheQueueExtractor,
@@ -93,8 +95,24 @@ export function createTsAnalyzer(opts: TsAnalyzerOptions = {}): SourceAnalyzer {
       const options = compilerOptions(t, req, limitations);
       const host = t.createCompilerHost(options, true);
       const rootNames = req.files.map((f) => path.join(req.root, f));
-      const program = t.createProgram({ rootNames, options, host });
-      const checker = program.getTypeChecker();
+      // TypeScript resolves imports recursively (findSourceFile → processImportedModules): a large,
+      // densely cross-importing project can overflow the stack. Retry without import resolution
+      // (root files only, library types skipped) instead of crashing.
+      let program: ts.Program;
+      let checker: ts.TypeChecker;
+      try {
+        program = t.createProgram({ rootNames, options, host });
+        checker = program.getTypeChecker();
+      } catch (e) {
+        if (!(e instanceof RangeError)) throw e;
+        program = t.createProgram({ rootNames, options: { ...options, noResolve: true }, host });
+        checker = program.getTypeChecker();
+        limitations.push({
+          code: "ARCH_NO_RESOLVE",
+          message: `The TypeScript program overflowed the call stack while resolving the imports of ${req.files.length} file(s) (${e.message}); it was rebuilt without module resolution: project files still resolve each other, but types from node_modules and lib were skipped, so calls through library types are not followed`,
+          impact: "reduces-confidence",
+        });
+      }
       const cache = t.createModuleResolutionCache(
         host.getCurrentDirectory(),
         (s) => host.getCanonicalFileName(s),
