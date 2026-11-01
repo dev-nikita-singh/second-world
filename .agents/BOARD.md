@@ -213,9 +213,10 @@ main (7b): cfb1f94 shared atomic writer (model/arch cache concurrent saves) · 3
 ## Wave 8 (2026-11-01, branch `wave-8`; master = wave-7 merged at 4dc0585, full suite 1885 passed / 3 skipped). Plan + DoD: .agents/PLAN-wave8.md
 | Agent | Status | Owns | Task |
 |---|---|---|---|
-| sw-cli-w8 | RUNNING | src/cli/** (not run-common.ts), docs/09-cli-and-api.md, tests/unit/cli/** + tests/e2e/** (new files) | CLI completeness (plan §sw-cli-w8) |
-| sw-robust-w8 | RUNNING | src/core/** (not safety/**, not log/**), src/cli/run-common.ts, src/engines/history/**, tests/unit/robust/**, tests/integration/robust/** | Tool robustness + soak (plan §sw-robust-w8) |
-| sw-sec-w8 | RUNNING | src/core/safety/**, src/core/log/**, src/engines/agent/export.ts, src/engines/bugs/{har,artifact}.ts, docs/11, SECURITY.md, .github/workflows/release.yml, tests/unit/security/** | Security review + fuzz (plan §sw-sec-w8) |
-| sw-real2-w8 | RUNNING | examples/orders-jobs-api/**, src/engines/architecture/**, tests/system/orders-jobs*.test.ts (+ tests/system/orders-jobs/**), tests/unit/architecture/** (new files) | Second realistic app + node:http routes in inspect |
+| sw-cli-w8 | DONE (de5a7cd) | src/cli/** (not run-common.ts), docs/09-cli-and-api.md, tests/unit/cli/** + tests/e2e/** (new files) | CLI completeness (plan §sw-cli-w8) |
+| sw-robust-w8 | DONE (4c636e0) | src/core/** (not safety/**, not log/**), src/cli/run-common.ts, src/engines/history/**, tests/unit/robust/**, tests/integration/robust/** | Tool robustness + soak (plan §sw-robust-w8) |
+| sw-sec-w8 | DONE (2656ed8) | src/core/safety/**, src/core/log/**, src/engines/agent/export.ts, src/engines/bugs/{har,artifact}.ts, docs/11, SECURITY.md, .github/workflows/release.yml, tests/unit/security/** | Security review + fuzz (plan §sw-sec-w8) |
+| sw-real2-w8 | DONE (044601f) | examples/orders-jobs-api/**, src/engines/architecture/**, tests/system/orders-jobs*.test.ts (+ tests/system/orders-jobs/**), tests/unit/architecture/** (new files) | Second realistic app + node:http routes in inspect |
 Unowned files (src/index.ts, package.json, other engines, docs/16): message main.
-| sw-gaps-w8 | RUNNING | src/core/world.ts (stress input mapping only), src/engines/stress/**, src/engines/agent/planner/**, src/engines/bugs/{property,generate,cases}.ts (stateful only), tests/unit/{stress,agent,bugs}/** + tests/integration/{stress,agent,bugs}/** (new files) | 4 engine gaps found by sw-real2-w8 on orders-jobs-api |
+| sw-gaps-w8 | DONE (3935628) | src/core/world.ts (stress input mapping only), src/engines/stress/**, src/engines/agent/planner/**, src/engines/bugs/{property,generate,cases}.ts (stateful only), tests/unit/{stress,agent,bugs}/** + tests/integration/{stress,agent,bugs}/** (new files) | 4 engine gaps found by sw-real2-w8 on orders-jobs-api |
+FINAL wave 8 (main): version 0.1.0 (6f3f8af); full suite twice in a row: 253 files, 2021 passed / 5 skipped / 0 failed (both runs); lint 0/0 --error-on-warnings; tsc clean. Merged to master.
