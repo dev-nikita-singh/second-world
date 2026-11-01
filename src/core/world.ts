@@ -817,6 +817,10 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
   };
 
   type Reporting = typeof import("../engines/reporting/index.js");
+  // Loaded eagerly on purpose (wave 8, measured on the built CLI, Windows/Node 24): importing the
+  // reporting chunk costs ~45–120 ms and ~1 MB RSS; stubbing it out made `sw history list` 401 → 380 ms
+  // median (ranges overlapping). Every engine command loads it anyway (finishRun), and laziness would
+  // turn the synchronous world.report.combine/render/exitCode (docs/09 §2) into async API. Not worth it.
   const reporting: Reporting = await import("../engines/reporting/index.js");
   const failOnDefault = cfg.config.report.failOn;
   const asFailOn = (f?: string) => (f ?? failOnDefault) as Parameters<Reporting["computeExitCode"]>[1];

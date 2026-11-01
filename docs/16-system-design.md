@@ -50,8 +50,10 @@ statically and measures it (§14).
   not accidents, but they mean engines cannot be split into packages by "moving folders" (docs/02 §1)
   without first extracting shared modules. A new pair fails CI; removing one fails the stale check,
   so the list only shrinks.
-- `createWorld()` loads the reporting engine eagerly (`src/core/world.ts`, `await import("../engines/reporting/index.js")`),
-  so every World pays for reporting even if it never writes a report.
+- `createWorld()` loads the reporting engine eagerly (`src/core/world.ts`). Kept on purpose after
+  measuring (wave 8): ~45–120 ms and ~1 MB RSS; `sw history list` 401 → 380 ms median with it stubbed
+  out (overlapping ranges). Every engine command needs it anyway, and lazy loading would make the
+  synchronous `world.report.*` API async.
 - (Fixed in wave 7: docs/02 §3 no longer lists files that do not exist; `tests/unit/cli/docs-architecture.test.ts`
   checks every path in it.)
 

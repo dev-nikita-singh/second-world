@@ -3,8 +3,9 @@
  * Ctrl+C handling, report rendering/writing, history auto-save and the exit code.
  * See docs/09-cli-and-api.md §1 and docs/02-architecture.md §4.4.
  */
-import { accessSync, constants, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { accessSync, constants, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import { hostname } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { ConfigError } from "../core/errors.js";
 import type { EngineResult } from "../core/evidence/schemas.js";
 import { createWorld, type World } from "../core/world.js";
@@ -28,6 +29,9 @@ export async function worldFromGlobals(g: GlobalOptions): Promise<World> {
     logger: makeLogger(g),
   });
 }
+
+/** Lock file that serialises report writes into one `-o` directory (docs/02-architecture.md §4.6). */
+export const REPORT_LOCK = ".sw-report.lock";
 
 /** Report formats written as files (everything except the terminal table). */
 function fileFormatsOf(world: World): string[] {
@@ -57,14 +61,14 @@ export function assertReportDirWritable(world: World): void {
           : `${p} is not writable`;
       if (why)
         throw new ConfigError("SW_CONFIG_OUTDIR", `Cannot write reports to ${outDir}: ${why}`, {
-          hint: "Pass a writable -o/--out-dir (or report.outDir in sw.config)",
+          hint: "Pass a writable -o/--out <dir> (or report.outDir in sw.config)",
         });
       return;
     }
     const up = dirname(p);
     if (up === p)
       throw new ConfigError("SW_CONFIG_OUTDIR", `Cannot write reports to ${outDir}: no such drive or root`, {
-        hint: "Pass a writable -o/--out-dir (or report.outDir in sw.config)",
+        hint: "Pass a writable -o/--out <dir> (or report.outDir in sw.config)",
       });
     p = up;
   }
@@ -94,6 +98,7 @@ export function installSignals(world: World, g: GlobalOptions, o: { reports?: bo
       world.cancel(new Error("interrupted"));
     } else {
       process.stderr.write("\naborted\n");
+      removeOwnTempFiles(world);
       process.exit(130);
     }
   };
@@ -103,6 +108,57 @@ export function installSignals(world: World, g: GlobalOptions, o: { reports?: bo
   return () => {
     for (const sig of sigs) process.off(sig, handler);
   };
+}
+
+/**
+ * Hard abort (second Ctrl+C) exits while writes may be in flight. Removes, synchronously, the temp
+ * files and locks (history `.lock`, report-dir lock) that THIS process created (their names carry our pid): report temps
+ * `.<name>.<pid>.<hex>.tmp` (src/shared/util/atomic-write.ts), history temps `<name>.tmp-<pid>-<hex>`
+ * (src/engines/history/fsutil.ts) and `.lock` when its owner record is ours. Without it 10/10 hard
+ * aborts during writes left files behind (tests/integration/robust/double-sigint.test.ts).
+ * Best effort: never throws.
+ */
+export function removeOwnTempFiles(world: World): void {
+  try {
+    const cwd = world.config.cwd;
+    const cfg = world.config.config as { report?: { outDir?: string }; history?: { dir?: string } };
+    const pid = process.pid;
+    const ours = new RegExp(`(\\.${pid}\\.[0-9a-f]+\\.tmp|\\.${pid}\\.tmp|\\.tmp-${pid}-[0-9a-f]+)$`);
+    const dirs = [join(cwd, ".second-world", "model"), join(cwd, ".second-world", "cache", "arch")];
+    const out = cfg.report?.outDir ? resolve(cwd, cfg.report.outDir) : undefined;
+    if (out) dirs.push(out);
+    const hist = cfg.history?.dir ? resolve(cwd, cfg.history.dir) : undefined;
+    if (hist) dirs.push(hist, join(hist, "runs"));
+    for (const d of dirs) {
+      let names: string[];
+      try {
+        names = readdirSync(d);
+      } catch {
+        continue;
+      }
+      for (const n of names) if (ours.test(n)) tryUnlink(join(d, n));
+    }
+    const locks = [hist ? join(hist, ".lock") : "", out ? join(out, REPORT_LOCK) : ""];
+    for (const lock of locks) {
+      if (!lock) continue;
+      try {
+        const info = JSON.parse(readFileSync(lock, "utf8")) as { pid?: unknown; host?: unknown };
+        if (info.pid === pid && info.host === hostname()) tryUnlink(lock);
+      } catch {
+        // no lock, or not readable: nothing of ours to remove
+      }
+    }
+  } catch {
+    // best effort on the way out
+  }
+}
+
+function tryUnlink(file: string): void {
+  try {
+    unlinkSync(file);
+  } catch {
+    // already gone
+  }
 }
 
 /** Prints live progress lines (perf.tick / stress.stage.*) on stderr. */
@@ -196,7 +252,15 @@ export async function finishRun(
   if (fileFormats.length > 0) {
     const outDir = resolve(world.config.cwd, cfg.report.outDir);
     try {
-      const written = await reporting.writeReports(result, { formats: fileFormats, outDir, failOn, meta });
+      const write = () => reporting.writeReports(result, { formats: fileFormats, outDir, failOn, meta });
+      // One run's reports per directory: parallel runs sharing `-o` take turns writing the whole set
+      // (the last to finish owns every file). tests/unit/robust/shared-outdir.test.ts.
+      const { LockTimeoutError, withLock } = await import("../engines/history/index.js");
+      const written = await withLock(join(outDir, REPORT_LOCK), write).catch((e: unknown) => {
+        if (!(e instanceof LockTimeoutError)) throw e;
+        if (!g.quiet) err(`${s.warn} ${e.message}; writing reports without it`);
+        return write();
+      });
       if (!g.quiet) for (const f of written.files) err(s.dim(`report: ${f.path}`));
     } catch (e) {
       // The run itself is valid: report the write failure, still save history, exit 2.

@@ -13,6 +13,7 @@ import {
   rename,
   stat,
   unlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { hostname } from "node:os";
@@ -94,6 +95,13 @@ export interface LockOptions {
   now?: () => number;
   /** Poll interval (ms). Default 25. */
   pollMs?: number;
+  /** The holder refreshes the lock's mtime this often (ms). Default 1 s. */
+  heartbeatMs?: number;
+  /**
+   * A lock of this host whose mtime is older than this (ms) is stale even when its pid is alive: the
+   * pid may have been reused by an unrelated process (Windows reuses pids quickly). Default 5 s.
+   */
+  heartbeatStaleMs?: number;
 }
 
 export interface LockInfo {
@@ -118,6 +126,20 @@ export function isStale(info: LockInfo | null, now: number, staleMs: number): bo
   if (now - info.at > staleMs) return true;
   if (info.host === hostname() && info.pid !== process.pid && !pidAlive(info.pid)) return true;
   return false;
+}
+
+/**
+ * Heartbeat check (same host only: the holder stamps mtime with its clock, the waiter compares with
+ * its own). A holder dead for longer than `heartbeatStaleMs` whose pid was reused looks alive to
+ * pidAlive(); its stopped heartbeat gives it away (tests/unit/robust/pid-reuse.test.ts).
+ */
+async function heartbeatStopped(file: string, info: LockInfo, heartbeatStaleMs: number): Promise<boolean> {
+  if (info.host !== hostname()) return false;
+  try {
+    return Date.now() - (await stat(file)).mtimeMs > heartbeatStaleMs;
+  } catch {
+    return false; // vanished: the next create attempt sees it
+  }
 }
 
 async function readLock(file: string): Promise<LockInfo | null> {
@@ -202,6 +224,7 @@ async function breakStaleLock(
   seen: LockInfo | null,
   now: () => number,
   staleMs: number,
+  heartbeatStaleMs: number,
 ): Promise<void> {
   const breaker = `${file}.break`;
   let fh: FileHandle;
@@ -223,7 +246,8 @@ async function breakStaleLock(
     await fh.close();
     const cur = await readLock(file);
     const stillStale = cur
-      ? (seen === null || cur.token === seen.token) && isStale(cur, now(), staleMs)
+      ? (seen === null || cur.token === seen.token) &&
+        (isStale(cur, now(), staleMs) || (await heartbeatStopped(file, cur, heartbeatStaleMs)))
       : await unreadableLockIsOld(file, Math.min(staleMs, UNREADABLE_GRACE_MS));
     if (stillStale) await unlink(file).catch(() => {});
   } finally {
@@ -252,6 +276,8 @@ export async function acquireLock(file: string, opts: LockOptions = {}): Promise
   const timeoutMs = opts.timeoutMs ?? 10_000;
   const staleMs = opts.staleMs ?? 60_000;
   const pollMs = opts.pollMs ?? 25;
+  const heartbeatMs = opts.heartbeatMs ?? 1_000;
+  const heartbeatStaleMs = opts.heartbeatStaleMs ?? 5_000;
   await mkdir(path.dirname(file), { recursive: true });
   const token = randomBytes(8).toString("hex");
   const deadline = now() + timeoutMs;
@@ -264,9 +290,15 @@ export async function acquireLock(file: string, opts: LockOptions = {}): Promise
     }
     if (got) {
       let released = false;
+      const beat = setInterval(() => {
+        const t = new Date();
+        utimes(file, t, t).catch(() => {});
+      }, heartbeatMs);
+      beat.unref();
       return async () => {
         if (released) return;
         released = true;
+        clearInterval(beat);
         const cur = await readLock(file);
         if (cur && cur.token !== token) return; // someone broke our (stale) lock; not ours to delete
         await unlink(file).catch(() => {});
@@ -275,10 +307,10 @@ export async function acquireLock(file: string, opts: LockOptions = {}): Promise
     const holder = await readLock(file);
     // An unreadable lock may be mid-creation by its holder: judge it by mtime instead.
     const stale = holder
-      ? isStale(holder, now(), staleMs)
+      ? isStale(holder, now(), staleMs) || (await heartbeatStopped(file, holder, heartbeatStaleMs))
       : await unreadableLockIsStale(file, Math.min(staleMs, UNREADABLE_GRACE_MS));
     if (stale) {
-      await breakStaleLock(file, holder, now, staleMs);
+      await breakStaleLock(file, holder, now, staleMs, heartbeatStaleMs);
       continue;
     }
     if (now() >= deadline) throw new LockTimeoutError(file, holder);

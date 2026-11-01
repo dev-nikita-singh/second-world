@@ -19,7 +19,7 @@ import { type CompareRunsOptions, compareRuns, type TrendOptions, trendAnalysis 
 import { appendLine, atomicWrite, type LockOptions, TMP_MARKER, withLock } from "./fsutil.js";
 import { captureGitMetadata } from "./git.js";
 import { extractMetrics, maxSeverity, overallStatus } from "./metrics.js";
-import { migrateRun } from "./migrations.js";
+import { migrateRun, UnsupportedSchemaError } from "./migrations.js";
 import {
   type AppendRunInput,
   type BaselineRef,
@@ -81,7 +81,11 @@ export interface JsonlStoreOptions {
 
 export class HistoryError extends Error {
   constructor(
-    readonly code: "SW_HISTORY_NOT_FOUND" | "SW_HISTORY_AMBIGUOUS" | "SW_HISTORY_COMPACTED",
+    readonly code:
+      | "SW_HISTORY_NOT_FOUND"
+      | "SW_HISTORY_AMBIGUOUS"
+      | "SW_HISTORY_COMPACTED"
+      | "SW_HISTORY_CORRUPT",
     message: string,
   ) {
     super(message);
@@ -90,6 +94,40 @@ export class HistoryError extends Error {
 }
 
 const SEVERITIES = new Set(["critical", "high", "medium", "low", "info"]);
+
+const isObj = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+const isStrArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
+
+/**
+ * Structural check of an index line. A line that parses as JSON but lacks a field the readers use
+ * (hand-edited, foreign or damaged index) is treated like a torn line: skipped with a warning and
+ * listed by verify, instead of crashing `sw history list` with exit 70
+ * (tests/unit/robust/malformed-inputs.test.ts).
+ */
+export function isIndexEntry(e: unknown): e is IndexEntry {
+  if (!isObj(e)) return false;
+  const f = e.findings;
+  return (
+    typeof e.id === "string" &&
+    e.id !== "" &&
+    typeof e.file === "string" &&
+    typeof e.createdAt === "string" &&
+    (e.label === undefined || typeof e.label === "string") &&
+    isStrArray(e.tags) &&
+    isStrArray(e.engines) &&
+    typeof e.status === "string" &&
+    isObj(e.metrics) &&
+    Object.values(e.metrics).every((m) => typeof m === "number" || m === null) &&
+    isObj(f) &&
+    typeof f.count === "number" &&
+    isStrArray(f.fingerprints) &&
+    (f.maxSeverity === null || typeof f.maxSeverity === "string") &&
+    (e.git === undefined || isObj(e.git)) &&
+    (e.sha256 === undefined || typeof e.sha256 === "string") &&
+    (e.bytes === undefined || typeof e.bytes === "number")
+  );
+}
 
 export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
   const cwd = opts.cwd ?? process.cwd();
@@ -124,7 +162,7 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
       if (line.trim() === "") continue;
       try {
         const e = JSON.parse(line) as IndexEntry;
-        if (typeof e.id !== "string" || typeof e.file !== "string") throw new Error("not an index entry");
+        if (!isIndexEntry(e)) throw new Error("not an index entry");
         byId.set(e.id, e); // last wins
       } catch {
         corrupt.push({ line: i + 1, text: line.slice(0, 120) });
@@ -186,9 +224,25 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
         "SW_HISTORY_COMPACTED",
         `Run ${e.id} was compacted by retention; only its summary remains`,
       );
-    const buf = await readFile(path.join(dir, e.file));
-    const json = JSON.parse((await gunzip(buf)).toString("utf8")) as unknown;
-    return migrateRun(json, { id: e.id, createdAt: e.createdAt });
+    const file = path.join(dir, e.file);
+    let run: HistoryRun;
+    try {
+      const json = JSON.parse((await gunzip(await readFile(file))).toString("utf8")) as unknown;
+      run = migrateRun(json, { id: e.id, createdAt: e.createdAt });
+    } catch (err) {
+      // missing, not gzip, not JSON, or a newer schema: a user-facing problem, not an internal error
+      const why = err instanceof UnsupportedSchemaError ? err.message : `${(err as Error).message}`;
+      throw new HistoryError(
+        "SW_HISTORY_CORRUPT",
+        `Cannot read run ${e.id} (${file}): ${why}. Run \`sw history verify\``,
+      );
+    }
+    if (!isObj(run) || !Array.isArray(run.results) || !run.results.every(isObj))
+      throw new HistoryError(
+        "SW_HISTORY_CORRUPT",
+        `Run ${e.id} (${file}) is not a SECOND WORLD history run. Run \`sw history verify\``,
+      );
+    return run;
   }
 
   function matches(e: IndexEntry, f: QueryFilter): boolean {
