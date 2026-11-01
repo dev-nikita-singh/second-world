@@ -73,12 +73,13 @@ Set `SW_FUZZ_RUNS` / `SW_FUZZ_SEED` for a longer or different run, e.g.
   (`{"data": "s3cr3t"}`) when it has low entropy and no known pattern. Configure it as an `{ env }` /
   `{ file }` secret (exact match) or add `safety.redact` patterns. Double-encoded JSON (a JSON string
   inside a JSON string) is covered only by exact secrets and patterns.
-- **History index integrity.** `sw history` trusts the `file` field of `index.jsonl` entries: whoever can
-  edit `.second-world/history` can point a read at another gzip file. Same-user local access is assumed
-  trusted (reported to main, wave 8).
-- **Prometheus scrape** (`sw model` with a metrics URL; src/engines/model/build.ts) checks the URL but
-  uses global `fetch`, which follows redirects and does not use DNS pinning. This was found by reading the
-  code and has no test yet; reported to main (wave 8). Scrape only endpoints you control.
+- **History index integrity** (fixed, wave 8). An index entry is trusted only when its `file` is
+  `runs/<id>.json.gz`; anything else is skipped as an unreadable line, and run ids that could build
+  another path are rejected on save (tests/unit/security/history-index-path.test.ts).
+- **Prometheus scrape** (`sw model` with a metrics URL; src/engines/model/build.ts). Redirects are no
+  longer followed and the body is capped at 32 MB (tests/unit/security/model-scrape-redirect.test.ts).
+  Residual: the scrape uses global `fetch`, so it is checked by `checkTarget` but not DNS-pinned; scrape
+  only endpoints you control.
 - **Workflow actions are pinned by tag (`@v4`), not by commit SHA.** Pin them to SHAs once the repository
   exists.
 - **Not run here:** the release workflow needs a GitHub repository, an `npm` environment with

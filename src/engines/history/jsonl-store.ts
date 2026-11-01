@@ -85,7 +85,8 @@ export class HistoryError extends Error {
       | "SW_HISTORY_NOT_FOUND"
       | "SW_HISTORY_AMBIGUOUS"
       | "SW_HISTORY_COMPACTED"
-      | "SW_HISTORY_CORRUPT",
+      | "SW_HISTORY_CORRUPT"
+      | "SW_HISTORY_BAD_ID",
     message: string,
   ) {
     super(message);
@@ -105,6 +106,8 @@ const isStrArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x
  * listed by verify, instead of crashing `sw history list` with exit 70
  * (tests/unit/robust/malformed-inputs.test.ts).
  */
+const RUN_FILE = /^runs\/[A-Za-z0-9._-]+\.json\.gz$/;
+
 export function isIndexEntry(e: unknown): e is IndexEntry {
   if (!isObj(e)) return false;
   const f = e.findings;
@@ -112,6 +115,9 @@ export function isIndexEntry(e: unknown): e is IndexEntry {
     typeof e.id === "string" &&
     e.id !== "" &&
     typeof e.file === "string" &&
+    // Only the shape we write (runs/<id>.json.gz): a tampered index must not point reads outside
+    // the history directory (docs/11 threat model).
+    RUN_FILE.test(e.file) &&
     typeof e.createdAt === "string" &&
     (e.label === undefined || typeof e.label === "string") &&
     isStrArray(e.tags) &&
@@ -265,6 +271,11 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
 
     async append(input) {
       const id = input.id ?? newId();
+      if (!RUN_FILE.test(`runs/${id}.json.gz`) || id.startsWith("."))
+        throw new HistoryError(
+          "SW_HISTORY_BAD_ID",
+          `Invalid run id "${id}": use letters, digits, ".", "_" or "-"`,
+        );
       const createdAt = input.createdAt ?? isoNow();
       const git =
         input.git === false

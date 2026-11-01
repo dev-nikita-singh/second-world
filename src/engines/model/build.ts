@@ -74,6 +74,9 @@ export interface ModelDeps {
   fetchText?: (url: string, signal: AbortSignal) => Promise<string>;
 }
 
+/** Upper bound for one Prometheus scrape body (a metrics page is normally a few hundred KB). */
+const MAX_SCRAPE_BYTES = 32 * 1024 * 1024;
+
 export function parseModelInput(input: unknown): ModelInput {
   const r = ModelInputSchema.safeParse(input ?? {});
   if (!r.success) {
@@ -356,9 +359,17 @@ export async function buildModel(
         const fetchText =
           deps.fetchText ??
           (async (u: string, signal: AbortSignal) => {
-            const res = await fetch(u, { signal });
+            // Never follow redirects: the Safety Guard checked this URL only, not where it points.
+            const res = await fetch(u, { signal, redirect: "manual" });
+            if (res.status >= 300 && res.status < 400)
+              throw new Error(`HTTP ${res.status} redirect not followed (scrape the final URL directly)`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.text();
+            const len = Number(res.headers.get("content-length") ?? 0);
+            if (len > MAX_SCRAPE_BYTES) throw new Error(`metrics page larger than ${MAX_SCRAPE_BYTES} bytes`);
+            const text = await res.text();
+            if (text.length > MAX_SCRAPE_BYTES)
+              throw new Error(`metrics page larger than ${MAX_SCRAPE_BYTES} bytes`);
+            return text;
           });
         text = await fetchText(src.url, AbortSignal.any([ctx.signal, AbortSignal.timeout(10_000)]));
         origin = src.url;
