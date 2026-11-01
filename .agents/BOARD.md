@@ -209,3 +209,12 @@ main fixes: 3070d0c (piped error colour, inspect no-files exit 5, prepack) · 9f
 | sw-ux8 | DONE (89ef4f0) | src/cli/commands/{perf,stress,init,config,reliability}.ts, src/engines/reporting/**, src/engines/*/index.ts (input error paths only), docs/02,08,09,11 (+ docs/03 reliability/perf), tests/unit/cli/** (new files), tests/unit/reporting/** | dry-run threshold validation, error paths with section, Math.min/max spread, init uses OpenAPI servers + a working perf scenario, TTY status code, reliability wording, stale docs |
 | sw-infra8 | DONE (27084d5) | src/core/safety/**, src/engines/experiments/sandbox.ts, tests/integration/docker/**, src/engines/architecture/**, src/cli/commands/history.ts, tests/unit/safety/**, tests/unit/architecture/** (new files) | world-wide maxRps GCRA, podman-compatible container probe + Linux docker test fixes, inspect: node:http/node:sqlite awareness or an honest limitation, `sw history verify` checks the audit-log chain |
 main (7b): cfb1f94 shared atomic writer (model/arch cache concurrent saves) · 33d7cc6 docs: sqlite backend not implemented · 1faefaf model/whatif/scenario error paths · be88872 lint 0/0 at --error-on-warnings · docs/16 gaps refreshed.
+
+## Wave 8 (2026-11-01, branch `wave-8`; master = wave-7 merged at 4dc0585, full suite 1885 passed / 3 skipped). Plan + DoD: .agents/PLAN-wave8.md
+| Agent | Status | Owns | Task |
+|---|---|---|---|
+| sw-cli-w8 | RUNNING | src/cli/** (not run-common.ts), docs/09-cli-and-api.md, tests/unit/cli/** + tests/e2e/** (new files) | CLI completeness (plan §sw-cli-w8) |
+| sw-robust-w8 | RUNNING | src/core/** (not safety/**, not log/**), src/cli/run-common.ts, src/engines/history/**, tests/unit/robust/**, tests/integration/robust/** | Tool robustness + soak (plan §sw-robust-w8) |
+| sw-sec-w8 | RUNNING | src/core/safety/**, src/core/log/**, src/engines/agent/export.ts, src/engines/bugs/{har,artifact}.ts, docs/11, SECURITY.md, .github/workflows/release.yml, tests/unit/security/** | Security review + fuzz (plan §sw-sec-w8) |
+| sw-real2-w8 | RUNNING | examples/orders-jobs-api/**, src/engines/architecture/**, tests/system/orders-jobs*.test.ts (+ tests/system/orders-jobs/**), tests/unit/architecture/** (new files) | Second realistic app + node:http routes in inspect |
+Unowned files (src/index.ts, package.json, other engines, docs/16): message main.
