@@ -9,7 +9,9 @@
  * `{{var}}` placeholders reference values extracted by earlier steps; `{{$nonce}}` is replaced by
  * one fresh value per execution (e.g. an Idempotency-Key shared by two steps).
  */
+
 import { z } from "zod";
+import { zodIssueLines } from "../../core/config/loader.js";
 import { sha256 } from "../../shared/util/hash.js";
 
 /** Rule ids a scenario assertion may claim (bugs-compatible ids + agent-specific ones). */
@@ -199,8 +201,8 @@ export function parseScenario(
   if (r.success) return { ok: true, scenario: r.data };
   return {
     ok: false,
-    errors: r.error.issues
+    errors: zodIssueLines(r.error, { schema: ScenarioSchema })
       .slice(0, 20)
-      .map((i) => `${i.path.length > 0 ? i.path.join(".") : "(root)"}: ${i.message}`),
+      .map((i) => `${i.path || "(root)"}: ${i.message}`),
   };
 }

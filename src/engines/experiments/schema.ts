@@ -4,7 +4,9 @@
  * Durations accept "30s"/"250ms"/numbers (ms) and are normalised to ms.
  * Commands are argv arrays or strings split without a shell (see command.ts).
  */
+
 import { z } from "zod";
+import { zodIssueLines } from "../../core/config/loader.js";
 import { parseDuration } from "../../core/config/units.js";
 import { ConfigError } from "../../core/errors.js";
 
@@ -195,7 +197,8 @@ export function experiment(def: ExperimentInputLoose): ExperimentInputLoose {
 }
 
 function issuesOf(e: z.ZodError): string[] {
-  return e.issues.map((i) => `${i.path.length > 0 ? i.path.join(".") : "(root)"}: ${i.message}`);
+  // Unknown keys get one line each with a typo suggestion (shared with the config loader).
+  return zodIssueLines(e, { schema: ExperimentSchema }).map((i) => `${i.path || "(root)"}: ${i.message}`);
 }
 
 export function parseExperimentInput(input: unknown): ExperimentInput {

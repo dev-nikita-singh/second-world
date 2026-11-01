@@ -3,12 +3,14 @@
  * §4 honesty, §5 export). Pipeline: sources → observations → entity resolution (union-find) →
  * nodes/edges with evidence lists + noisy-OR confidence → observed metrics, failure modes, critical paths.
  */
+
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { maybeGunzip, stripGzipExtension } from "../../adapters/telemetry/gzip.js";
 import { type NormalizedMetric, type NormalizedSpan, parseOtlp } from "../../adapters/telemetry/otlp.js";
 import { isOtlpProtobufFile, parseOtlpProtobuf } from "../../adapters/telemetry/otlp-proto.js";
 import { parsePrometheus } from "../../adapters/telemetry/prometheus.js";
+import { zodIssueLines } from "../../core/config/loader.js";
 import { createEngineContext } from "../../core/context.js";
 import { ConfigError } from "../../core/errors.js";
 import type { EngineResult, Limitation } from "../../core/evidence/schemas.js";
@@ -75,11 +77,11 @@ export interface ModelDeps {
 export function parseModelInput(input: unknown): ModelInput {
   const r = ModelInputSchema.safeParse(input ?? {});
   if (!r.success) {
-    const issue = r.error.issues[0];
+    const issues = zodIssueLines(r.error, { prefix: ["model"], schema: ModelInputSchema });
     throw new ConfigError(
       "SW_CONFIG_MODEL",
-      `Invalid model input at ${issue?.path.join(".") || "(root)"}: ${issue?.message ?? "invalid"}`,
-      { hint: "See docs/03-engines/system-model.md" },
+      `Invalid model input: ${issues.map((i) => `${i.path}: ${i.message}`).join("; ")}`,
+      { hint: "See docs/03-engines/system-model.md", details: { issues } },
     );
   }
   return r.data;
