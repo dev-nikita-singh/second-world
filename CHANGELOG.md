@@ -10,6 +10,17 @@ Work toward the first release, `0.1.0` (package version is `0.1.0-dev`; nothing 
 
 ### Added
 
+- `sw bugs --path-param/--query/--header` for the main request of `--concurrency-test` (de5a7cd).
+- `sw history verify` checks the audit-log hash chain (27084d5).
+- `sw inspect` recognises hand-written `node:http` routing and `node:sqlite`/`better-sqlite3` database
+  access; says when no routes or DB access were found (`ARCH_NO_ROUTES`, `ARCH_NO_DB_ACCESS`) (27084d5, 044601f).
+- `sw agent` uses `bugs.stateful.resources` (new `agent.resources`) for ownership and lifecycle probes (d037c40).
+- `sw init` takes the target from the OpenAPI `servers` URL and writes a working perf scenario (89ef4f0).
+- Example apps `examples/conduit-api` (RealWorld API) and `examples/orders-jobs-api` (jobs, payments,
+  webhooks, cache) with ground truth and system tests (26993ac, 044601f).
+- Docs: system design (docs/16), versioning & releases (docs/17), troubleshooting, threat model (docs/11)
+  (cf4a48d, 1d76ea4, 2656ed8). Release workflow with npm provenance (2656ed8).
+
 - Release engineering: CI workflow (`.github/workflows/ci.yml`: Ubuntu, macOS and Windows × Node 22.19 and 24;
   lint, typecheck, unit, integration, e2e, build, packed-tarball smoke; Linux jobs for the Docker-backed tests
   with Docker and with Podman), a composite GitHub Action (`action.yml`) that runs `sw` and can upload SARIF,
@@ -26,8 +37,32 @@ Work toward the first release, `0.1.0` (package version is `0.1.0-dev`; nothing 
 - `sw inspect` on a folder with no source files is an error run (exit 5), not a pass (3070d0c).
 - Code formatted with Biome and imports ordered; no behaviour change (cd7bb37).
 
+### Security
+
+- `localhost` resolving to a LAN address was allowed; loopback names must resolve to loopback (2656ed8).
+- `sw replay` could import an invariant module from anywhere named in a shared artifact; only in-project
+  modules load now (2656ed8).
+- Secrets leaked through curl reproductions (cookies, API keys, secret query params) and through free-text
+  redaction gaps; curl and HAR share one redaction rule (2656ed8).
+- DNS lookups in the Safety Guard have a timeout (`dnsTimeoutMs`, 10 s) (2656ed8).
+- `safety.maxRps` is enforced per World, not per engine lease (27084d5).
+- A tampered history index cannot point reads outside the history folder; `sw model` Prometheus scrapes
+  no longer follow redirects (f559ad6).
+
 ### Fixed
 
+- Concurrency: history lock races (stale-lock break, crash during lock creation, PID reuse), double Ctrl+C
+  temp-file cleanup, report folders shared by parallel runs, model/arch-cache concurrent saves, audit-log
+  chain under parallel processes (7d11c85, cfb1f94, 4c636e0, 27084d5).
+- `--dry-run` runs the same validation as a real run for perf, stress, reliability, bugs, agent (89ef4f0, de5a7cd).
+- Config/engine errors name the full key with a "did you mean" suggestion (cf4a48d, 89ef4f0, 1faefaf).
+- `sw inspect` no longer crashes (exit 70) on 2000+ file projects with deep import chains; hashing is
+  ~4x faster (044601f).
+- BOLA checks on owner-only writes when the read is public (4ca674c); no ownership false positive on
+  public reads in `sw agent` (d037c40); race findings name the mutating operation (d037c40).
+- Reports no longer crash on >120k-point series; perf errors line shows HTTP codes (89ef4f0).
+- Malformed history files exit 2 with a message instead of 70 (4c636e0).
+- The package no longer ships source maps (946 kB instead of 2.5 MB) (f6e246d).
 - `sw doctor` showed `✔ docker` when only the docker CLI was installed and the daemon was down; it now warns
   "daemon not reachable" and marks the docker capability unavailable.
 - `sw doctor` inside a container on Docker Desktop no longer labels the OS as WSL.
