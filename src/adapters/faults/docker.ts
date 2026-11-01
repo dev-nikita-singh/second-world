@@ -23,20 +23,69 @@ export interface DockerInjectorOptions extends ExternalInjectorOptions {
   inspect?: (container: string, format: string) => Promise<string | null>;
 }
 
-/** Returns the docker server version, or null when the daemon is not reachable. */
-export async function dockerServerVersion(bin = "docker", timeoutMs = 3000): Promise<string | null> {
+/**
+ * Container-engine probes, tried in order until one prints a version:
+ * - `version --format {{.Server.Version}}`: Docker (any OS), and podman in remote mode (podman machine
+ *   on macOS/Windows), where a server section exists.
+ * - `info --format {{.Version.Version}}`: local podman (Linux, also behind a `docker` → podman shim),
+ *   which has no `.Server` in `version` and no `.ServerVersion` in `info`.
+ * Both fail (non-zero exit) when the daemon/socket is unreachable.
+ */
+export const CONTAINER_ENGINE_PROBES: readonly (readonly string[])[] = [
+  ["version", "--format", "{{.Server.Version}}"],
+  ["info", "--format", "{{.Version.Version}}"],
+];
+
+export interface ContainerEngineProbe {
+  /** Server/engine version, or null when no probe succeeded. */
+  version: string | null;
+  /** First line of the first probe's error when version is null. */
+  reason?: string;
+}
+
+/** One CLI call for the probe: exitCode undefined = could not run (ENOENT) or timed out. */
+export type ProbeExec = (
+  bin: string,
+  args: string[],
+  timeoutMs: number,
+) => Promise<{ exitCode: number | undefined; stdout: string; stderr: string }>;
+
+const execaProbe: ProbeExec = async (bin, args, timeoutMs) => {
+  const { execa } = await import("execa");
+  const r = await execa(bin, args, { timeout: timeoutMs, reject: false, windowsHide: true, stdin: "ignore" });
+  return {
+    exitCode: r.timedOut ? undefined : r.exitCode,
+    stdout: String(r.stdout ?? ""),
+    stderr: String(r.stderr || r.shortMessage || ""),
+  };
+};
+
+/** Probes the container engine behind `bin` (docker or podman). Never throws. */
+export async function probeContainerEngine(
+  bin = "docker",
+  timeoutMs = 3000,
+  exec: ProbeExec = execaProbe,
+): Promise<ContainerEngineProbe> {
+  let reason: string | undefined;
   try {
-    const { execa } = await import("execa");
-    const r = await execa(bin, ["version", "--format", "{{.Server.Version}}"], {
-      timeout: timeoutMs,
-      reject: false,
-      windowsHide: true,
-    });
-    const v = String(r.stdout ?? "").trim();
-    return r.exitCode === 0 && v ? v : null;
-  } catch {
-    return null;
+    for (const args of CONTAINER_ENGINE_PROBES) {
+      const r = await exec(bin, [...args], timeoutMs);
+      const v = r.stdout.trim();
+      // "<no value>" = the template field does not exist in this engine's output.
+      if (r.exitCode === 0 && v && v !== "<no value>") return { version: v };
+      reason ??= (r.stderr.trim() || `${bin} ${args[0]} failed`).split(/\r?\n/)[0];
+      // ENOENT/timeout: the binary is missing or hung; the next probe would fail the same way.
+      if (r.exitCode === undefined) break;
+    }
+  } catch (e) {
+    reason ??= (e as Error).message;
   }
+  return { version: null, ...(reason ? { reason } : {}) };
+}
+
+/** Returns the container server version (docker or podman), or null when it is not reachable. */
+export async function dockerServerVersion(bin = "docker", timeoutMs = 3000): Promise<string | null> {
+  return (await probeContainerEngine(bin, timeoutMs)).version;
 }
 
 /** Docker CLI errors meaning the revert has nothing left to do. */

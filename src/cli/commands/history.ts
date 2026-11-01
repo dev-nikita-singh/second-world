@@ -1,9 +1,14 @@
 /**
  * `sw history list|show|diff|baseline|trend|verify|prune`. See docs/09-cli-and-api.md §1 and
  * docs/03-engines/evidence-and-history.md. Store: src/engines/history (JSONL, hash-checked reports).
- * Exit codes: 0 ok; 1 when `diff` finds regressions or `verify` finds corruption; 2 unknown run / bad args.
+ * Exit codes: 0 ok; 1 when `diff` finds regressions or `verify` finds a corrupted history or a broken
+ * audit-log hash chain (docs/11 §3); 2 unknown run / bad args.
  */
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { ExitCode, SecondWorldError } from "../../core/errors.js";
+import { type AuditVerifyResult, verifyAuditLog } from "../../core/safety/guard.js";
+import type { World } from "../../core/world.js";
 import type { HistoryStore } from "../../engines/history/index.js";
 import type { GlobalOptions } from "../main.js";
 import { colorEnabled, out, style, unicodeEnabled } from "../output.js";
@@ -12,11 +17,11 @@ import { int } from "./perf.js";
 
 type Store = HistoryStore;
 
-async function withStore<T>(g: GlobalOptions, fn: (store: Store) => Promise<T>): Promise<T> {
+async function withStore<T>(g: GlobalOptions, fn: (store: Store, world: World) => Promise<T>): Promise<T> {
   const world = await worldFromGlobals(g);
   try {
     const store = (await world.history.store()) as unknown as Store;
-    return await fn(store);
+    return await fn(store, world);
   } catch (e) {
     if (e instanceof Error && e.name === "HistoryError") {
       const code = (e as Error & { code: string }).code;
@@ -232,19 +237,61 @@ export async function historyTrend(
   });
 }
 
+/**
+ * Audit log checked by `history verify` (docs/11 §3): `<project>/.second-world/audit.log`, the file
+ * createWorld writes for config-file runs (src/core/world.ts `auditFile`).
+ */
+export function auditLogPath(world: { config: { cwd: string } }): string {
+  return join(world.config.cwd, ".second-world", "audit.log");
+}
+
+export interface AuditVerifyOutput extends AuditVerifyResult {
+  file: string;
+  present: boolean;
+}
+
+export function verifyAudit(file: string): AuditVerifyOutput {
+  const present = existsSync(file);
+  return { file, present, ...(present ? verifyAuditLog(file) : { ok: true, entries: 0 }) };
+}
+
+/**
+ * `sw history verify`: report hashes + index integrity of the history store, and the hash chain of the
+ * safety audit log. Exit 1 when either is corrupted or tampered with (same code as a corrupted history:
+ * an integrity check that failed), 0 otherwise; a missing audit log is reported but is not an error.
+ */
 export async function historyVerify(o: { json?: boolean }, g: GlobalOptions): Promise<void> {
-  await withStore(g, async (store) => {
+  await withStore(g, async (store, world) => {
     const r = await store.verify();
+    const audit = verifyAudit(auditLogPath(world));
+    const ok = r.ok && audit.ok;
     const s = style(colorEnabled(g));
-    if (o.json) out(JSON.stringify(r, null, 2));
+    if (o.json) out(JSON.stringify({ ...r, ok, history: { ok: r.ok }, audit }, null, 2));
     else {
       out(
         `${r.ok ? s.ok : s.fail} history ${r.ok ? "intact" : "CORRUPTED"}: ${r.checked} run(s) checked, ${r.errors.length} error(s), ${r.warnings.length} warning(s)`,
       );
       for (const e of r.errors) out(`  ${s.fail} ${JSON.stringify(e)}`);
       for (const w of r.warnings) out(`  ${s.warn} ${JSON.stringify(w)}`);
+      if (!audit.present)
+        out(`${s.dim("-")} audit log: none at ${audit.file} (written by runs that use a config file)`);
+      else if (audit.ok) {
+        out(
+          `${s.ok} audit log intact: ${audit.entries} entr${audit.entries === 1 ? "y" : "ies"} hash-chained (${audit.file})`,
+        );
+        for (const l of audit.torn ?? [])
+          out(`  ${s.warn} line ${l} unreadable: a write cut short by a crash; the chain continues past it`);
+      } else {
+        const why =
+          audit.reason === "hash-mismatch"
+            ? "the entry was modified"
+            : "an earlier entry was removed, reordered or replaced";
+        out(
+          `${s.fail} audit log TAMPERED or corrupted: hash chain broken at line ${audit.brokenAt} (${why}) — ${audit.file}`,
+        );
+      }
     }
-    process.exitCode = r.ok ? 0 : 1;
+    process.exitCode = ok ? 0 : 1;
   });
 }
 

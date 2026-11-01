@@ -2,7 +2,8 @@
  * Client extractors — docs/03-engines/architecture-inspector.md §1.3:
  *  - HTTP: fetch (global/undici/node-fetch), axios (+ axios.create), got (+ extend), undici.request, node:http(s)
  *    with timeout / AbortSignal detection (feeds ARCH001)
- *  - DB: pg, mysql2, Prisma, TypeORM, Drizzle, Mongoose, Knex, plus a naming heuristic for project
+ *  - DB: pg, mysql2, Prisma, TypeORM, Drizzle, Mongoose, Knex, node:sqlite (DatabaseSync), better-sqlite3
+ *    (.prepare/.exec), plus a naming heuristic for project
  *    repository classes (`Db`, `*Repository`, `*Dao`, `*Store`; confidence 0.5)
  *  - caches: ioredis, redis;  queues: BullMQ, amqplib, kafkajs, AWS SQS
  *  - pool creation without a size (ARCH006 hits)
@@ -334,6 +335,9 @@ function dbClient(
   ctx.addClient(c, node);
 }
 
+const SQLITE_METHODS = new Set(["prepare", "exec"]);
+const SQLITE_MODULES = new Set(["node:sqlite", "better-sqlite3"]);
+
 function knexOp(ctx: TsFileContext, call: ts.CallExpression): ClientOp {
   const t = ctx.ts;
   let n: ts.Node = call;
@@ -387,6 +391,31 @@ export const dbClientExtractor: TsExtractor = {
       if ((method === "query" || method === "execute") && s.includes("()"))
         dbClient(ctx, call, "mysql2", "mysql", opFromSql(ctx, call.arguments[0]), `mysql.${method}`, 0.9);
       return;
+    }
+    // node:sqlite `new DatabaseSync(...)` / better-sqlite3 `new Database(...)`: .prepare(sql) / .exec(sql)
+    if (
+      SQLITE_METHODS.has(method) &&
+      ((mod === "sqlite" && o.name === "DatabaseSync" && s === "new") ||
+        (mod === "better-sqlite3" && s === "new"))
+    ) {
+      const lib = mod === "sqlite" ? "node:sqlite" : "better-sqlite3";
+      dbClient(ctx, call, lib, "sqlite", opFromSql(ctx, call.arguments[0]), `sqlite.${method}`, 0.9);
+      return;
+    }
+    // A field/parameter typed DatabaseSync (assigned in a constructor): `this.sql.prepare(sql)`.
+    if (o.param && SQLITE_METHODS.has(method) && o.typeName && /^(DatabaseSync|Database)$/.test(o.typeName)) {
+      if (ctx.facts.imports.some((i) => SQLITE_MODULES.has(i.specifier))) {
+        dbClient(
+          ctx,
+          call,
+          "node:sqlite",
+          "sqlite",
+          opFromSql(ctx, call.arguments[0]),
+          `sqlite.${method}`,
+          0.8,
+        );
+        return;
+      }
     }
     if (mod === "@prisma/client") {
       if (/^new\.[A-Za-z_]\w*$/.test(s) && PRISMA_OPS.test(method)) {

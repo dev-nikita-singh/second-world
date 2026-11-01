@@ -84,7 +84,7 @@ jobs:
       - run: npm ci
       # The same probe tests/integration/docker/helpers.ts uses; if it fails the live tests would only skip.
       - name: Container runtime is visible to the tests
-        run: docker info --format '{{.ServerVersion}}'
+        run: docker version --format '{{.Server.Version}}' || docker info --format '{{.Version.Version}}'
       - name: Live Docker tests
         run: npx vitest run tests/integration/docker tests/e2e/evolve-cli.test.ts
 
@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Podman support is not verified yet (the code drives the `docker` CLI and probes with
-    # `docker info --format '{{.ServerVersion}}'`). Remove once this job has passed on GitHub.
+    # `docker version --format '{{.Server.Version}}' || docker info --format '{{.Version.Version}}'`). Remove once this job has passed on GitHub.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -123,6 +123,6 @@ jobs:
           printf 'unqualified-search-registries = ["docker.io"]\n' > ~/.config/containers/registries.conf
       # The same probe tests/integration/docker/helpers.ts uses; if it fails the live tests would only skip.
       - name: Container runtime is visible to the tests
-        run: docker info --format '{{.ServerVersion}}'
+        run: docker version --format '{{.Server.Version}}' || docker info --format '{{.Version.Version}}'
       - name: Live Docker tests (podman)
         run: npx vitest run tests/integration/docker tests/e2e/evolve-cli.test.ts

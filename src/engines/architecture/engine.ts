@@ -106,6 +106,44 @@ const BASE_LIMITATIONS: Limitation[] = [
   },
 ];
 
+/** Frameworks / libraries the TypeScript extractors recognise (keep in sync with analyzer/ts/extractors). */
+export const SUPPORTED_ROUTE_FRAMEWORKS =
+  "Express, Fastify, Hono, Koa (@koa/router), NestJS decorators, Next.js route handlers";
+export const SUPPORTED_DB_LIBRARIES =
+  "pg, mysql2, Prisma, TypeORM, Drizzle, Mongoose, Knex, node:sqlite, better-sqlite3, and project classes named *Db/*Repository/*Dao/*Store";
+
+const NODE_HTTP = new Set(["http", "node:http", "https", "node:https", "http2", "node:http2"]);
+
+/**
+ * Honest coverage gaps (docs/03-engines/architecture-inspector.md §5): source files were analysed but
+ * no HTTP route / no database access was recognised, so route-scoped rules (ARCH007/ARCH008, reachability) and datastore edges silently had nothing to work on. Exported for tests.
+ */
+export function coverageLimitations(facts: readonly FileFacts[]): Limitation[] {
+  if (facts.length === 0) return [];
+  const out: Limitation[] = [];
+  if (!facts.some((f) => f.routes.length > 0)) {
+    const nodeHttp = facts.some((f) => f.imports.some((i) => NODE_HTTP.has(i.specifier)));
+    out.push({
+      code: "ARCH_NO_ROUTES",
+      message:
+        `No HTTP routes recognised in ${facts.length} source file(s)` +
+        (nodeHttp
+          ? " (the project uses node:http directly; hand-written request dispatch is not recognised)"
+          : "") +
+        `. Supported: ${SUPPORTED_ROUTE_FRAMEWORKS}. Route-level checks (ARCH007 route without auth, ARCH008 handler fan-out, route reachability) did not run, and findings are located by function rather than by route`,
+      impact: "reduces-confidence",
+    });
+  }
+  if (!facts.some((f) => f.clients.some((c) => c.kind === "db"))) {
+    out.push({
+      code: "ARCH_NO_DB_ACCESS",
+      message: `No database access recognised. Supported: ${SUPPORTED_DB_LIBRARIES}. If the project uses another driver, its datastore edges and DB rules (ARCH005 query in a loop, ARCH006 pool size) did not run`,
+      impact: "reduces-confidence",
+    });
+  }
+  return out;
+}
+
 export async function runArchitecture(
   inputLoose: ArchitectureInputLoose | ArchitectureInput,
   ctxPartial: Partial<EngineContext> = {},
@@ -240,6 +278,7 @@ export async function runArchitecture(
       code: "ARCH_WORKSPACES",
       message: `${disc.workspaces.length} workspace package(s) analysed in one program; cross-package imports resolved via node_modules links or the package entry (heuristic)`,
     });
+  for (const l of coverageLimitations(facts)) addLim(l);
   addLim({
     code: "ARCH_CACHE_DEPTH",
     message:

@@ -3,7 +3,8 @@
  * container. docs/03-engines/reliability-lab.md §1, §4 (dependency-latency).
  *
  * Two upstreams: a containered HTTP server on a shared labelled network, and an HTTP server on the host
- * (reached from the Toxiproxy container via host.docker.internal). Latency is measured with fresh
+ * (reached from the Toxiproxy container via host.docker.internal; on Linux mapped with
+ * --add-host host.docker.internal:host-gateway and the server binds 0.0.0.0, see helpers.ts). Latency is measured with fresh
  * connections before, during and after the fault; the toxic and the proxy must be gone afterwards —
  * including after a hard crash, via `sw reliability cleanup --ledger`. The reliability engine's
  * dependency-latency scenario is also run end-to-end through the toxiproxy injector. Skipped without Docker.
@@ -24,6 +25,8 @@ import {
   docker,
   dockerAvailable,
   ensureImage,
+  HOST_GATEWAY_ARGS,
+  HOST_UPSTREAM_BIND,
   publishedPort,
   removeLabelled,
   TEST_LABEL,
@@ -84,7 +87,10 @@ describe.skipIf(!dockerAvailable)("LIVE toxiproxy injector", () => {
     dir = mkdtempSync(path.join(tmpdir(), "sw-dkr-toxi-"));
     ledger = path.join(dir, "ledger.json");
     await removeLabelled(TEST_LABEL);
-    hostUpstream = await listenOnRandomPort(http.createServer((_q, s) => s.end("host upstream")));
+    hostUpstream = await listenOnRandomPort(
+      http.createServer((_q, s) => s.end("host upstream")),
+      HOST_UPSTREAM_BIND,
+    );
     await docker(["network", "create", "--label", TEST_LABEL, NET], { reject: true });
     await docker(
       [
@@ -113,6 +119,7 @@ describe.skipIf(!dockerAvailable)("LIVE toxiproxy injector", () => {
         TEST_LABEL,
         "--network",
         NET,
+        ...HOST_GATEWAY_ARGS,
         "-p",
         "127.0.0.1::8474",
         "-p",

@@ -3,7 +3,8 @@
  * docs/11-safety-security-privacy.md §5.
  *
  * - "docker": every build/test/invariant/start command runs in a throw-away container
- *   (`docker run --rm`) with identical `--cpus`/`--memory` for all arms, a non-root `--user`,
+ *   (`docker run --rm`) with identical `--cpus`/`--memory` for all arms, a non-root `--user` (on a
+ *   rootless Linux engine "0:0", which is the unprivileged host user — see sandboxUser),
  *   `--read-only` root fs (+ tmpfs /tmp, HOME=/tmp), the worktree bind-mounted at /work (the only
  *   writable mount), `--network none` for build/test (install uses the default network to reach the
  *   registry). The app container publishes only 127.0.0.1:<port> (needs the default bridge network:
@@ -13,6 +14,7 @@
  *   `ctx.safety.requireApproval("evolution-execution", …)` (checked by the engine).
  */
 import { execa } from "execa";
+import { type ProbeExec, probeContainerEngine } from "../../adapters/faults/docker.js";
 import type { LaunchPlan } from "./app.js";
 import { type CommandResult, type CommandSpec, describeFailure, runCommand, toArgv } from "./command.js";
 
@@ -43,24 +45,14 @@ export interface Sandbox {
   cleanup?(): Promise<number>;
 }
 
+/**
+ * Is a container engine reachable through the `docker` CLI? Docker, or podman behind a `docker` shim
+ * (see probeContainerEngine for the probes; podman is not verified on this project's own machines).
+ */
 export async function dockerReachable(timeoutMs = 10_000): Promise<{ ok: boolean; reason?: string }> {
-  try {
-    const r = await execa("docker", ["info", "--format", "{{.ServerVersion}}"], {
-      reject: false,
-      timeout: timeoutMs,
-      windowsHide: true,
-      stdin: "ignore",
-    });
-    if (r.exitCode === 0 && String(r.stdout).trim()) return { ok: true };
-    return {
-      ok: false,
-      reason: String(r.stderr || r.shortMessage || "docker info failed")
-        .trim()
-        .split(/\r?\n/)[0],
-    };
-  } catch (e) {
-    return { ok: false, reason: (e as Error).message };
-  }
+  const p = await probeContainerEngine("docker", timeoutMs);
+  if (p.version) return { ok: true };
+  return { ok: false, reason: p.reason ?? "docker version failed" };
 }
 
 export function createProcessSandbox(): Sandbox {
@@ -90,6 +82,48 @@ export interface DockerSandboxOptions {
   labels?: Record<string, string>;
   /** Timeout for `docker pull` when the image is missing (ms). Default 10 minutes. */
   pullTimeoutMs?: number;
+  /** Rootless-engine check run by prepare() on Linux (tests). Default: engineRootless(). */
+  detectRootless?: () => Promise<boolean>;
+  /** Host platform (tests). Default process.platform. */
+  platform?: NodeJS.Platform;
+}
+
+/**
+ * Rootless engines (rootless Docker, rootless podman — also behind a `docker` shim) map container
+ * uid 0 to the invoking host user and any other container uid to a subordinate uid, which cannot write
+ * the bind-mounted worktree (owned by the host user). Probes: Docker lists "name=rootless" in
+ * SecurityOptions; podman reports Host.Security.Rootless. Unknown/failed → false (keep the configured user).
+ */
+export async function engineRootless(exec?: ProbeExec): Promise<boolean> {
+  const probes: [string[], (out: string) => boolean][] = [
+    [["info", "--format", "{{json .SecurityOptions}}"], (s) => /name=rootless/.test(s)],
+    [["info", "--format", "{{.Host.Security.Rootless}}"], (s) => s.trim() === "true"],
+  ];
+  const run: ProbeExec =
+    exec ??
+    (async (bin, args, timeoutMs) => {
+      const r = await execa(bin, args, { ...quiet, timeout: timeoutMs });
+      return { exitCode: r.exitCode, stdout: String(r.stdout ?? ""), stderr: String(r.stderr ?? "") };
+    });
+  for (const [args, isRootless] of probes) {
+    try {
+      const r = await run("docker", args, 15_000);
+      if (r.exitCode === 0 && r.stdout.trim() && r.stdout.trim() !== "<no value>")
+        return isRootless(r.stdout);
+    } catch {
+      // try the next probe
+    }
+  }
+  return false;
+}
+
+/**
+ * The `--user` for sandbox containers. On a rootless Linux engine "0:0" is the invoking (unprivileged)
+ * host user, the only uid that can write the worktree; `--read-only`, `no-new-privileges` and the
+ * user namespace still apply. Elsewhere the configured user (defaultDockerUser: host uid:gid on Linux).
+ */
+export function sandboxUser(configured: string, platform: NodeJS.Platform, rootless: boolean): string {
+  return platform === "linux" && rootless ? "0:0" : configured;
 }
 
 let containerSeq = 0;
@@ -126,6 +160,7 @@ export function bindMount(host: string, container: string, readonly: boolean): s
 
 function dockerArgs(
   o: DockerSandboxOptions,
+  user: string,
   name: string,
   worktree: string,
   network: string,
@@ -146,7 +181,7 @@ function dockerArgs(
     "--network",
     network,
     "--user",
-    o.user,
+    user,
     "--read-only",
     "--tmpfs",
     "/tmp:rw,exec",
@@ -195,12 +230,17 @@ export function createDockerSandbox(o: DockerSandboxOptions): Sandbox {
     ...o.labels,
   }).flatMap(([k, v]) => ["--label", `${k}=${v}`]);
   let prepared: Promise<void> | undefined;
+  let user = o.user;
+  const platform = o.platform ?? process.platform;
   return {
     kind: "docker",
     label: `docker ${o.image} cpus=${o.cpus} memory=${o.memory}`,
     prepare(signal) {
       // Pull once up front: an implicit pull inside `docker run` would count against gate/health timeouts.
       prepared ??= (async () => {
+        if (platform === "linux") {
+          user = sandboxUser(o.user, platform, await (o.detectRootless ?? engineRootless)());
+        }
         if (await dockerImagePresent(o.image)) return;
         const r = await runCommand(["docker", "pull", o.image], {
           cwd: process.cwd(),
@@ -232,7 +272,7 @@ export function createDockerSandbox(o: DockerSandboxOptions): Sandbox {
       const network = ro.phase === "install" ? "bridge" : o.network;
       const argv = [
         "docker",
-        ...dockerArgs(o, name, ro.cwd, network, ro.env ?? {}, ro.mounts ?? [], labelArgs),
+        ...dockerArgs(o, user, name, ro.cwd, network, ro.env ?? {}, ro.mounts ?? [], labelArgs),
         o.image,
         ...toArgv(cmd),
       ];
@@ -256,7 +296,7 @@ export function createDockerSandbox(o: DockerSandboxOptions): Sandbox {
             Object.entries(plan.env).filter((e): e is [string, string] => e[1] !== undefined),
           ),
         };
-        const args = dockerArgs(o, name, worktree, "bridge", env, mounts, labelArgs);
+        const args = dockerArgs(o, user, name, worktree, "bridge", env, mounts, labelArgs);
         args.push("-p", `127.0.0.1:${port}:${port}`);
         return {
           argv: ["docker", ...args, o.image, ...plan.argv],

@@ -1,29 +1,36 @@
 /**
  * Shared helpers for the live Docker integration tests (tests/integration/docker/**).
- * Every test file skips with `describe.skipIf(!dockerAvailable)` when `docker info` fails, so CI
+ * Every test file skips with `describe.skipIf(!dockerAvailable)` when the container-engine probe fails (src/adapters/faults/docker.ts probeContainerEngine), so CI
  * without a daemon stays green. Everything the tests create carries the label TEST_LABEL (plus the
  * labels the code under test sets itself); `removeLabelled()` force-removes only those objects.
  */
 import { execa } from "execa";
+import { probeContainerEngine } from "../../../src/adapters/faults/docker.js";
 
 /** Label put on every container/network the tests create directly. */
 export const TEST_LABEL = "io.second-world.test=docker-integration";
 
+/** Same probe as the product (docker, or podman behind a `docker` shim). */
 export async function dockerInfoOk(): Promise<boolean> {
-  try {
-    const r = await execa("docker", ["info", "--format", "{{.ServerVersion}}"], {
-      reject: false,
-      timeout: 15_000,
-      windowsHide: true,
-      stdin: "ignore",
-    });
-    return r.exitCode === 0 && String(r.stdout).trim().length > 0;
-  } catch {
-    return false;
-  }
+  return (await probeContainerEngine("docker", 15_000)).version !== null;
 }
 
 export const dockerAvailable = await dockerInfoOk();
+
+/**
+ * `docker run` args that make host.docker.internal resolve to the host. Docker Desktop (Windows/macOS)
+ * provides the name itself; a Linux engine needs it mapped to the bridge gateway (Docker >= 20.10;
+ * podman >= 4.7 understands host-gateway too — not verified here).
+ */
+export const HOST_GATEWAY_ARGS: string[] =
+  process.platform === "linux" ? ["--add-host", "host.docker.internal:host-gateway"] : [];
+
+/**
+ * Bind address for a host-side test server that a container must reach via host.docker.internal.
+ * Docker Desktop forwards to host loopback; on Linux the gateway is the bridge IP, so loopback-only
+ * servers are unreachable from containers.
+ */
+export const HOST_UPSTREAM_BIND = process.platform === "linux" ? "0.0.0.0" : "127.0.0.1";
 
 export async function docker(
   args: string[],

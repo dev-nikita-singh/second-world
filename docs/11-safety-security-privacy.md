@@ -7,7 +7,7 @@ SECOND WORLD generates traffic, injects faults, and runs commands. Safety is a *
 | Threat | Example | Control |
 |---|---|---|
 | Accidental DoS of a third party | Typo in target URL → hammering a real site | Host allow-list, default local-only, pre-flight confirmation for non-local hosts |
-| Runaway load | Wrong unit (`rate: 20000`) | Hard budgets (`maxRps`, `maxRequests`, `maxDuration`, `maxConcurrency`), GCRA enforcement |
+| Runaway load | Wrong unit (`rate: 20000`) | Hard budgets (`maxRps`, `maxRequests`, `maxDuration`, `maxConcurrency`), GCRA enforcement. `maxRps` and `maxRequests` are per world: engines running concurrently in one run share them (`src/core/safety/guard.ts`, tests/unit/safety/world-rate-cap.test.ts) |
 | Testing production unintentionally | Staging config pointing at prod DB | `environment` label, prod requires explicit flags + typed confirmation. Mutations blocked by default |
 | Data leakage in reports/logs | Bearer tokens in HAR files | Redaction pipeline on everything persisted |
 | Source code leakage | Proprietary code sent to an external service | Nothing is ever sent to an external service: no AI, no phone-home. Outbound traffic goes only to allow-listed targets and configured telemetry endpoints |
@@ -46,7 +46,37 @@ Fault injection, state-changing requests in Bug Hunter/Agent, Evolution builds/e
 
 ## 3. Audit trail
 
-Append-only JSONL at `.second-world/audit.log`: who (OS user, CI job), when, what (engine, action, target, budget), approval source, outcome. It is included (redacted) in report artifacts. `sw history verify` checks hash chaining (each entry includes the hash of the previous one, which makes tampering detectable).
+Append-only JSONL at `<project>/.second-world/audit.log`, written when a config file is used (the
+config file's folder is the project; `src/core/world.ts`). One line per safety decision: who (OS user,
+CI job), when, what (action such as `target.allowed`, `safety.blocked`, `budget.reserved`,
+`approval.granted` with its source, `kill-switch`; target and detail), all passed through secret
+redaction (`src/core/safety/guard.ts` `audit`). The log is not copied into report artifacts.
+
+Hash chain: every entry stores `prevHash` (the hash of the entry before it in the file; 64 zeros for
+the first) and `hash` = SHA-256 over `prevHash` and its own content. Parallel `sw` processes in one
+project extend the same chain: each append re-reads the chain head from the file under a short
+`audit.log.lock` lock (tests/unit/safety/audit-chain.test.ts, 4 processes × 50 entries).
+
+`sw history verify` checks the chain after the history store (`src/cli/commands/history.ts`):
+
+```text
+$ sw history verify
+✔ history intact: 6 run(s) checked, 0 error(s), 0 warning(s)
+✖ audit log TAMPERED or corrupted: hash chain broken at line 2 (the entry was modified) — …/.second-world/audit.log
+```
+
+- Exit 1 when the chain is broken (an entry edited → "the entry was modified"; an entry removed,
+  reordered or replaced → "an earlier entry was removed, reordered or replaced"), the same code as a
+  corrupted history store. Exit 0 when intact or when there is no audit log yet (reported as "none").
+- `--json` adds `audit: { file, present, ok, entries, brokenAt?, reason?, torn? }` and `history.ok`; the
+  top-level `ok` covers both.
+- A line cut short by a crash mid-write is reported as a warning (`torn`), not tampering: the next
+  entry chains to the last complete one.
+- Limits: a hash chain cannot detect entries removed from the **end** of the file. Replacing the
+  last entry with unparseable bytes therefore only gives the torn-line **warning** (exit 0), not a
+  failure: it cannot be told apart from a crash mid-write. Nor can it detect a whole file
+  rewritten with a fresh valid chain by someone with write access. Keep the log somewhere append-only
+  (or ship it off the machine) if that matters. The same check is available as `verifyAuditLog(file)`.
 
 ## 4. Secret redaction & data minimisation
 

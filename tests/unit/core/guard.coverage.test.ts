@@ -190,8 +190,11 @@ describe("audit chain", () => {
     const lines = readFileSync(file, "utf8").trimEnd().split("\n");
     writeFileSync(file, `${lines[0]?.replace('"n":1', '"n":2')}\n${lines[1]}\n`);
     expect(verifyAuditLog(file)).toMatchObject({ ok: false, brokenAt: 1 });
+    // An unparseable LAST line is a write cut short by a crash (a hash chain cannot detect tail
+    // truncation anyway): reported as torn, not as a broken chain. Garbage in the middle still breaks
+    // the chain (tests/unit/safety/audit-chain.test.ts).
     writeFileSync(file, `${lines[0]}\nnot json\n`);
-    expect(verifyAuditLog(file)).toMatchObject({ ok: false, brokenAt: 2, entries: 2 });
+    expect(verifyAuditLog(file)).toMatchObject({ ok: true, entries: 1, torn: [2] });
     const empty = join(d, "empty.log");
     writeFileSync(empty, "\n");
     expect(verifyAuditLog(empty)).toEqual({ ok: true, entries: 0 });

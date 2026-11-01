@@ -12,10 +12,21 @@
  */
 import { createHash } from "node:crypto";
 import { promises as dnsPromises } from "node:dns";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { isIP, type LookupFunction } from "node:net";
 import { userInfo } from "node:os";
 import { dirname } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { systemClock } from "../clock.js";
 import { SafetyError, TargetError } from "../errors.js";
 import { createRedactor } from "../log/redact.js";
@@ -255,16 +266,90 @@ function sha256(s: string): string {
 
 const GENESIS = "0".repeat(64);
 
-function lastHashOf(file: string): { hash: string; seq: number } {
+interface ChainHead {
+  hash: string;
+  seq: number;
+  /** The file does not end with "\n" (a torn write): the next append starts a fresh line. */
+  needsNewline: boolean;
+}
+
+function parseEntry(line: string): AuditEntry | undefined {
   try {
-    if (!existsSync(file)) return { hash: GENESIS, seq: 0 };
-    const lines = readFileSync(file, "utf8").trimEnd().split(/\r?\n/);
-    const last = lines[lines.length - 1];
-    if (!last) return { hash: GENESIS, seq: 0 };
-    const e = JSON.parse(last) as AuditEntry;
-    return { hash: e.hash ?? GENESIS, seq: e.seq ?? 0 };
+    const e = JSON.parse(line) as AuditEntry;
+    return e && typeof e.hash === "string" && typeof e.prevHash === "string" && typeof e.seq === "number"
+      ? e
+      : undefined;
   } catch {
-    return { hash: GENESIS, seq: 0 };
+    return undefined;
+  }
+}
+
+/**
+ * Head of the chain in `file`: the last parseable entry, read from the end in growing windows (bounded
+ * memory for large logs). Unparseable trailing bytes (a torn write) are skipped.
+ */
+function chainHeadOf(file: string): ChainHead {
+  let fd: number | undefined;
+  try {
+    if (!existsSync(file)) return { hash: GENESIS, seq: 0, needsNewline: false };
+    fd = openSync(file, "r");
+    const size = fstatSync(fd).size;
+    if (size === 0) return { hash: GENESIS, seq: 0, needsNewline: false };
+    const lastByte = Buffer.alloc(1);
+    readSync(fd, lastByte, 0, 1, size - 1);
+    const needsNewline = lastByte[0] !== 0x0a;
+    for (let win = 64 * 1024; ; win *= 4) {
+      const len = Math.min(size, win);
+      const buf = Buffer.alloc(len);
+      readSync(fd, buf, 0, len, size - len);
+      const lines = buf.toString("utf8").split(/\r?\n/);
+      // The first line of a partial window may be cut: only trust it when the window is the whole file.
+      const from = len === size ? 0 : 1;
+      for (let i = lines.length - 1; i >= from; i--) {
+        const e = parseEntry(lines[i] as string);
+        if (e) return { hash: e.hash, seq: e.seq, needsNewline };
+      }
+      if (len === size) return { hash: GENESIS, seq: 0, needsNewline };
+    }
+  } catch {
+    return { hash: GENESIS, seq: 0, needsNewline: false };
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+const lockSleep = new Int32Array(new SharedArrayBuffer(4));
+
+/**
+ * Cross-process exclusive section on `<file>.lock` (O_EXCL create). Several `sw` processes in one
+ * project append to the same audit log; reading the chain head and appending must not interleave.
+ * Held for one small append; a lock older than 10 s is stale (crashed holder) and removed.
+ * Returns false (fn not run) when the lock could not be taken within ~2 s.
+ */
+function withAuditLock(file: string, fn: () => void): boolean {
+  const lock = `${file}.lock`;
+  const t0 = performance.now();
+  for (;;) {
+    try {
+      closeSync(openSync(lock, "wx"));
+      break;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST" && code !== "EPERM" && code !== "EACCES") throw e;
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 10_000) rmSync(lock, { force: true });
+      } catch {
+        // vanished meanwhile: retry
+      }
+      if (performance.now() - t0 > 2000) return false;
+      Atomics.wait(lockSleep, 0, 0, 2);
+    }
+  }
+  try {
+    fn();
+    return true;
+  } finally {
+    rmSync(lock, { force: true });
   }
 }
 
@@ -273,24 +358,73 @@ function entryHash(e: Omit<AuditEntry, "hash">): string {
   return sha256(prevHash + JSON.stringify(rest));
 }
 
-/** Verifies the hash chain of an audit JSONL file. Returns the first broken line (1-based) if any. */
-export function verifyAuditLog(file: string): { ok: boolean; entries: number; brokenAt?: number } {
-  const text = readFileSync(file, "utf8").trimEnd();
-  if (!text) return { ok: true, entries: 0 };
-  const lines = text.split(/\r?\n/);
-  let prev = GENESIS;
-  for (let i = 0; i < lines.length; i++) {
-    try {
-      const e = JSON.parse(lines[i] as string) as AuditEntry;
-      const { hash, ...rest } = e;
-      if (e.prevHash !== prev || entryHash(rest) !== hash)
-        return { ok: false, entries: lines.length, brokenAt: i + 1 };
-      prev = hash;
-    } catch {
-      return { ok: false, entries: lines.length, brokenAt: i + 1 };
+export interface AuditVerifyResult {
+  ok: boolean;
+  /** Valid entries (ok) or non-blank lines (not ok). */
+  entries: number;
+  /** First line (1-based) where the chain breaks. */
+  brokenAt?: number;
+  /** hash-mismatch: the entry was edited; prev-hash-mismatch: a line before it was removed, reordered or replaced. */
+  reason?: "hash-mismatch" | "prev-hash-mismatch";
+  /** Unparseable lines the chain continues around (torn writes from a crash); not tampering. */
+  torn?: number[];
+}
+
+/** Calls `onLine(line, lineNo)` for each line of `file`, reading 64 KiB at a time (bounded memory). */
+function forEachLine(file: string, onLine: (line: string, no: number) => boolean): void {
+  const fd = openSync(file, "r");
+  try {
+    const buf = Buffer.alloc(64 * 1024);
+    const dec = new StringDecoder("utf8"); // multi-byte characters may straddle chunks
+    let rest = "";
+    let no = 0;
+    for (;;) {
+      const n = readSync(fd, buf, 0, buf.length, null);
+      if (n === 0) break;
+      const parts = (rest + dec.write(buf.subarray(0, n))).split("\n");
+      rest = parts.pop() as string;
+      for (const p of parts) if (!onLine(p.replace(/\r$/, ""), ++no)) return;
     }
+    rest += dec.end();
+    if (rest) onLine(rest.replace(/\r$/, ""), ++no);
+  } finally {
+    closeSync(fd);
   }
-  return { ok: true, entries: lines.length };
+}
+
+/**
+ * Verifies the hash chain of an audit JSONL file (docs/11 §3). Each entry's hash covers its content and
+ * the previous entry's hash, so an edited, deleted, reordered or replaced line breaks the chain at the
+ * first affected line. Removing entries from the END is not detectable by a chain alone.
+ * A missing file is an empty chain.
+ */
+export function verifyAuditLog(file: string): AuditVerifyResult {
+  if (!existsSync(file)) return { ok: true, entries: 0 };
+  let prev = GENESIS;
+  let entries = 0;
+  let lines = 0;
+  const torn: number[] = [];
+  let broken: { at: number; reason: NonNullable<AuditVerifyResult["reason"]> } | undefined;
+  forEachLine(file, (line, no) => {
+    if (!line.trim()) return true;
+    lines++;
+    if (broken) return true;
+    const e = parseEntry(line);
+    if (!e) {
+      torn.push(no);
+      return true;
+    }
+    const { hash, ...rest } = e;
+    if (e.prevHash !== prev) broken = { at: no, reason: "prev-hash-mismatch" };
+    else if (entryHash(rest) !== hash) broken = { at: no, reason: "hash-mismatch" };
+    else {
+      prev = hash;
+      entries++;
+    }
+    return true;
+  });
+  if (broken) return { ok: false, entries: lines, brokenAt: broken.at, reason: broken.reason };
+  return { ok: true, entries, ...(torn.length > 0 ? { torn } : {}) };
 }
 
 function currentUser(): string {
@@ -331,39 +465,59 @@ export function createSafetyGuard(
   const approvedActions = new Set<DisruptiveAction>();
   let totalTaken = 0;
   const globalMaxRequests = cfg.maxRequests ?? Number.POSITIVE_INFINITY;
+  // safety.maxRps is a world-wide cap (docs/11 §2 hard budgets): every lease throttles through this
+  // one GCRA, so N engines running concurrently in one world share the rate instead of getting N×.
+  // A lease that asks for a lower rate gets its own extra per-lease GCRA on top (see reserve()).
+  const globalGcra = rpsGcra(cfg.maxRps);
 
-  // audit chain
+  // audit chain: with a file, the head is re-read from the file under a lock at every append, so
+  // parallel `sw` processes sharing .second-world/audit.log extend ONE chain (docs/11 §3).
   const entries: AuditEntry[] = [];
-  let chain = opts.auditFile ? lastHashOf(opts.auditFile) : { hash: GENESIS, seq: 0 };
+  let chain = { hash: GENESIS, seq: 0 };
   let auditDirReady = false;
   const user = currentUser();
   const ci = ciJob();
 
   function audit(ev: { action: string; target?: string; detail?: Record<string, unknown> }): void {
     try {
-      const base: Omit<AuditEntry, "hash"> = {
-        seq: chain.seq + 1,
+      const body = {
         ts: isoNow(),
         user,
         ...(ci ? { ci } : {}),
         action: ev.action,
         ...(ev.target ? { target: redactor.redactString(ev.target) } : {}),
         ...(ev.detail ? { detail: redactor.redactObject(ev.detail) } : {}),
-        prevHash: chain.hash,
       };
-      const entry: AuditEntry = { ...base, hash: entryHash(base) };
+      const make = (head: { hash: string; seq: number }): AuditEntry => {
+        const base: Omit<AuditEntry, "hash"> = { seq: head.seq + 1, ...body, prevHash: head.hash };
+        return { ...base, hash: entryHash(base) };
+      };
+      let entry: AuditEntry | undefined;
+      const file = opts.auditFile;
+      if (file) {
+        try {
+          if (!auditDirReady) {
+            mkdirSync(dirname(file), { recursive: true });
+            auditDirReady = true;
+          }
+          const append = (): void => {
+            const head = chainHeadOf(file);
+            const e = make(head);
+            appendFileSync(file, `${head.needsNewline ? "\n" : ""}${JSON.stringify(e)}\n`, "utf8");
+            entry = e;
+          };
+          // Lock not obtainable in time: append anyway (a possibly forked chain beats a lost record).
+          if (!withAuditLock(file, append)) append();
+        } catch {
+          // file unwritable: keep the entry in memory only
+        }
+      }
+      entry ??= make(chain);
       chain = { hash: entry.hash, seq: entry.seq };
       entries.push(entry);
       if (entries.length > MAX_AUDIT_IN_MEMORY) entries.shift();
-      if (opts.auditFile) {
-        if (!auditDirReady) {
-          mkdirSync(dirname(opts.auditFile), { recursive: true });
-          auditDirReady = true;
-        }
-        appendFileSync(opts.auditFile, `${JSON.stringify(entry)}\n`, "utf8");
-      }
     } catch {
-      // audit must never crash the run; the in-memory chain still holds the entry
+      // audit must never crash the run
     }
   }
 
@@ -759,10 +913,8 @@ export function createSafetyGuard(
     const startedAt = now();
     let taken = 0;
     let released = false;
-    const gcra =
-      Number.isFinite(lim.maxRps) && lim.maxRps > 0
-        ? new Gcra({ rate: lim.maxRps, burst: Math.max(1, Math.ceil(lim.maxRps / 10)) })
-        : null;
+    // Per-lease limiter only when the lease is stricter than the world-wide cap.
+    const leaseGcra = globalGcra && lim.maxRps >= globalGcra.rate ? null : rpsGcra(lim.maxRps);
     let durationTimer: ReturnType<typeof setTimeout> | undefined;
     if (!clock && Number.isFinite(lim.maxDurationMs)) {
       durationTimer = setTimeout(
@@ -796,9 +948,13 @@ export function createSafetyGuard(
         audit({ action: "budget.released", detail: { taken } });
       },
       async throttle(signal?: AbortSignal): Promise<boolean> {
-        if (!gcra) return false;
+        if (!leaseGcra && !globalGcra) return false;
         const sig = signal ? AbortSignal.any([signal, leaseSignal]) : leaseSignal;
-        return gcra.take(clock ?? systemClock, 1, sig);
+        const c = clock ?? systemClock;
+        // Lease first (its own pace), then the shared world-wide cap; waited if either delayed us.
+        const waitedLease = leaseGcra ? await leaseGcra.take(c, 1, sig) : false;
+        const waitedGlobal = globalGcra ? await globalGcra.take(c, 1, sig) : false;
+        return waitedLease || waitedGlobal;
       },
       signal: leaseSignal,
       limits: lim,
@@ -834,6 +990,12 @@ export function createSafetyGuard(
     pins: () => [...pinsByHost.values()],
     checkRedirect,
   };
+}
+
+/** GCRA for a requests/second cap (burst = 10% of a second's worth), or null when uncapped. */
+function rpsGcra(rps: number | undefined): Gcra | null {
+  if (rps === undefined || !Number.isFinite(rps) || rps <= 0) return null;
+  return new Gcra({ rate: rps, burst: Math.max(1, Math.ceil(rps / 10)) });
 }
 
 function safeUrl(s: string): URL {
