@@ -1,0 +1,104 @@
+# SECOND WORLD release: publish to npm with provenance (docs/11 §supply chain, docs/17).
+#
+# Trigger: pushing a tag `v<version>` that equals package.json "version" (e.g. v0.1.0).
+# 1. verify: the same checks as CI (lint at --error-on-warnings, typecheck, unit, integration, e2e,
+#    build, packed-tarball smoke) plus `npm audit --omit=dev` on Linux, from the tagged commit.
+# 2. publish: only after verify passes. Least privilege: the workflow token can only read the repo;
+#    `id-token: write` lets npm mint the Sigstore provenance attestation (OIDC), nothing else.
+#    The npm token comes from the `npm` environment (add required reviewers there for a manual gate).
+#
+# Not run in this repository yet: it needs a GitHub repo, an `npm` environment with secret NPM_TOKEN
+# (an npm automation/granular token for the package), and a public repo for provenance.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+  FORCE_COLOR: "0"
+  npm_config_fund: "false"
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      DOCKER_HOST: tcp://127.0.0.1:1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      - name: Tag matches package.json version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          test "v${version}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != package.json v${version}"; exit 1; }
+      - name: Production dependencies have no known vulnerabilities
+        if: runner.os == 'Linux'
+        run: npm audit --omit=dev --audit-level=low
+      - name: Lint (biome, warnings are errors)
+        run: npm run lint -- --error-on-warnings
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run test:integration
+      - run: npm run test:e2e
+      - run: npm run build
+      - name: Pack and install the tarball into a fresh project
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination "$RUNNER_TEMP"
+          smoke="$RUNNER_TEMP/sw-smoke"
+          mkdir -p "$smoke"
+          cd "$smoke"
+          npm init -y > /dev/null
+          npm install "$RUNNER_TEMP"/second-world-*.tgz
+          npx sw --version
+          npx sw doctor
+          npx sw init --target http://127.0.0.1:3000
+          npx sw config validate
+
+  publish:
+    name: npm publish (provenance)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      # `prepack` builds dist/ from this exact commit; the file list is printed for the log.
+      - run: npm pack --dry-run
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

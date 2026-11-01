@@ -273,7 +273,7 @@ describe("self-contained artifacts: every check kind survives a JSON round trip"
       );
     const c = mk("inv.mjs");
     expect(c.context?.concurrency?.invariant).toEqual({ module: tmp.join("inv.mjs") });
-    const replay = session({ auth: { roles: ROLES } }, { statuses: [201, 201, 201], cwd: process.cwd() });
+    const replay = session({ auth: { roles: ROLES } }, { statuses: [201, 201, 201], cwd: tmp.path });
     const h = await hydrateForReplay(c, replay);
     expect(h.ok).toBe(true);
     const run = await runCase((h as { case: BugCase }).case, replay.env);

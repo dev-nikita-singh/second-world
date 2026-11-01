@@ -13,7 +13,13 @@ import {
   type HttpResult,
 } from "../../adapters/http/undici-executor.js";
 import { SafetyError } from "../../core/errors.js";
-import { createRedactor, type Redactor } from "../../core/log/redact.js";
+import {
+  createRedactor,
+  isSensitiveHeader,
+  REDACTED_PLACEHOLDER,
+  type Redactor,
+  redactUrlParams,
+} from "../../core/log/redact.js";
 import type { BudgetLease, EngineContext } from "../../core/types.js";
 import type { RawBody } from "./generators/mutations.js";
 import { getPointer } from "./json-schema.js";
@@ -462,7 +468,10 @@ export class BugsHttp {
    */
   curl(tpl: RequestTemplate): string {
     const p = this.prepare(tpl);
-    const parts = ["curl", "-sS", "-X", tpl.method, shellQuote(p.url)];
+    // Same rules as the HAR export (core/log/redact.ts): sensitive query values and credential headers
+    // become [REDACTED] so the reader knows to supply them; shell variables (SWVAR…SWVAR) are kept.
+    const url = this.redactor.redactString(redactUrlParams(p.url, (v) => /SWVAR[A-Z0-9_]+SWVAR/.test(v)).url);
+    const parts = ["curl", "-sS", "-X", tpl.method, shellQuote(url)];
     let role = tpl.role;
     if (role === undefined) role = tpl.secured ? (this.o.defaultRole ?? null) : null;
     const cred = role ? this.o.roles[role] : undefined;
@@ -477,7 +486,11 @@ export class BugsHttp {
         parts.push("-H", shellQuote(`${k}: ${this.redactor.redactString(v)}`));
         continue;
       }
-      parts.push("-H", shellQuote(`${k}: ${this.redactor.redactString(v)}`));
+      if (isSensitiveHeader(k) && !/SWVAR[A-Z0-9_]+SWVAR/.test(v)) {
+        parts.push("-H", shellQuote(`${k}: ${REDACTED_PLACEHOLDER}`));
+        continue;
+      }
+      parts.push("-H", shellQuote(this.redactor.redactString(`${k}: ${v}`)));
     }
     if (p.body !== undefined) parts.push("--data-raw", shellQuote(this.redactor.redactString(p.body)));
     return parts.join(" ");

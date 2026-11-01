@@ -60,6 +60,13 @@ sw bugs --concurrency-test "POST /orders" --burst 20 --invariant "./invariants/s
 sw replay F-01JB8Z...   # re-run a saved failing case
 ```
 
+`sw replay` treats the artifact as data. It may have come from someone else, for example attached to a
+bug report. Invariant modules named in an artifact (`context.invariants`, a concurrency test's
+`invariant`) are loaded only when they are inside the current project (the directory of the config).
+Importing a module runs its code. A module anywhere else is not imported: the replay is
+`inconclusive` with the reason "invariant module … is outside the project" and exits 2. To replay an
+artifact from another checkout, run `sw replay` in that project. See docs/11 threat model T6.
+
 ### Known values (`values`) and harvested values
 
 `values` maps a parameter or body property name to known-good values (`productId: [1, 2]`,

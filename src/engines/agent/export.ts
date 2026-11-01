@@ -206,7 +206,8 @@ export function suggestedTest(s: Scenario, meta: ExportMeta): SuggestedTest {
   const setupReqs = reqs.slice(0, s.setup.length);
   const stepReqs = reqs.slice(s.setup.length);
   const roles = new Set(meta.roles.filter((r): r is string => typeof r === "string"));
-  const auth: Record<string, { header: string; prefix: string }> = {};
+  // Null prototype: a role named "__proto__" is an own key like any other (never the prototype setter).
+  const auth: Record<string, { header: string; prefix: string }> = Object.create(null);
   for (const r of [...roles].sort()) auth[r] = authSpec(meta.credentials[r]);
   const pstep = parallelStep(s);
   const body: string[] = [];

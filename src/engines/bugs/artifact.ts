@@ -7,7 +7,7 @@
  * session and FAILS SAFE: anything it cannot resolve yields a reason → classification
  * "inconclusive", never a false "does not reproduce".
  */
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { BugCase, CaseContext } from "./cases.js";
 import { matchesPattern } from "./contract.js";
 import { ROLE_EXPIRED, ROLE_INVALID } from "./http.js";
@@ -25,6 +25,21 @@ function absRef(ref: string | InvRef, cwd: string): InvRef {
   const suffix = hash > 1 ? r.module.slice(hash) : "";
   r.module = (isAbsolute(path) ? path : resolve(cwd, path)) + suffix;
   return r;
+}
+
+/**
+ * An artifact is data (it may come from someone else): importing a module runs its code, so replay
+ * only loads invariant modules inside the current project (docs/11 threat model T6). Returns the
+ * reason when `ref` points elsewhere.
+ */
+function outsideProject(ref: string | InvRef, cwd: string): string | undefined {
+  const r = typeof ref === "string" ? { module: ref } : ref;
+  const hash = r.module.lastIndexOf("#");
+  const path = hash > 1 ? r.module.slice(0, hash) : r.module;
+  const file = isAbsolute(path) ? resolve(path) : resolve(cwd, path);
+  const rel = relative(resolve(cwd), file);
+  if (rel !== "" && !rel.startsWith("..") && !isAbsolute(rel)) return undefined;
+  return `invariant module ${file} is outside the project (${resolve(cwd)}); replay only loads project code`;
 }
 
 function isBuiltinInvariant(inv: unknown): inv is { kind: string } {
@@ -109,6 +124,8 @@ export async function hydrateForReplay(c: BugCase, s: Session): Promise<HydrateR
   }
   const invariants: LoadedInvariant[] = [];
   for (const ref of ctx.invariants) {
+    const outside = outsideProject(ref, s.cwd);
+    if (outside) return { ok: false, reason: outside };
     try {
       invariants.push(await loadInvariant(ref, s.cwd));
     } catch (e) {
@@ -123,6 +140,8 @@ export async function hydrateForReplay(c: BugCase, s: Session): Promise<HydrateR
     s.env.concurrencyFns = new Map();
     const inv = ctx.concurrency.invariant;
     if (inv !== undefined && !isBuiltinInvariant(inv)) {
+      const outside = outsideProject(inv as string | InvRef, s.cwd);
+      if (outside) return { ok: false, reason: outside };
       try {
         s.env.concurrencyFns.set(0, await loadInvariant(inv as string | InvRef, s.cwd));
       } catch (e) {

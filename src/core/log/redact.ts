@@ -22,14 +22,81 @@ export const DEFAULT_REDACT_HEADERS = [
 
 /** Object keys whose (string) values are always redacted. */
 const SENSITIVE_KEY =
-  /^(?:.*[_-])?(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|client[_-]?secret|authorization|auth|credentials?|cookie|session[_-]?id)$/i;
-/** camelCase → snake for key matching: accessToken → access_Token, so the keyword is its own word. */
-function isSensitiveKey(key: string): boolean {
-  return SENSITIVE_KEY.test(key.replace(/([a-z0-9])([A-Z])/g, "$1_$2"));
+  /^(?:.*[_-])?(?:password|passwd|pwd|passphrase|secret|token|jwt|bearer|api[_-]?key|apikey|(?:access|private|secret|signing|encryption|master)[_-]?key|client[_-]?secret|authorization|auth|credentials?|cookie|session(?:[_-]?id)?)$/i;
+/** Unambiguous keywords that mark a key as secret even when glued to a prefix (USERPASSWORD, dbtoken). */
+const SENSITIVE_SUFFIX = /(?:password|passwd|passphrase|secret|token|api[_-]?key|credentials?)$/i;
+/**
+ * camelCase / acronyms → snake for key matching: accessToken → access_Token, XApiKey → X_Api_Key,
+ * so the keyword is its own word.
+ */
+export function isSensitiveKey(key: string): boolean {
+  const k = key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/([A-Z])([A-Z][a-z])/g, "$1_$2");
+  return SENSITIVE_KEY.test(k) || SENSITIVE_SUFFIX.test(key);
+}
+
+/**
+ * Shared rule for reproduction artifacts (HAR export and curl commands): the placeholder written instead
+ * of a credential value, so a reader knows to supply it.
+ */
+export const REDACTED_PLACEHOLDER = "[REDACTED]";
+const SECRET_HEADER =
+  /^(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key|x-auth-token|x-csrf-token)$|token|secret|password|session/i;
+const SECRET_PARAM = /token|secret|password|passwd|api[-_]?key|apikey|signature|sig$|session|auth/i;
+
+/** Header whose whole value is a credential (HAR + curl, one list). */
+export function isSensitiveHeader(name: string): boolean {
+  return (
+    SECRET_HEADER.test(name) || isSensitiveKey(name) || DEFAULT_REDACT_HEADERS.includes(name.toLowerCase())
+  );
+}
+
+/** Query parameter whose value is a credential (HAR + curl, one list). */
+export function isSensitiveParam(name: string): boolean {
+  return SECRET_PARAM.test(name) || isSensitiveKey(name);
+}
+
+/**
+ * URL with userinfo dropped and sensitive query values replaced by REDACTED_PLACEHOLDER (as
+ * %5BREDACTED%5D in the URL). `keep(value)` returns true for values that must stay (shell variables).
+ * Returns the parameters as name/value pairs too. Unparseable input is returned unchanged.
+ */
+export function redactUrlParams(
+  raw: string,
+  keep: (value: string) => boolean = () => false,
+): { url: string; query: { name: string; value: string }[] } {
+  try {
+    const u = new URL(raw);
+    u.username = "";
+    u.password = "";
+    const query: { name: string; value: string }[] = [];
+    let changed = false;
+    const next = new URLSearchParams();
+    for (const [k, v] of u.searchParams.entries()) {
+      const value = isSensitiveParam(k) && v !== "" && !keep(v) ? REDACTED_PLACEHOLDER : v;
+      if (value !== v) changed = true;
+      query.push({ name: k, value });
+      next.append(k, value);
+    }
+    if (changed) u.search = next.toString();
+    return { url: u.toString(), query };
+  } catch {
+    return { url: raw, query: [] };
+  }
 }
 /** Key-like names used for the entropy rule in free text. */
 const KEYLIKE_ASSIGN =
   /\b([A-Za-z0-9_.-]*(?:key|token|secret|password|passwd|pwd|auth|credential|signature|sig)[A-Za-z0-9_.-]*)(["']?\s*[:=]\s*["']?)([^\s"',;&]{20,})/gi;
+
+/**
+ * `name: value` / `name=value` / `"name": "value"` with a SENSITIVE name (isSensitiveKey): the value is
+ * redacted whatever its length or entropy (a 7-char password or a 12-char session token in a JSON body,
+ * query string or YAML line). Quoted values run to the closing quote (so spaces are covered).
+ */
+const SENSITIVE_ASSIGN =
+  /(["']?)\b([A-Za-z_][A-Za-z0-9_.-]*)\1(\s*[:=]\s*)("(?:[^"\\\r\n]|\\.)*"|'(?:[^'\\\r\n]|\\.)*'|\$\{[A-Za-z_][A-Za-z0-9_]*\}|[^\s"',;&<>{}[\]()]+)/g;
+/** A value that is a placeholder or already redacted, never a secret itself. */
+const NOT_A_SECRET =
+  /^(?:(?:[A-Za-z]+\s+)?«redacted:[0-9a-f]{8}»|\[REDACTED\]|true|false|null|undefined|(?:[A-Za-z]+\s+)?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)$/;
 
 export interface RedactPattern {
   name: string;
@@ -69,7 +136,7 @@ export interface RedactorOptions {
   secrets?: Iterable<string>;
   /** Extra patterns appended to the built-ins. */
   patterns?: Array<RedactPattern | RegExp>;
-  /** Disable the entropy rule (default enabled). */
+  /** Disable the free-text key/value heuristics: sensitive-name assignments and the entropy rule (default enabled). */
   entropy?: boolean;
 }
 
@@ -117,6 +184,11 @@ export function createRedactor(opts: RedactorOptions = {}): Redactor {
     ),
   ];
   const entropy = opts.entropy !== false;
+  // Credential header written as text ("Cookie: sid=abc", curl -H 'x-api-key: …'): value to end of line/quote.
+  const headerLine = new RegExp(
+    `(^|[^\\w-])(${[...headerSet].map(escapeRe).join("|")})(\\s*:[ \\t]*)([^\\r\\n'"\\\\]+)`,
+    "gim",
+  );
 
   function rebuildSecretRe(): void {
     if (secrets.size === 0) {
@@ -156,6 +228,24 @@ export function createRedactor(opts: RedactorOptions = {}): Redactor {
         return match.slice(0, idx) + redactionMarker(part) + match.slice(idx + part.length);
       });
     }
+    if (headerSet.size > 0) {
+      headerLine.lastIndex = 0;
+      s = s.replace(headerLine, (m, pre: string, name: string, sep: string, value: string) => {
+        const v = value.trimEnd();
+        if (v === "" || NOT_A_SECRET.test(v)) return m;
+        return `${pre}${name}${sep}${redactionMarker(v)}${value.slice(v.length)}`;
+      });
+    }
+    if (entropy) SENSITIVE_ASSIGN.lastIndex = 0;
+    if (entropy)
+      s = s.replace(SENSITIVE_ASSIGN, (m, q: string, name: string, sep: string, value: string) => {
+        if (!isSensitiveKey(name.split(".").pop() ?? name)) return m;
+        const quoted = value.length >= 2 && (value[0] === '"' || value[0] === "'");
+        const inner = quoted ? value.slice(1, -1) : value;
+        if (inner === "" || NOT_A_SECRET.test(inner) || inner.startsWith("«redacted:")) return m;
+        const red = redactionMarker(inner);
+        return `${q}${name}${q}${sep}${quoted ? `${value[0]}${red}${value[0]}` : red}`;
+      });
     if (entropy) {
       KEYLIKE_ASSIGN.lastIndex = 0;
       s = s.replace(KEYLIKE_ASSIGN, (m, name: string, sep: string, value: string) => {

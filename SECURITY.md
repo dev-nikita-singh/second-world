@@ -11,6 +11,9 @@ Please report security problems **privately**, not in a public issue or pull req
 We acknowledge reports as soon as we can and agree a disclosure date with you. Fixes land with a
 regression test and a `CHANGELOG.md` entry; credit is given unless you ask otherwise.
 
+Releases are published to npm only from the tag-triggered GitHub workflow (`.github/workflows/release.yml`) with
+npm provenance, so `npm audit signatures` can verify a tarball came from this repository's CI.
+
 Supported versions: SECOND WORLD has no release yet. Until `1.0`, only the latest release (and `main`) receive
 security fixes.
 
@@ -50,7 +53,12 @@ The full design is in [docs/11-safety-security-privacy.md](docs/11-safety-securi
   hash of the previous one (`src/core/safety/guard.ts`), so edits are detectable; `verifyAuditLog()` from the
   package API checks the chain.
 - **No code execution from data.** `sw inspect` parses code and never runs it; `--no-config-code` loads only
-  JSON/YAML configs; commands from config run as argv arrays with no shell.
+  JSON/YAML configs; commands from config run as argv arrays with no shell. `sw replay` loads invariant modules
+  named in a reproduction artifact only from inside the current project, so replaying an artifact someone sent
+  you cannot run code from elsewhere on disk. Exported agent tests embed every value as a JSON literal.
+- **Fuzzed.** The Safety Guard's URL/IP/DNS handling, redaction (logs, audit log, HAR, curl), exported test code
+  and command splitting are property-tested with fast-check (`tests/unit/security/`; threat model and residual
+  risks in docs/11 §1).
 - **Nothing leaves the machine.** No AI, no telemetry, no phone-home: traffic goes only to your allow-listed
   targets and the telemetry endpoints you configure.
 

@@ -80,6 +80,8 @@ export interface SafetyGuardOptions {
   confirm?: (message: string) => Promise<boolean>;
   /** DNS resolver (tests); default `dns.promises.lookup(host, { all: true, verbatim: true })`. */
   resolver?: (host: string) => Promise<ResolvedAddress[]>;
+  /** Upper bound for one DNS resolution (pre-flight pin and mid-run recheck). Default 10 s. */
+  dnsTimeoutMs?: number;
 }
 
 export interface ResolvedAddress {
@@ -446,6 +448,8 @@ function ciJob(): string | undefined {
 // ---------------------------------------------------------------- guard
 
 const MAX_AUDIT_IN_MEMORY = 1000;
+/** Default bound for one DNS resolution (docs/11 §2). */
+const DNS_TIMEOUT_MS = 10_000;
 
 export function createSafetyGuard(
   cfgIn: SafetyConfig = {},
@@ -611,6 +615,24 @@ export function createSafetyGuard(
         family: a.family,
       })));
 
+  const dnsTimeoutMs = opts.dnsTimeoutMs ?? DNS_TIMEOUT_MS;
+
+  /** `resolver(host)` bounded by dnsTimeoutMs: getaddrinfo has no timeout of its own and can block. */
+  function resolveBounded(host: string): Promise<ResolvedAddress[]> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_res, rej) => {
+      timer = setTimeout(
+        () =>
+          rej(
+            Object.assign(new Error(`DNS lookup timed out after ${dnsTimeoutMs} ms`), { code: "ETIMEOUT" }),
+          ),
+        dnsTimeoutMs,
+      );
+      timer.unref?.();
+    });
+    return Promise.race([resolver(host), timeout]).finally(() => clearTimeout(timer));
+  }
+
   function strictest(a: TargetClass, b: TargetClass): TargetClass {
     return RANK[b] > RANK[a] ? b : a;
   }
@@ -625,7 +647,7 @@ export function createSafetyGuard(
     const key = host.toLowerCase();
     let addrs: ResolvedAddress[];
     try {
-      addrs = await resolver(key);
+      addrs = await resolveBounded(key);
     } catch (e) {
       throw new TargetError("SW_TARGET_DNS", `Cannot resolve "${host}": ${(e as Error).message}`, {
         hint: "Check the host name, your DNS/VPN, or use an IP address",
@@ -636,7 +658,11 @@ export function createSafetyGuard(
     const cls = classOf(key, addrs);
     if (cls !== classifyHost(key)) {
       const allAddrsListed = addrs.every((a) => allowHosts.some((p) => hostMatches(p, a.address, port)));
-      const d = decide(host, cls, listedName || allAddrsListed);
+      // A loopback NAME (localhost, *.localhost) must resolve to loopback (RFC 6761 §6.3): the name
+      // being on the (default) allow-list says nothing about a LAN/public answer from a tampered
+      // hosts file or resolver, so only the addresses themselves can authorise that.
+      const nameVouches = listedName && classifyHost(key) !== "loopback";
+      const d = decide(host, cls, nameVouches || allAddrsListed);
       if (!d.allowed) {
         const list = addrs.map((a) => a.address).join(", ");
         audit({
@@ -720,7 +746,20 @@ export function createSafetyGuard(
       return;
     }
     // Unpinned host: must pass the normal target check, then is resolved, checked and pinned once.
-    const u = new URL(`http://${host}`);
+    let u: URL;
+    try {
+      u = new URL(`http://${host}`);
+    } catch {
+      // Never throw synchronously out of a LookupFunction: net.connect expects the callback.
+      cb(
+        lookupErr(
+          new SafetyError("SW_SAFETY_INVALID_HOST", `Invalid host "${hostname}"`),
+          "SW_SAFETY_INVALID_HOST",
+        ),
+        empty,
+      );
+      return;
+    }
     const d = checkTarget(u);
     if (!d.allowed) {
       const e = new SafetyError(d.code as `SW_SAFETY_${string}`, d.reason, d.hint ? { hint: d.hint } : {});
@@ -745,7 +784,7 @@ export function createSafetyGuard(
     if (!pin) return;
     let addrs: ResolvedAddress[];
     try {
-      addrs = await resolver(host);
+      addrs = await resolveBounded(host);
     } catch {
       return; // transient resolution failure: connections keep using the pinned addresses
     }

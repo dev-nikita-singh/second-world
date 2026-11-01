@@ -10,14 +10,17 @@
  * Spec: http://www.softwareishard.com/blog/har-12-spec/
  */
 import { STATUS_CODES } from "node:http";
-import type { Redactor } from "../../core/log/redact.js";
+import {
+  isSensitiveHeader,
+  REDACTED_PLACEHOLDER,
+  type Redactor,
+  redactUrlParams,
+} from "../../core/log/redact.js";
 import { BugsHttp, type Exchange, ROLE_EXPIRED, ROLE_INVALID } from "./http.js";
 import type { Credential } from "./schema.js";
 
-export const HAR_REDACTED = "[REDACTED]";
-const SENSITIVE_HEADER =
-  /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key|x-auth-token|x-csrf-token)$|token|secret|password|session/i;
-const SENSITIVE_PARAM = /token|secret|password|passwd|api[-_]?key|apikey|signature|sig$|session|auth/i;
+/** Same placeholder and the same sensitive header/param rules as the curl reproductions (core/log/redact.ts). */
+export const HAR_REDACTED = REDACTED_PLACEHOLDER;
 
 export interface HarNameValue {
   name: string;
@@ -123,20 +126,7 @@ function credentialHeaderName(cred: Credential | undefined): string {
 }
 
 function cleanUrl(raw: string): { url: string; query: HarNameValue[] } {
-  try {
-    const u = new URL(raw);
-    u.username = "";
-    u.password = "";
-    const query: HarNameValue[] = [];
-    for (const [k, v] of [...u.searchParams.entries()]) {
-      const value = SENSITIVE_PARAM.test(k) ? HAR_REDACTED : v;
-      query.push({ name: k, value });
-      if (value !== v) u.searchParams.set(k, value);
-    }
-    return { url: u.toString(), query };
-  } catch {
-    return { url: raw, query: [] };
-  }
+  return redactUrlParams(raw);
 }
 
 /** Builds a HAR 1.2 document from recorded exchanges (already redacted bodies). */
@@ -153,12 +143,12 @@ export function toHar(exchanges: readonly Exchange[], o: HarOptions): Har {
       if (cred && name === credHeader) return { name, value: `$${BugsHttp.authEnvName(role)}` };
       if (name === "authorization" && (role === ROLE_INVALID || role === ROLE_EXPIRED))
         return { name, value: HAR_REDACTED };
-      if (SENSITIVE_HEADER.test(name)) return { name, value: HAR_REDACTED };
+      if (isSensitiveHeader(name)) return { name, value: HAR_REDACTED };
       return { name, value: String(v) };
     });
     const resHeaders: HarNameValue[] = Object.entries(e.responseHeaders).map(([k, v]) => ({
       name: k.toLowerCase(),
-      value: SENSITIVE_HEADER.test(k) ? HAR_REDACTED : String(v),
+      value: isSensitiveHeader(k) ? HAR_REDACTED : String(v),
     }));
     const { url, query } = cleanUrl(e.url);
     const reqCt = e.requestHeaders["content-type"] ?? "application/octet-stream";
