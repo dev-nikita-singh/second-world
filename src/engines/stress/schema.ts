@@ -191,7 +191,12 @@ function splitBase(v: Record<string, unknown>): { base: Record<string, unknown>;
     if (!(STRESS_KEYS as readonly string[]).includes(k)) base[k] = val;
   }
   let loadType = v.loadType as "vus" | "rate" | undefined;
-  if (loadType === undefined) loadType = base.rate !== undefined || base.model === "open" ? "rate" : "vus";
+  // Same rule as performance's model inference: an explicit model wins, else a rate means open.
+  if (loadType === undefined) {
+    if (base.model === "open") loadType = "rate";
+    else if (base.model === "closed" || base.model === "iterations") loadType = "vus";
+    else loadType = base.rate !== undefined ? "rate" : "vus";
+  }
   return { base, loadType };
 }
 

@@ -26,7 +26,7 @@ agent: {
 Ownership probes only **secured** item operations: the owner creates the resource, the other
 test account calls the read, update or delete and must be refused. A public read (blogs, Conduit)
 is never an ownership violation; its owner-only update/delete are probed instead (DELETE needs
-`allowDestructive`). Lifecycle creates and reads back with the owner.
+`allowDestructive`). Lifecycle creates and reads back with the owner. When the resource has an `update` operation (not excluded) and a `body`, lifecycle also probes **read after update**: create → read (fills any cache) → update → read, where the update sends the resource body (restricted to the update operation's documented fields) with one free-text string field changed (e.g. `note`, `description`; never ids, slugs, enums or patterned strings). The final read must return the value the update returned (`same-json`, rule `bugs/state-model-mismatch`): a read cache the update forgets to invalidate is reported. A refused update makes the probe inconclusive, not a finding.
 
 The planner produces `ScenarioProposal` objects as data (DSL, validated by a Zod schema), never code. Given the same seed and inputs, it proposes the same scenarios.
 

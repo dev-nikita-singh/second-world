@@ -201,12 +201,12 @@ describe("orders-jobs-api: sw from source with the example's sw.config.ts", () =
     expect(s.falsePositives).toEqual([]);
   }, 320_000);
 
-  it("sw agent finds the webhook replay; no false positives", async () => {
+  it("sw agent finds the webhook replay and the stale cached read; no false positives", async () => {
     await reset(direct);
     const r = await sw(["agent", "--json"], project, 200_000);
     expect(r.exitCode, r.stderr.slice(-2000)).toBe(1);
     const { s } = scored("sw agent", r.stdout, "agent");
-    expect(s.matched).toEqual(["webhook-replay-not-idempotent"]);
+    expect(s.matched.sort()).toEqual(["stale-cache-after-update", "webhook-replay-not-idempotent"]);
     expect(s.falsePositives).toEqual([]);
   }, 220_000);
 

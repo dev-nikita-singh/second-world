@@ -247,6 +247,9 @@ const STRESS_FROM_PERF = [
   "budget",
   "timing",
 ];
+/** Perf keys that decide the stress load dimension when stress/call input set none of LOAD_KEYS. */
+const STRESS_LOAD_FROM_PERF = ["model", "rate"];
+const STRESS_LOAD_KEYS = ["loadType", "model", "rate", "vus"];
 
 /**
  * Stress input = shared perf base keys from config.performance (target, thresholds, scenarios, …)
@@ -261,6 +264,11 @@ export function buildStressInput(
   const base: Obj = {};
   for (const k of STRESS_FROM_PERF) if (perf[k] !== undefined) base[k] = perf[k];
   const stress = isObj(cfg.config.stress) ? (cfg.config.stress as Obj) : {};
+  // stress.loadType is inferred from model/rate (stress/schema.ts splitBase); inherit them from
+  // performance only when stress itself says nothing about the load dimension. The per-stage
+  // level always replaces them.
+  if (STRESS_LOAD_KEYS.every((k) => stress[k] === undefined && input[k] === undefined))
+    for (const k of STRESS_LOAD_FROM_PERF) if (perf[k] !== undefined) base[k] = perf[k];
   const merged = deepMerge(deepMerge(base, stress), input);
   const targets = cfg.config.targets;
   if (typeof merged.target === "string" && targets[merged.target])

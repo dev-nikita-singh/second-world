@@ -310,8 +310,22 @@ export async function runModelTechnique(
     }
     return true;
   });
+  // Random command lists rarely contain create → read → update → read in that order (5 command
+  // kinds, ≤ maxCommands, fast-check starts with small sizes), so a read cache that the update
+  // forgets to invalidate was never reached in the default 4 runs. The canonical lifecycle runs
+  // first as a fixed example (commands whose check() fails are skipped, e.g. no update op), then
+  // `runs` random lists explore other orders.
+  const lifecycle = [
+    new Create(),
+    new Read(0),
+    new Update(0),
+    new Read(0),
+    new Delete(0),
+    new ReadDeleted(0),
+  ];
   const res = await fc.check(prop, {
-    numRuns: opts.runs,
+    numRuns: opts.runs + 1,
+    examples: [[lifecycle]],
     seed: opts.seed,
     interruptAfterTimeLimit: opts.timeLimitMs,
     markInterruptAsFailure: false,

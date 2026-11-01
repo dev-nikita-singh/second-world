@@ -11,7 +11,7 @@
  * - ownership: cross-account access on `{id}` items using the configured test accounts
  *   (owner creates and reads, the other account must not read);
  * - privilege: privileged operations called with an ordinary test account;
- * - lifecycle: create → read-back round trip;
+ * - lifecycle: create → read-back round trip; create → read → update → read (no stale read);
  * - concurrency: concurrent copies of a create (no 5xx);
  * - history: re-checks of earlier reproduced defects;
  * - arch-risk: probes from architecture hints (ARCH005 → larger page sizes, ARCH001 →
@@ -30,7 +30,14 @@ import {
 } from "../../bugs/generate.js";
 import { numericBounds, sampleValid } from "../../bugs/generators/sample.js";
 import type { RequestTemplate } from "../../bugs/http.js";
-import { getPointer, isObject, type JsonSchema, normalize, primaryType } from "../../bugs/json-schema.js";
+import {
+  getPointer,
+  isObject,
+  type JsonSchema,
+  normalize,
+  primaryType,
+  type SchemaResolver,
+} from "../../bugs/json-schema.js";
 import type { ResourceSpec } from "../../bugs/schema.js";
 import type { ArchHint, HistoryItem } from "../context.js";
 import type { ScenarioInput, Step } from "../scenario.js";
@@ -95,6 +102,73 @@ function setPointer(root: unknown, pointer: string, value: unknown): unknown {
     } else return copy;
   }
   return copy;
+}
+
+/** Free-text-like field names (changed first); identifier-like names are never changed. */
+const FREE_TEXT = /note|desc|comment|text|body|bio|message|content|summary|remark/i;
+/** Free text that servers more often validate or derive identifiers from (changed only after FREE_TEXT). */
+const SEMI_FREE = /address|title|name/i;
+const IDENTIFIER =
+  /(^id$|Id$|_id$|slug|email|url|uri|sku|code|status|state|type|token|password|currency|lang|locale)/i;
+
+/**
+ * Update body for the read-after-update probe: the configured resource body restricted to the
+ * update operation's documented fields, with ONE free-text string field (depth ≤ 2) changed within
+ * its schema (no enum/const/pattern/format, maxLength respected). Undefined when nothing can change
+ * or a required update field is missing.
+ */
+export function updateBody(
+  body: unknown,
+  schema: unknown,
+  resolver: SchemaResolver,
+): { body: unknown; pointer: string; value: string } | undefined {
+  if (!isObject(body)) return undefined;
+  const root = schema !== undefined ? normalize(schema, resolver) : undefined;
+  let value: Record<string, unknown> = structuredClone(body);
+  if (root && isObject(root.properties)) {
+    const props = root.properties;
+    value = Object.fromEntries(Object.entries(value).filter(([k]) => k in props));
+    const req = Array.isArray(root.required) ? (root.required as unknown[]) : [];
+    if (req.some((k) => typeof k === "string" && !(k in value))) return undefined;
+  }
+  type Cand = { pointer: string; key: string; old: string; s: JsonSchema | undefined };
+  const cands: Cand[] = [];
+  const walk = (o: Record<string, unknown>, s: JsonSchema | undefined, ptr: string, d: number): void => {
+    for (const [k, v] of Object.entries(o)) {
+      const ps = s && isObject(s.properties) ? s.properties[k] : undefined;
+      const sub = ps !== undefined ? normalize(ps, resolver) : undefined;
+      const p = `${ptr}/${k.replace(/~/g, "~0").replace(/\//g, "~1")}`;
+      if (typeof v === "string") cands.push({ pointer: p, key: k, old: v, s: sub });
+      else if (isObject(v) && d < 2) walk(v, sub, p, d + 1);
+    }
+  };
+  walk(value, root, "", 0);
+  const rank = (c: Cand): number => (FREE_TEXT.test(c.key) ? 0 : SEMI_FREE.test(c.key) ? 1 : 2);
+  const ok = cands
+    .filter((c) => !IDENTIFIER.test(c.key))
+    .filter((c) => {
+      const s = c.s;
+      if (!s) return true;
+      const t = primaryType(s);
+      return (
+        (t === undefined || t === "string") &&
+        s.enum === undefined &&
+        s.const === undefined &&
+        s.pattern === undefined &&
+        s.format === undefined
+      );
+    })
+    .sort((a, b) => rank(a) - rank(b));
+  for (const c of ok) {
+    const max = typeof c.s?.maxLength === "number" ? c.s.maxLength : Number.POSITIVE_INFINITY;
+    const min = typeof c.s?.minLength === "number" ? c.s.minLength : 0;
+    const next = [`${c.old} (sw update)`, "sw update", "swu"].find(
+      (x) => x !== c.old && x.length <= max && x.length >= min,
+    );
+    if (next === undefined) continue;
+    return { body: setPointer(value, c.pointer, next), pointer: c.pointer, value: next };
+  }
+  return undefined;
 }
 
 const scenario = (
@@ -524,7 +598,7 @@ export class HeuristicPlanner implements Planner {
             equals: v,
             rule: "bugs/state-model-mismatch",
           });
-    return [
+    const out: unknown[] = [
       scenario(
         `Create then read back via ${op.key}`,
         `A created ${r.name} is readable by its creator with the values that were sent`,
@@ -532,6 +606,40 @@ export class HeuristicPlanner implements Planner {
         assertions,
       ),
     ];
+    const upd = this.readAfterUpdate(r, role);
+    if (upd) out.push(upd);
+    return out;
+  }
+
+  /**
+   * create → read → update → read: the read after the update must show the updated value (a read
+   * cache that the update forgets to invalidate serves the old one). Only with an available update
+   * operation and a configured body; one free-text string field is changed. Setup = create + a read
+   * that fills any cache; the update and the final read are compared with `same-json`, which is
+   * inconclusive when the update is refused and silent when its response lacks the field.
+   */
+  private readAfterUpdate(r: DerivedResource, role: string | undefined): ScenarioInput | undefined {
+    const up = r.update;
+    if (!up || !this.opsByKey.has(up.key) || r.body === undefined) return undefined;
+    const change = updateBody(r.body, up.body?.schema, this.resolver());
+    if (!change) return undefined;
+    const tpl = this.base(up);
+    const idName = [...up.path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1] as string).pop() ?? r.idParam;
+    tpl.pathParams[idName] = "{{rid}}";
+    tpl.body = { kind: "json", value: change.body };
+    if (role !== undefined) tpl.role = role;
+    return scenario(
+      `Create, read, update, then read back via ${r.read.key}`,
+      `After ${up.key} changes ${change.pointer} of a ${r.name}, ${r.read.key} returns the updated value (no stale read)`,
+      [toStep(tpl, "update"), this.readStep(r, role, "read after update")],
+      [
+        { kind: "same-json", steps: [0, 1], pointer: change.pointer, rule: "bugs/state-model-mismatch" },
+        { kind: "no-5xx" },
+      ],
+      {
+        setup: [this.createStep(r, role, "create"), this.readStep(r, role, "read (fills any cache)")],
+      },
+    );
   }
 
   private concurrency(op: Operation): unknown[] {

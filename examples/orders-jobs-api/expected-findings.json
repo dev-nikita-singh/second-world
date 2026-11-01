@@ -144,7 +144,7 @@
     {
       "id": "stale-cache-after-update",
       "engine": "bugs",
-      "alsoDetectableBy": [],
+      "alsoDetectableBy": ["agent"],
       "category": "bug",
       "ruleId": "bugs/race-lost-update",
       "severity": "medium",
@@ -165,9 +165,19 @@
           "ruleId": "bugs/race-lost-update",
           "operation": "PUT /orders/{id}",
           "titleIncludes": "order note"
+        },
+        {
+          "command": "sw bugs",
+          "ruleId": "bugs/state-model-mismatch",
+          "operation": "GET /orders/{id}"
+        },
+        {
+          "command": "sw agent",
+          "ruleId": "bugs/state-model-mismatch",
+          "operation": "GET /orders/{id}"
         }
       ],
-      "description": "Found by the register-model concurrency test in bugs.concurrency (read → updates → read). The model-based stateful technique (create/read/update/delete) did not find it in its default 4 runs (nor with 25), and sw agent's lifecycle probe only checks create → read-back (no update → read): reported to main as SECOND WORLD gaps."
+      "description": "Found by the register-model concurrency test in bugs.concurrency (read → updates → read), by the bugs model-based stateful technique (create → read → update → read) and by sw agent's lifecycle probe (create → read → update → read), since the wave-8 fixes in those engines."
     }
   ],
   "observations": [

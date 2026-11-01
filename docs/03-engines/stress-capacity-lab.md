@@ -13,6 +13,8 @@
 | Breakpoint | Increase until a stop condition (error rate, p99, generator saturation) | Highest *tested* load that meets requirements |
 | Fixed-arrival | Open model at set rates | True capacity without coordinated omission |
 
+**Load dimension:** stage levels are VUs (closed model) or arrival rates in req/s (open model). Set it with `stress.loadType: "vus" | "rate"`. When omitted it is inferred like the performance model: an explicit `model` wins (`open` → rate; `closed`/`iterations` → VUs), else a `rate` means rate, else VUs. If the `stress` section and the command line set none of `loadType`, `model`, `rate`, `vus`, the `model`/`rate` of the `performance` section are used for this inference, so `performance: { model: "open", rate: 10 }` with `stress: { stages: [4, 12, 48] }` runs 4, 12 and 48 req/s. The stage level always replaces the inherited rate.
+
 Stages run back to back and share connections unless `isolateStages: true`. An optional `settle` period between stages is excluded from metrics.
 
 ## 2. Stop conditions (safety + efficiency)
@@ -47,6 +49,7 @@ sw stress --mode soak --rate 100 --duration 2h
 
 - "Capacity" is always **"highest tested load that met requirements in this environment"**, together with an environment fingerprint.
 - USL/extrapolated numbers carry `kind: "estimate"` and are rendered in a separate section.
+- **Safety rate cap.** Every request passes the world-wide GCRA of `min(safety.maxRps, budget.maxRps)`, which lets `ceil(cap/10)` requests through back to back. A stage is marked `capped` (limitation `STRESS-SAFETY-RATE-CAP`, excluded from knee/USL) only when the GCRA delayed requests **and** the stage's measured rate (mean or a 1 s peak) reached 80 % of the cap. A stage that only sent short bursts above the burst tolerance (closed-loop VUs whose responses arrive together, e.g. long-polls released at once) while running well below the cap is not capped: limitation `STRESS-SAFETY-BURST-SMOOTHED` (informational) names the stages, the delayed requests and their rate.
 
 ## 7. When every stage fails (exit codes)
 

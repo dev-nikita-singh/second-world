@@ -75,14 +75,19 @@ export interface StageResult {
   invalid: boolean;
   /**
    * The safety rate cap (min(safety.maxRps, budget.maxRps)) throttled requests in this stage
-   * (perf limitation PERF-THROTTLED-BY-SAFETY / totals.throttled > 0): throughput reflects the cap,
-   * not the target's capacity. Optional: absent in reports stored before this field existed (= false).
+   * (perf limitation PERF-THROTTLED-BY-SAFETY / totals.throttled > 0) and the stage ran near the cap
+   * (runner.ts CAP_NEAR_FRACTION): throughput reflects the cap, not the target's capacity. Optional: absent in reports stored before this field existed (= false).
    */
   capped?: boolean;
   /** Requests that waited for the safety rate cap (absent = 0). */
   throttled?: number;
   /** The cap in req/s when known. */
   capRps?: number;
+  /**
+   * The safety GCRA delayed some requests (bursts above its burst tolerance) but the stage's rate
+   * stayed below CAP_NEAR_FRACTION of the cap: not capped, reported as informational.
+   */
+  burstSmoothed?: boolean;
   /** Aborted early because window-level thresholds failed k consecutive windows. */
   abortedEarly: boolean;
   series: StageSeriesPoint[];

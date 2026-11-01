@@ -52,6 +52,8 @@ export interface StressDeps {
 
 /** Perf limitation: requests waited for the safety rate cap (closed/iterations models). */
 export const THROTTLE_CODE = "PERF-THROTTLED-BY-SAFETY";
+/** A throttled stage counts as capped only when its measured rate (mean or 1 s peak) reaches this share of the cap. */
+export const CAP_NEAR_FRACTION = 0.8;
 
 const isLittlesLaw = (reason: string): boolean => reason.startsWith("Little's Law");
 
@@ -125,8 +127,14 @@ function toStageResult(
   const errorRate = d?.totals.errorRate ?? 0;
   const throttleLim = res.limitations.find((l) => l.code === THROTTLE_CODE);
   const throttled = d?.totals.throttled ?? 0;
-  const capped = throttleLim !== undefined || throttled > 0;
   const capMatch = throttleLim ? /\((\d+(?:\.\d+)?) req\/s/.exec(throttleLim.message) : null;
+  const capRps = capMatch?.[1] !== undefined ? Number(capMatch[1]) : undefined;
+  // A wait at the GCRA only means the cap limited throughput when the stage actually ran near it.
+  // Closed-loop VUs whose answers arrive together burst above the burst tolerance (ceil(cap/10)
+  // cells) at a mean rate far below the cap: those waits smooth bursts, they are not a cap.
+  const peakRps = Math.max(d?.totals.rps ?? 0, ...(d?.series ?? []).map((p) => p.rps));
+  const nearCap = capRps === undefined || peakRps >= CAP_NEAR_FRACTION * capRps;
+  const capped = (throttleLim !== undefined || throttled > 0) && nearCap;
   const breachReasons: string[] = [];
   if (abortedEarly) breachReasons.push(`consecutive-windows: ${abortedEarly}`);
   for (const t of thresholds) if (!t.passed && t.actual !== null) breachReasons.push(t.expression);
@@ -190,7 +198,8 @@ function toStageResult(
     invalid: false,
     capped,
     throttled,
-    ...(capMatch?.[1] !== undefined ? { capRps: Number(capMatch[1]) } : {}),
+    ...(capRps !== undefined ? { capRps } : {}),
+    ...(throttled > 0 && !capped ? { burstSmoothed: true } : {}),
     abortedEarly: abortedEarly !== null,
     series: (d?.series ?? []).map((s) => ({
       t: s.t,
@@ -464,6 +473,23 @@ export async function executeStress(
     capRps === null
       ? "the safety rate cap"
       : `${budgetRps !== undefined && budgetRps <= capRps ? "budget.maxRps" : "safety.maxRps"} ${capRps} req/s`;
+  const smoothed = stages.filter((s) => s.burstSmoothed);
+  if (smoothed.length > 0) {
+    const sCap = smoothed.find((s) => s.capRps !== undefined)?.capRps;
+    const sLabel =
+      sCap === undefined
+        ? "the safety rate cap"
+        : `${budgetRps !== undefined && budgetRps <= sCap ? "budget.maxRps" : "safety.maxRps"} ${sCap} req/s`;
+    limitations.push({
+      code: "STRESS-SAFETY-BURST-SMOOTHED",
+      message: `${smoothed.length} stage(s) (${smoothed
+        .map((s) => `${s.label}: ${s.throttled} request(s) delayed, ${s.throughput.toFixed(0)} req/s`)
+        .join("; ")}) sent short bursts above the burst tolerance of ${sLabel} (${
+        sCap === undefined ? "ceil(cap/10)" : Math.max(1, Math.ceil(sCap / 10))
+      } back-to-back requests); those requests waited a few ms. The stage's rate stayed well below the cap, so its throughput is not limited by it.`,
+      impact: "informational",
+    });
+  }
   const curveMode = input.mode === "step" || input.mode === "ramp" || input.mode === "breakpoint";
   const capacity =
     input.mode === "spike" || input.mode === "soak"

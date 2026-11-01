@@ -79,7 +79,7 @@ export default {
     // ≈ 13 jobs/s) are the bottleneck: at 48 rps (24 checkouts/s) a bounded queue sheds load (503)
     // and keeps job waits bounded; an unbounded one keeps accepting orders while every job waits longer.
     mode: "step",
-    // Arrival rate (open model), like performance.model; stress does not inherit `model`/`rate`.
+    // Arrival rate (open model). Stress inherits performance.model/rate when unset; explicit here for clarity.
     loadType: "rate",
     stages: [4, 12, 48],
     hold: "6s",
