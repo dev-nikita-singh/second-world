@@ -4,11 +4,12 @@
  * Snapshots: <cwd>/.second-world/model/model-<builtAt>-<hash>.json + latest.json (sw-model's
  * saveModelSnapshot). JSON output is always toCanonicalJson (the graph is non-enumerable).
  */
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ConfigError } from "../../core/errors.js";
 import type { EngineResult } from "../../core/evidence/schemas.js";
 import type { World } from "../../core/world.js";
+import type { ModelInput } from "../../engines/model/index.js";
 import type { GlobalOptions } from "../main.js";
 import { colorEnabled, err, out, style, unicodeEnabled } from "../output.js";
 import { installSignals, worldFromGlobals } from "../run-common.js";
@@ -126,6 +127,40 @@ function printModel(d: ModelDataLike, g: GlobalOptions): void {
     out(`${s.warn} to verify: merge ${m.node}${m.detail ? ` (${m.detail})` : ""}`);
 }
 
+/**
+ * `--dry-run`: inputs the real build would skip with a limitation (it never fails on them, so neither
+ * does the dry run): missing project dir, unreadable contract / config / trace / Prometheus files,
+ * Prometheus URLs the Safety Guard blocks. Reads only file metadata; sends nothing.
+ */
+export function modelInputWarnings(world: World, input: ModelInput): string[] {
+  const warnings: string[] = [];
+  const base = input.project ?? world.config.cwd;
+  const file = (what: string, f: string): void => {
+    const p = resolve(base, f);
+    if (!existsSync(p)) warnings.push(`${what} not found: ${p} (the build skips it)`);
+    else if (!statSync(p).isFile()) warnings.push(`${what} is not a file: ${p} (the build skips it)`);
+  };
+  if (input.architecture !== false && input.project !== undefined) {
+    if (!existsSync(input.project)) warnings.push(`project not found: ${input.project} (no static source)`);
+    else if (!statSync(input.project).isDirectory())
+      warnings.push(`project is not a directory: ${input.project} (no static source)`);
+  }
+  const specs =
+    typeof input.openapi === "string" ? [input.openapi] : Array.isArray(input.openapi) ? input.openapi : [];
+  for (const f of specs) file("OpenAPI contract", f);
+  for (const f of input.config.files) file("config file", f);
+  for (const f of input.traces) file("telemetry file", f);
+  for (const p of input.prometheus) {
+    const src = typeof p === "string" ? { file: p } : (p as { file?: string; url?: string });
+    if (src.file) file("Prometheus file", src.file);
+    else if (src.url) {
+      const d = world.safety.checkTarget(new URL(src.url));
+      if (!d.allowed) warnings.push(`Prometheus scrape of ${src.url} would be denied: ${d.reason}`);
+    }
+  }
+  return warnings;
+}
+
 export async function modelBuild(path: string | undefined, o: Obj, g: GlobalOptions): Promise<void> {
   const s = style(colorEnabled(g));
   const world = await worldFromGlobals(g);
@@ -144,9 +179,10 @@ export async function modelBuild(path: string | undefined, o: Obj, g: GlobalOpti
       | { url: string; spans(): unknown[]; metrics(): unknown[]; close(): Promise<void> }
       | undefined;
     const receiveS = o.receive !== undefined ? Number(o.receive) : undefined;
-    if (receiveS !== undefined) {
-      if (!(receiveS > 0))
-        throw new ConfigError("SW_CONFIG_FLAG", "--receive needs a positive number of seconds");
+    if (receiveS !== undefined && !(receiveS > 0))
+      throw new ConfigError("SW_CONFIG_FLAG", "--receive needs a positive number of seconds");
+    // A dry run validates --receive but never listens or waits.
+    if (receiveS !== undefined && !g.dryRun) {
       receiver = (await m.startOtlpReceiver({})) as unknown as typeof receiver;
       err(`OTEL_EXPORTER_OTLP_ENDPOINT=${receiver?.url}`);
       err(s.dim("accepts OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf (SDK default) or http/json"));
@@ -166,23 +202,17 @@ export async function modelBuild(path: string | undefined, o: Obj, g: GlobalOpti
       await receiver?.close();
     }
     if (g.dryRun) {
-      out(
-        JSON.stringify(
-          world.redactor.redactObject({
-            dryRun: true,
-            input: m.parseModelInput(
-              world.buildInput("model", {
-                ...input,
-                performance: undefined,
-                reliability: undefined,
-                findings: undefined,
-              }),
-            ),
-          }),
-          null,
-          2,
-        ),
+      const parsed = m.parseModelInput(
+        world.buildInput("model", {
+          ...input,
+          performance: undefined,
+          reliability: undefined,
+          findings: undefined,
+        }),
       );
+      const warnings = modelInputWarnings(world, parsed);
+      if (!g.quiet) for (const w of warnings) err(`${s.warn} ${w}`);
+      out(JSON.stringify(world.redactor.redactObject({ dryRun: true, input: parsed, warnings }), null, 2));
       process.exitCode = 0;
       return;
     }

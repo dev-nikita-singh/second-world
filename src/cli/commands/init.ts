@@ -8,6 +8,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Readable, Writable } from "node:stream";
 import { parse as parseYaml } from "yaml";
 import { CONFIG_FILE_NAMES } from "../../core/config/loader.js";
 import { ConfigError } from "../../core/errors.js";
@@ -361,11 +362,23 @@ export function initSummary(
   return lines;
 }
 
+/**
+ * Test seams for the interactive path (no real TTY needed): `cwd`, whether to prompt, and the
+ * streams @clack/prompts reads keystrokes from / renders to.
+ */
+export interface InitIo {
+  cwd?: string;
+  interactive?: boolean;
+  input?: Readable;
+  output?: Writable;
+}
+
 export async function initCommand(
   o: { force?: boolean; json?: boolean; target?: string },
   g: GlobalOptions,
+  io: InitIo = {},
 ): Promise<void> {
-  const root = process.cwd();
+  const root = io.cwd ?? process.cwd();
   const s = style(colorEnabled(g));
   const d = detectProject(root);
   if (d.existingConfig && !o.force) {
@@ -387,10 +400,15 @@ export async function initCommand(
   };
   let answers = defaults;
   const interactive =
-    !g.yes && process.stdin.isTTY === true && process.stdout.isTTY === true && !process.env.CI;
+    io.interactive ??
+    (!g.yes && process.stdin.isTTY === true && process.stdout.isTTY === true && !process.env.CI);
   if (interactive) {
     const p = await import("@clack/prompts");
-    p.intro("SECOND WORLD init");
+    const streams = {
+      ...(io.input === undefined ? {} : { input: io.input }),
+      ...(io.output === undefined ? {} : { output: io.output }),
+    };
+    p.intro("SECOND WORLD init", streams);
     p.note(
       [
         `package manager: ${d.packageManager}`,
@@ -399,8 +417,10 @@ export async function initCommand(
         `start script: ${d.startScript ?? "not found"}`,
       ].join("\n"),
       "Detected",
+      streams,
     );
     const url = await p.text({
+      ...streams,
       message: "Target URL of your service (local)",
       initialValue: defaults.targetUrl,
       validate: (v) => {
@@ -412,21 +432,35 @@ export async function initCommand(
         }
       },
     });
+    // Ctrl+C / Esc at any prompt → exit 130, nothing written; answering "No" to the last one → exit 0.
     if (p.isCancel(url)) {
-      p.cancel("cancelled");
+      p.cancel("cancelled", streams);
       process.exitCode = 130;
       return;
     }
-    const health = await p.text({ message: "Health check path", initialValue: defaults.healthPath });
+    const health = await p.text({
+      ...streams,
+      message: "Health check path",
+      initialValue: defaults.healthPath,
+    });
     if (p.isCancel(health)) {
-      p.cancel("cancelled");
+      p.cancel("cancelled", streams);
       process.exitCode = 130;
       return;
     }
     answers = { targetUrl: String(url), healthPath: String(health) };
-    const ok = await p.confirm({ message: "Write sw.config.ts and update .gitignore?", initialValue: true });
-    if (p.isCancel(ok) || ok !== true) {
-      p.cancel("nothing written");
+    const ok = await p.confirm({
+      ...streams,
+      message: "Write sw.config.ts and update .gitignore?",
+      initialValue: true,
+    });
+    if (p.isCancel(ok)) {
+      p.cancel("cancelled, nothing written", streams);
+      process.exitCode = 130;
+      return;
+    }
+    if (ok !== true) {
+      p.cancel("nothing written", streams);
       process.exitCode = 0;
       return;
     }

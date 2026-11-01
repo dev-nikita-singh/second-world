@@ -8,8 +8,10 @@
 import { existsSync, readdirSync, renameSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ulid } from "ulid";
-import { ConfigError, ExitCode, SecondWorldError } from "../../core/errors.js";
+import { ConfigError, ExitCode, SafetyError, SecondWorldError } from "../../core/errors.js";
 import type { EngineResult } from "../../core/evidence/schemas.js";
+import type { World } from "../../core/world.js";
+import type { BugsInput } from "../../engines/bugs/index.js";
 import type { GlobalOptions } from "../main.js";
 import { colorEnabled, err, out, style } from "../output.js";
 import { attachProgress, finishRun, installSignals, worldFromGlobals } from "../run-common.js";
@@ -170,6 +172,69 @@ export function parseMix(spec: string): Record<string, unknown> {
   return entry;
 }
 
+const MAIN_PARAM_FLAGS = [
+  ["pathParam", "--path-param", "<name>=<value>", "id=1"],
+  ["query", "--query", "<key>=<value>", "limit=10"],
+  ["header", "--header", "<name>=<value>", "X-Tenant=acme"],
+] as const;
+
+/** `--path-param` / `--query` / `--header` → `key=value` pairs (value may contain "="; key non-empty). */
+function keyValues(flag: string, form: string, example: string, v: unknown): Array<[string, string]> {
+  const items = v === undefined ? [] : (Array.isArray(v) ? v : [v]).map(String);
+  return items.map((item) => {
+    const eq = item.indexOf("=");
+    if (eq <= 0 || item.slice(0, eq).trim() === "") {
+      throw new ConfigError("SW_CONFIG_FLAG", `${flag} "${item}" is not ${form}`, {
+        hint: `Expected ${flag} ${form} (repeatable), e.g. ${flag} ${example}`,
+      });
+    }
+    return [item.slice(0, eq).trim(), item.slice(eq + 1)];
+  });
+}
+
+/**
+ * Path params, query and headers of the main concurrency-test request, with the same value rules as
+ * `--mix` (`<pathParam>=v`, `query.k=v`, `header.k=v`). A path param is attached to each operation
+ * whose path template names it; one that no operation names is an error.
+ */
+export function concurrencyParamsFromFlags(
+  o: Record<string, unknown>,
+  operations: readonly string[],
+): Array<{
+  pathParams?: Record<string, string | number>;
+  query?: Record<string, string | number | boolean>;
+  headers?: Record<string, string>;
+}> {
+  const [pp, qq, hh] = MAIN_PARAM_FLAGS.map(([key, flag, form, ex]) => keyValues(flag, form, ex, o[key])) as [
+    Array<[string, string]>,
+    Array<[string, string]>,
+    Array<[string, string]>,
+  ];
+  const names = operations.map((op) => new Set([...op.matchAll(/\{([^}]+)\}/g)].map((m) => m[1] as string)));
+  const known = [...new Set(names.flatMap((s) => [...s]))];
+  for (const [k, v] of pp) {
+    if (!names.some((s) => s.has(k))) {
+      throw new ConfigError(
+        "SW_CONFIG_FLAG",
+        `--path-param "${k}=${v}": no --concurrency-test path has {${k}} (known path params: ${known.length ? known.join(", ") : "none"})`,
+        {
+          hint: 'Expected --path-param <name>=<value> naming a {placeholder} of the operation, e.g. --concurrency-test "PUT /products/{id}/stock" --path-param id=1',
+        },
+      );
+    }
+  }
+  return names.map((s) => {
+    const entry: ReturnType<typeof concurrencyParamsFromFlags>[number] = {};
+    const pathParams = Object.fromEntries(
+      pp.filter(([k]) => s.has(k)).map(([k, v]) => [k, scalar(v, false) as string | number]),
+    );
+    if (Object.keys(pathParams).length) entry.pathParams = pathParams;
+    if (qq.length) entry.query = Object.fromEntries(qq.map(([k, v]) => [k, scalar(v, true)]));
+    if (hh.length) entry.headers = Object.fromEntries(hh);
+    return entry;
+  });
+}
+
 /** Maps `sw bugs` flags to a loose Bug Hunter input. */
 /** `cwd`: directory the command was run from (flag paths are relative to it). */
 export function bugsInputFromFlags(o: Record<string, unknown>, cwd = process.cwd()): Record<string, unknown> {
@@ -209,18 +274,27 @@ export function bugsInputFromFlags(o: Record<string, unknown>, cwd = process.cwd
         throw new ConfigError("SW_CONFIG_FLAG", "--body must be valid JSON");
       }
     }
-    input.concurrency = ops.map((operation) => ({
+    const params = concurrencyParamsFromFlags(o, ops);
+    input.concurrency = ops.map((operation, i) => ({
       operation,
       burst,
       ...(o.role ? { role: o.role } : {}),
       ...(body !== undefined ? { body } : {}),
+      ...params[i],
       ...(o.invariant ? { invariant: parseInvariant(String(o.invariant)) } : {}),
       ...(mix.length ? { mix } : {}),
     }));
-  } else if (o.burst !== undefined || o.invariant !== undefined || mixSpecs.length > 0) {
+  } else if (
+    o.burst !== undefined ||
+    o.invariant !== undefined ||
+    mixSpecs.length > 0 ||
+    o.pathParam !== undefined ||
+    o.query !== undefined ||
+    o.header !== undefined
+  ) {
     throw new ConfigError(
       "SW_CONFIG_FLAG",
-      '--burst/--invariant/--mix require --concurrency-test "METHOD /path"',
+      '--burst/--invariant/--mix require --concurrency-test "METHOD /path" (so do --path-param/--query/--header)',
     );
   }
   return input;
@@ -243,6 +317,36 @@ export function relocateArtifacts(result: EngineResult, from: string, to: string
   }
 }
 
+/**
+ * What a real Bug Hunter / agent session checks before its first request (engines/bugs/session.ts
+ * openSession + hooks.ts), for `--dry-run`: the contract loads, every invariant module loads and
+ * exports a function, and every HTTP hook URL passes the Safety Guard (else exit 3, as in a real run).
+ * Command hooks are not run. Sends nothing.
+ */
+export async function checkBugsSession(
+  world: World,
+  input: Pick<BugsInput, "target" | "openapi" | "cwd" | "hooks"> &
+    Partial<Pick<BugsInput, "invariants" | "concurrency">>,
+): Promise<void> {
+  const bugs = await import("../../engines/bugs/index.js");
+  const cwd = input.cwd ?? process.cwd();
+  if (input.openapi !== undefined) await bugs.loadContract(input.openapi, cwd);
+  for (const ref of input.invariants ?? []) await bugs.loadInvariant(ref, cwd);
+  for (const t of input.concurrency ?? []) {
+    const inv = t.invariant;
+    if (inv !== undefined && !(typeof inv === "object" && "kind" in inv)) await bugs.loadInvariant(inv, cwd);
+  }
+  for (const name of ["setup", "reset"] as const) {
+    const h = input.hooks[name];
+    if (!h || !("http" in h)) continue;
+    const d = world.safety.checkTarget(new URL(h.http.url, input.target));
+    if (!d.allowed)
+      throw new SafetyError("SW_SAFETY_HOOK_TARGET", `Hook ${name} targets a blocked host: ${d.reason}`, {
+        hint: d.hint,
+      });
+  }
+}
+
 export async function bugsCommand(o: Record<string, unknown>, g: GlobalOptions): Promise<void> {
   const s = style(colorEnabled(g));
   const world = await worldFromGlobals(g);
@@ -259,6 +363,7 @@ export async function bugsCommand(o: Record<string, unknown>, g: GlobalOptions):
     if (g.dryRun) {
       const { parseBugsInput } = await import("../../engines/bugs/index.js");
       const parsed = parseBugsInput(plan);
+      await checkBugsSession(world, parsed);
       const view = {
         ...parsed,
         auth: parsed.auth ? { ...parsed.auth, roles: Object.keys(parsed.auth.roles ?? {}) } : undefined,

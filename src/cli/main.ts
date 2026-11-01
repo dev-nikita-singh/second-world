@@ -217,6 +217,13 @@ export function buildProgram(): Command {
     .option("--role <name>", "auth role for concurrency bursts")
     .option("--body <json>", "request body for concurrency bursts")
     .option(
+      "--path-param <name=value>",
+      'path parameter of the concurrency-test request, e.g. id=1 for "PUT /products/{id}/stock" (repeatable)',
+      collect,
+    )
+    .option("--query <k=v>", "query parameter of the concurrency-test request (repeatable)", collect)
+    .option("--header <k=v>", "header of the concurrency-test request (repeatable)", collect)
+    .option(
       "--mix <spec>",
       'interleave another operation with each burst (repeatable): "METHOD /path[:count] [as=take|read|inc|dec|write|add|remove|has] [count=n] [phase=before|during|after] [pointer=/ptr] [value=v] [role=r] [<pathParam>=v] [query.k=v] [header.k=v] [body=<json>]"; as defaults to read for GET',
       collect,
@@ -477,6 +484,7 @@ export function buildProgram(): Command {
   const baseline = history.command("baseline").description("named baselines");
   baseline
     .command("set")
+    .description("name a run as a baseline (use it as baseline:<name>)")
     .argument("<name>", "baseline name, e.g. main")
     .argument("<run>", "run id or prefix")
     .action(async (name: string, run: string, _o, cmd: Command) =>
@@ -484,6 +492,7 @@ export function buildProgram(): Command {
     );
   baseline
     .command("list")
+    .description("named baselines and their runs")
     .option("--json", "JSON output")
     .action(async (o, cmd: Command) =>
       (await hist()).historyBaselineList(o, cmd.optsWithGlobals<GlobalOptions>()),

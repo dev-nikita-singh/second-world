@@ -47,7 +47,7 @@ const SKIP: Record<string, string> = {
   "docs/03-engines/evidence-and-history.md:9": "type definitions, not a config",
   "docs/03-engines/experiments.md:21": "illustrative experiment() sketch with `scenarios: [...]` elided",
   "docs/03-engines/system-model.md:19": "type definitions, not a config",
-  "docs/09-cli-and-api.md:84": "API tour with elided inputs (`{ /* ... */ }`)",
+  "docs/09-cli-and-api.md:387": "API tour with elided inputs (`{ /* ... */ }`)",
 };
 
 interface DocBlock {

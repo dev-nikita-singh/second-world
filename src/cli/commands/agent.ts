@@ -6,13 +6,17 @@
  * together with --yes. Exit codes and history as for `sw bugs`.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { parseDuration } from "../../core/config/units.js";
 import { ConfigError, SafetyError } from "../../core/errors.js";
 import type { EngineResult } from "../../core/evidence/schemas.js";
+import type { World } from "../../core/world.js";
+import type { AgentInput } from "../../engines/agent/index.js";
 import type { GlobalOptions } from "../main.js";
 import { colorEnabled, err, out, style } from "../output.js";
 import { attachProgress, finishRun, installSignals, worldFromGlobals } from "../run-common.js";
+import { checkBugsSession } from "./bugs.js";
 
 type Obj = Record<string, unknown>;
 
@@ -102,6 +106,26 @@ export function exportSuggestedTests(dir: string, tests: readonly SuggestedTestL
   return written;
 }
 
+/**
+ * `--dry-run`: what a real agent run checks before its first request (engines/agent/engine.ts
+ * executeAgent): the Bug Hunter session checks (contract, hook targets) and every --context report
+ * is readable JSON (same message as the engine). Sends nothing.
+ */
+export async function checkAgentInput(world: World, input: AgentInput): Promise<void> {
+  await checkBugsSession(world, input);
+  const cwd = input.cwd ?? process.cwd();
+  for (const f of input.context.files) {
+    try {
+      JSON.parse(await readFile(isAbsolute(f) ? f : resolve(cwd, f), "utf8"));
+    } catch (e) {
+      throw new ConfigError(
+        "SW_CONFIG_AGENT_CONTEXT",
+        `Cannot read context report ${f}: ${(e as Error).message}`,
+      );
+    }
+  }
+}
+
 export async function agentCommand(o: Obj, g: GlobalOptions): Promise<void> {
   const s = style(colorEnabled(g));
   if (o.allowDestructive === true && !g.yes && !g.approveDisruptive) {
@@ -123,6 +147,7 @@ export async function agentCommand(o: Obj, g: GlobalOptions): Promise<void> {
     if (g.dryRun) {
       const { parseAgentInput } = await import("../../engines/agent/index.js");
       const parsed = parseAgentInput(plan);
+      await checkAgentInput(world, parsed);
       const view = {
         ...parsed,
         auth: parsed.auth ? { ...parsed.auth, roles: Object.keys(parsed.auth.roles ?? {}) } : undefined,
