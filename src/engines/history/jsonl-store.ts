@@ -73,7 +73,7 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
     corrupt: { line: number; text: string }[];
   }
 
-  async function readIndex(): Promise<IndexRead> {
+  async function readIndex(retried = false): Promise<IndexRead> {
     let text: string;
     try {
       text = await readFile(indexFile, "utf8");
@@ -95,6 +95,13 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
       } catch {
         corrupt.push({ line: i + 1, text: line.slice(0, 120) });
       }
+    }
+    // Only the last line is unreadable and has no newline: either a crashed writer (it stays like this) or
+    // another process appending right now (one write() per record, which a reader on Linux/macOS can see
+    // mid-write). Re-read once after a moment before calling it an interrupted write.
+    if (!retried && corrupt.length === 1 && !text.endsWith("\n") && corrupt[0]?.line === lines.length) {
+      await new Promise((r) => setTimeout(r, 50));
+      return readIndex(true);
     }
     if (corrupt.length > 0 && opts.onWarning) warnCorrupt(corrupt, text.endsWith("\n"));
     const entries = [...byId.values()].sort(compareEntries);

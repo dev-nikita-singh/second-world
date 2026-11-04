@@ -62,8 +62,9 @@ const state = async () => ({
   running: (await inspect(NAME, "{{.State.Running}}")) === "true",
   paused: (await inspect(NAME, "{{.State.Paused}}")) === "true",
 });
+// Podman prints `null` (not `{}`) once the container is detached from every network.
 const networks = async () =>
-  JSON.parse((await inspect(NAME, "{{json .NetworkSettings.Networks}}")) ?? "{}") as object;
+  (JSON.parse((await inspect(NAME, "{{json .NetworkSettings.Networks}}")) ?? "{}") ?? {}) as object;
 
 async function crashChild(fault: object, watchdog: boolean): Promise<string> {
   const r = await execa(

@@ -53,12 +53,29 @@ import {
 export interface WorkerEntry {
   url: URL;
   execArgv?: string[];
+  /**
+   * TS sources only: inline bootstrap (run with `eval: true`) that registers tsx through its API inside the
+   * worker and then imports `url`. Node 22 does not apply `--import tsx` loader hooks in a worker thread
+   * (verified on 22.19: ".js" imports of ".ts" files fail to resolve); Node 24 does. Built dist never uses it.
+   */
+  bootstrap?: string;
 }
 
 function tsxLoaderUrl(): string | null {
   try {
     const req = createRequire(import.meta.url);
     return pathToFileURL(req.resolve("tsx")).href;
+  } catch {
+    return null;
+  }
+}
+
+/** The tsx register() API (ESM build), for the worker bootstrap. */
+function tsxApiUrl(): string | null {
+  try {
+    const cjs = createRequire(import.meta.url).resolve("tsx/esm/api");
+    const mjs = cjs.replace(/\.cjs$/, ".mjs");
+    return pathToFileURL(existsSync(mjs) ? mjs : cjs).href;
   } catch {
     return null;
   }
@@ -84,8 +101,10 @@ export function resolveWorkerEntry(here: string | undefined = import.meta.url): 
   if (/\.[cm]?ts$/.test(here)) {
     const url = new URL("./worker.ts", here);
     const tsx = tsxLoaderUrl();
-    if (!tsx || !fileExists(url)) return null;
-    return { url, execArgv: ["--import", tsx] };
+    const api = tsxApiUrl();
+    if (!tsx || !api || !fileExists(url)) return null;
+    const bootstrap = `import(${JSON.stringify(api)}).then((m) => { m.register(); return import(${JSON.stringify(url.href)}); });`;
+    return { url, execArgv: ["--import", tsx], bootstrap };
   }
   const ext = here.endsWith(".cjs") ? ["cjs"] : ["js", "mjs"];
   const candidates = ext.flatMap((e) => [`./perf-worker.${e}`, `../perf-worker.${e}`]);
@@ -299,9 +318,9 @@ export async function executeSharded(
       },
       snapshotTicks: abortEntries.length > 0,
     };
-    const worker = new Worker(entry.url, {
+    const worker = new Worker(entry.bootstrap ?? entry.url, {
       workerData: init,
-      ...(entry.execArgv ? { execArgv: entry.execArgv } : {}),
+      ...(entry.bootstrap ? { eval: true } : entry.execArgv ? { execArgv: entry.execArgv } : {}),
       name: `sw-perf-${p.index}`,
     });
     liveWorkers++;

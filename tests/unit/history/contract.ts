@@ -12,6 +12,15 @@ import { createFinding } from "../../../src/core/evidence/store.js";
 import type { HistoryStore } from "../../../src/engines/history/index.js";
 import { makeTmpDir, type TmpDir } from "../../helpers/tmp.js";
 
+/** Shortest prefix of `id` (at least `min` chars) that no id in `others` starts with. */
+function uniquePrefix(id: string, others: readonly string[], min = 6): string {
+  for (let n = min; n < id.length; n++) {
+    const p = id.slice(0, n);
+    if (!others.some((o) => o.startsWith(p))) return p;
+  }
+  return id;
+}
+
 export interface ContractStoreOptions {
   cwd: string;
   isoNow: () => string;
@@ -107,8 +116,11 @@ export function describeHistoryStoreContract(name: string, make: MakeStore): voi
       expect(run?.label).toBe("first");
       expect(run?.tags).toEqual(["ci"]);
       expect(run?.results[0]?.engine).toBe("performance");
-      expect((await store.get(b.id.slice(0, 20)))?.id).toBe(b.id);
-      expect((await store.get(b.id.slice(0, 20).toLowerCase()))?.id).toBe(b.id);
+      // Run ids are monotonic ULIDs: two runs made in the same millisecond share their first ~20 chars,
+      // so pick the shortest prefix (>= 6) that is unique, as `sw history show <prefix>` users do.
+      const bp = uniquePrefix(b.id, [a.id]);
+      expect((await store.get(bp))?.id).toBe(b.id);
+      expect((await store.get(bp.toLowerCase()))?.id).toBe(b.id);
       expect(await store.get("01NOPE0000000000000000000")).toBeNull();
       expect(await store.get(b.id.slice(0, 5))).toBeNull(); // prefix < 6 chars
       expect((await store.query({ hasFindings: true })).map((e) => e.id)).toEqual([b.id]);
@@ -207,7 +219,7 @@ export function describeHistoryStoreContract(name: string, make: MakeStore): voi
       const ref = await store.setBaseline("zeta", a.id);
       expect(ref).toMatchObject({ name: "zeta", runId: a.id });
       expect(typeof ref.setAt).toBe("string");
-      await store.setBaseline("alpha", a.id.slice(0, 10));
+      await store.setBaseline("alpha", uniquePrefix(a.id, [b.id], 10));
       await store.setBaseline("alpha", b.id);
       expect((await store.listBaselines()).map((x) => `${x.name}:${x.runId}`)).toEqual([
         `alpha:${b.id}`,
