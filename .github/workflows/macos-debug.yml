@@ -1,6 +1,8 @@
 # TEMPORARY (branch ci-macos-w9 only, never merged): macOS diagnostics.
 name: macOS debug
 on:
+  push:
+    branches: [ci-macos-w9]
   workflow_dispatch:
     inputs:
       files:
@@ -38,15 +40,15 @@ jobs:
       - run: sysctl -n machdep.cpu.brand_string hw.ncpu hw.perflevel0.logicalcpu hw.perflevel1.logicalcpu || true
       - name: A/A debug
         if: inputs.aa != '0'
-        run: node .github/debug/aa-debug.mjs ${{ inputs.aa }}
+        run: node .github/debug/aa-debug.mjs ${{ inputs.aa || '8' }}
         continue-on-error: true
       - name: tests repeated
         shell: bash
         run: |
           fails=0
-          for i in $(seq 1 ${{ inputs.repeat }}); do
+          for i in $(seq 1 ${{ inputs.repeat || '3' }}); do
             echo "::group::round $i"
-            npx vitest run --project integration ${{ inputs.files }} || fails=$((fails+1))
+            npx vitest run --project integration ${{ inputs.files || 'tests/integration/cli/experiments.test.ts tests/integration/stress/stress-lab.test.ts tests/integration/robust/double-sigint.test.ts' }} || fails=$((fails+1))
             echo "::endgroup::"
           done
           echo "failed rounds: $fails"
