@@ -1,0 +1,53 @@
+# TEMPORARY (branch ci-macos-w9 only, never merged): macOS diagnostics.
+name: macOS debug
+on:
+  workflow_dispatch:
+    inputs:
+      files:
+        description: test files
+        default: tests/integration/cli/experiments.test.ts tests/integration/stress/stress-lab.test.ts tests/integration/robust/double-sigint.test.ts
+      repeat:
+        default: "3"
+      aa:
+        default: "8"
+permissions:
+  contents: read
+jobs:
+  dbg:
+    name: dbg (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+        node: ["22.19.x", "24.x"]
+    env:
+      CI: "true"
+      FORCE_COLOR: "0"
+      DOCKER_HOST: tcp://127.0.0.1:1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: sysctl -n machdep.cpu.brand_string hw.ncpu hw.perflevel0.logicalcpu hw.perflevel1.logicalcpu || true
+      - name: A/A debug
+        if: inputs.aa != '0'
+        run: node .github/debug/aa-debug.mjs ${{ inputs.aa }}
+        continue-on-error: true
+      - name: tests repeated
+        shell: bash
+        run: |
+          fails=0
+          for i in $(seq 1 ${{ inputs.repeat }}); do
+            echo "::group::round $i"
+            npx vitest run --project integration ${{ inputs.files }} || fails=$((fails+1))
+            echo "::endgroup::"
+          done
+          echo "failed rounds: $fails"
+          test $fails -eq 0
