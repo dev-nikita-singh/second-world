@@ -101,6 +101,24 @@ describe("synchronised retries (missing jitter)", () => {
     expect(r.reason).toMatch(/steady-state/);
   });
 
+  it("detects sharp constant-delay retries in a busy background (precise timers, 10 ms window)", () => {
+    // Linux/macOS: setTimeout(80) retries land within ~2 ms, i.e. in one 5 ms bin. A 20 ms window adds
+    // three bins of background to that peak (z ≈ 4.5 here: missed before wave 9).
+    const rng = createRng(102);
+    const chains = withRetries(poisson(10, 4000, 2), 3, () => 81 + rng.next() * 2);
+    const times = [...chains, ...poisson(40, 4000, 52)].sort((a, b) => a - b);
+    const r = detectSynchronizedRetries(times, poisson(10, 2000, 11));
+    expect(r.detected, JSON.stringify(r)).toBe(true);
+    expect(r.lagMs).toBeGreaterThanOrEqual(75);
+    expect(r.lagMs).toBeLessThanOrEqual(90);
+  });
+
+  it("the 10 ms window does not turn a slightly jittered 60 ms lattice into a finding", () => {
+    const rng = createRng(21);
+    const lattice = Array.from({ length: 330 }, (_, i) => i * 60 + (rng.next() - 0.5));
+    expect(detectSynchronizedRetries(lattice).detected).toBe(false);
+  });
+
   it("lag histogram counts pairs inside the lag range", () => {
     const h = lagHistogram([0, 20, 40, 2000], { binMs: 10, minLagMs: 10, maxLagMs: 100 });
     expect(h.pairs).toBe(3); // 20, 20, 40

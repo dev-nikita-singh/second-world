@@ -46,8 +46,10 @@ describe("safety.maxRps in VU models", () => {
     expect(ex.seen.length).toBeGreaterThanOrEqual(40);
     expect(res.limitations.map((l) => l.code)).toContain("PERF-THROTTLED-BY-SAFETY");
     expect(res.data?.totals.throttled).toBeGreaterThan(0);
-    // waiting for a token is not latency
-    expect(res.data?.latency.raw.p99).toBeLessThan(20);
+    // waiting for a token is not latency: counted, 10 VUs at 50/s would wait ~200 ms per request.
+    // p50, not p99: with ~55 samples p99 is the max, and one event-loop stall under a loaded parallel
+    // suite (a setImmediate "request" taking 25 ms) failed it on Linux.
+    expect(res.data?.latency.raw.p50).toBeLessThan(20);
   });
 
   it("iterations model: work completes at the cap", async () => {

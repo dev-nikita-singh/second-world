@@ -99,7 +99,10 @@ describe("ledger writes", () => {
         expect(() => JSON.parse(raw)).not.toThrow(); // never a half-written file
         reads++;
       } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+        // ENOENT: not written yet. EPERM/EACCES/EBUSY: Windows refuses to open a file while a writer's
+        // rename replaces it (the product's reader retries the same codes); neither is a torn file.
+        if (!["ENOENT", "EPERM", "EACCES", "EBUSY"].includes((e as NodeJS.ErrnoException).code ?? ""))
+          throw e;
       }
       await new Promise((r) => setTimeout(r, 2));
     }

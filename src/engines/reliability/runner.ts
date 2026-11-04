@@ -1144,7 +1144,7 @@ export async function executeReliability(
         amplification:
           "Dependency calls seen by the proxy ÷ client requests (affected routes), fault vs steady state; storm > 3x",
         jitter:
-          "Lag histogram (pairwise inter-arrival lags 10–1000 ms, 5 ms bins) of dependency calls = autocorrelation of the arrival process; 20 ms-window peak z ≥ 5 and ≥ 1.25x the p90 of all 20 ms-window sums (robust to timer-tick lattices), absent from the steady-state control",
+          "Lag histogram (pairwise inter-arrival lags 10–1000 ms, 5 ms bins) of dependency calls = autocorrelation of the arrival process; strongest 20 ms-window peak (or 10 ms-window peak for precise timers, when it is not a lattice) z ≥ 5 and ≥ 1.25x the p90 of all window sums of that width (robust to timer-tick lattices), absent from the steady-state control",
         breaker:
           "Second half of a sustained failure: calls per request ≤ 0.5× baseline → breaker; ≥ 0.8× with ≥ 50% client errors → no breaker",
         timeout:

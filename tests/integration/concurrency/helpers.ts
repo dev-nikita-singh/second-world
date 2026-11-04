@@ -1,5 +1,7 @@
 /** Spawning helpers for real-process concurrency tests (tests/integration/concurrency). */
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync, writeFileSync } from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execa, type ResultPromise } from "execa";
@@ -83,4 +85,76 @@ export function pidAlive(pid: number): boolean {
   } catch (e) {
     return (e as NodeJS.ErrnoException).code === "EPERM";
   }
+}
+
+export interface GatedProxy {
+  url: string;
+  /** Requests the proxy has seen. */
+  readonly seen: number;
+  close(): Promise<void>;
+}
+
+/**
+ * HTTP proxy in front of `target` that makes "the run is in flight" a fact instead of a timing guess:
+ * once it has forwarded `afterRequests` requests it creates `triggerFile` (for SW_TEST_SIGINT_WHEN_FILE)
+ * and from then on holds every further request for `holdMs` before forwarding it. A Ctrl+C sent after
+ * the trigger therefore always lands while the run still has requests outstanding, on fast and slow
+ * machines alike.
+ */
+export async function startGatedProxy(
+  target: string,
+  o: { afterRequests: number; triggerFile: string; holdMs: number },
+): Promise<GatedProxy> {
+  const up = new URL(target);
+  let seen = 0;
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const server = http.createServer((req, res) => {
+    seen++;
+    const forward = (): void => {
+      const preq = http.request(
+        {
+          host: up.hostname,
+          port: up.port,
+          method: req.method,
+          path: req.url,
+          headers: { ...req.headers, host: up.host },
+        },
+        (pres) => {
+          res.writeHead(pres.statusCode ?? 502, pres.headers);
+          pres.pipe(res);
+        },
+      );
+      preq.on("error", () => res.destroy());
+      req.pipe(preq);
+    };
+    if (seen <= o.afterRequests) {
+      if (seen === o.afterRequests) writeFileSync(o.triggerFile, "in flight\n");
+      forward();
+      return;
+    }
+    req.pause();
+    const t = setTimeout(() => {
+      timers.delete(t);
+      req.resume();
+      forward();
+    }, o.holdMs);
+    timers.add(t);
+    res.on("close", () => {
+      clearTimeout(t);
+      timers.delete(t);
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    get seen() {
+      return seen;
+    },
+    async close() {
+      for (const t of timers) clearTimeout(t);
+      server.closeAllConnections();
+      await new Promise<void>((r) => server.close(() => r()));
+    },
+  };
 }

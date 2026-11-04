@@ -4,6 +4,7 @@
  * This proves the fixture is valid ground truth for the engines.
  */
 import { readFileSync } from "node:fs";
+import { connect, type Socket } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { type RunningExample, startExample } from "../../helpers/examples.js";
 import { api } from "../../helpers/http.js";
@@ -114,15 +115,22 @@ describe("shop-express seeded defects are reproducible", () => {
   });
 
   it("sync-crypto-login: concurrent logins block unrelated requests", async () => {
-    const base = await api(shop.url, "GET", "/healthz");
-    const logins = Array.from({ length: 8 }, () =>
-      api(shop.url, "POST", "/auth/login", { body: { username: "bob", password: "bob-pass" } }),
+    // Relative to measured work, not a fixed +60 ms (pbkdf2 is ~20 ms on a fast Linux box, ~50 ms on a
+    // slow one). Raw sockets make the arrival order deterministic: fetch's pool opened new connections
+    // for the logins while /healthz reused an idle one, so /healthz sometimes overtook every login.
+    const LOGIN = JSON.stringify({ username: "bob", password: "bob-pass" });
+    const baseMs = Math.min(...(await rawBurst(shop.url, [null, null, null])));
+    const loginWorkMs =
+      Math.min(...(await seq(3, async () => (await rawBurst(shop.url, [LOGIN]))[0] as number))) - baseMs;
+    // 8 logins written first, then /healthz on its own connection, all in one synchronous burst.
+    const burst = await rawBurst(shop.url, [...Array.from({ length: 8 }, () => LOGIN), null]);
+    const healthMs = burst[8] as number;
+    // A non-blocking server answers /healthz in ~baseMs. With pbkdf2Sync the 8 logins run back to
+    // back on the event loop ahead of it, so /healthz waits for (almost) all of them.
+    expect(loginWorkMs).toBeGreaterThan(1);
+    expect(healthMs - baseMs, `login work ${loginWorkMs.toFixed(1)} ms`).toBeGreaterThan(
+      0.5 * 8 * loginWorkMs,
     );
-    await new Promise((r) => setImmediate(r));
-    const health = api(shop.url, "GET", "/healthz");
-    const [h] = await Promise.all([health, ...logins]);
-    // 8 × ~15–50 ms pbkdf2Sync serialised on the event loop.
-    expect(h.ms).toBeGreaterThan(base.ms + 60);
     reproduced.add("sync-crypto-login");
   });
 
@@ -236,3 +244,51 @@ describe("shop-express seeded defects are reproducible", () => {
     expect([...reproduced].sort()).toEqual(expected.defects.map((d) => d.id).sort());
   });
 });
+
+async function seq<T>(n: number, f: () => Promise<T>): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < n; i++) out.push(await f());
+  return out;
+}
+
+/**
+ * Opens one connection per entry (null = GET /healthz, string = POST /auth/login with that JSON body),
+ * waits until the server has accepted them all, then writes every request in one synchronous burst in
+ * array order. Resolves each request's latency (write → response fully received) in ms.
+ */
+async function rawBurst(baseUrl: string, entries: (string | null)[]): Promise<number[]> {
+  const { hostname, port } = new URL(baseUrl);
+  const socks = await Promise.all(
+    entries.map(
+      () =>
+        new Promise<Socket>((resolve, reject) => {
+          const s = connect({ host: hostname, port: Number(port) }, () => resolve(s));
+          s.once("error", reject);
+        }),
+    ),
+  );
+  await new Promise((r) => setTimeout(r, 30)); // the server accepts every connection first
+  const done = socks.map((s) => {
+    const t0 = { v: 0 };
+    const p = new Promise<number>((resolve, reject) => {
+      s.on("data", () => undefined);
+      s.once("end", () => resolve(performance.now() - t0.v));
+      s.once("error", reject);
+    });
+    return { s, t0, p };
+  });
+  entries.forEach((body, i) => {
+    const d = done[i] as (typeof done)[number];
+    const head =
+      body === null
+        ? "GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"
+        : `POST /auth/login HTTP/1.1\r\nHost: x\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;
+    d.t0.v = performance.now();
+    d.s.write(head);
+  });
+  try {
+    return await Promise.all(done.map((d) => d.p));
+  } finally {
+    for (const s of socks) s.destroy();
+  }
+}

@@ -47,8 +47,11 @@ export async function runClosed(opts: ClosedSchedulerOptions): Promise<ClosedSch
 
   const vu = async (i: number): Promise<void> => {
     const startAt = t0 + (opts.startOffset ? opts.startOffset(i) : vuStartOffset(i, opts.vus, opts.rampUpMs));
-    const wait = startAt - clock.now();
-    if (wait > 0) {
+    // Timers may fire early relative to the monotonic clock (libuv's loop time is ms-truncated and
+    // cached: on Linux setTimeout wakes up to ~1.5 ms before performance.now() reaches the deadline).
+    // A VU must never start before its scheduled instant: with a shared future t0 (worker shards)
+    // an early first iteration would land before warmupEnd and be silently classed as warmup.
+    for (let wait = startAt - clock.now(); wait > 0; wait = startAt - clock.now()) {
       try {
         await clock.sleep(wait, signal);
       } catch {

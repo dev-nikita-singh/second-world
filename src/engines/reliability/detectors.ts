@@ -352,21 +352,37 @@ export interface SyncRetryResult {
 }
 
 /**
- * Strongest 4-bin (20 ms) peak vs a high-quantile background. The background is the 90th percentile of all
- * 4-bin sums, not the median: timer quantisation (≈15.6 ms ticks on Windows) makes setTimeout-driven
- * retries arrive on a lattice, which produces a peak at EVERY tick multiple. Those repeated peaks set
- * the p90, while synchronised retries add a few isolated peaks (lags D, 2D, 3D) that stand above it.
+ * Peak window widths (bins). 4 bins (20 ms at 5 ms bins): on Windows a constant retry delay is smeared
+ * by up to one ≈15.6 ms timer tick. 2 bins (10 ms): with precise timers (Linux, macOS) the same retries
+ * land in a single 5 ms bin, and a 20 ms window would add three bins of background noise to that sharp
+ * peak (z ≈ 4.6 instead of ≈ 10 for the same arrivals). The strongest scale wins, but the narrow scale
+ * only counts when it shows few separate significant peaks (≤ NARROW_MAX_PEAKS): constant retries give
+ * peaks at D, 2D, 3D, …, while a lattice (periodic arrivals) gives one at every multiple of its period;
+ * the 20 ms scale keeps its own lattice robustness (peaks then fill > 10% of the windows).
  */
-function strongestPeak(h: LagHistogram): {
+const NARROW_WIDTH = 2;
+const WIDE_WIDTH = 4;
+const NARROW_MAX_PEAKS = 5;
+
+interface Peak {
   idx: number;
+  /** Window width in bins. */
+  width: number;
   peak: number;
   background: number;
   z: number;
   ratio: number;
-} {
+}
+
+/**
+ * Strongest W-bin peak vs a high-quantile background, for one window width. The background is the
+ * 90th percentile of all W-bin sums, not the median: timer quantisation (≈15.6 ms ticks on Windows)
+ * makes setTimeout-driven retries arrive on a lattice, which produces a peak at EVERY tick multiple.
+ * Those repeated peaks set the p90, while synchronised retries add a few isolated peaks (lags D, 2D,
+ * 3D) that stand above it.
+ */
+function peakAt(h: LagHistogram, W: number, zMin = Number.POSITIVE_INFINITY): Peak & { clusters: number } {
   const c = h.counts;
-  // Peak window = 4 bins (20 ms at 5 ms bins): a constant retry delay is smeared by up to one timer tick.
-  const W = 4;
   const sums: number[] = [];
   for (let i = 0; i + W <= c.length; i++) {
     let v = 0;
@@ -378,19 +394,33 @@ function strongestPeak(h: LagHistogram): {
     ? (sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))] as number)
     : 0;
   const bg = Math.max(p90, 0.5);
-  let best = { idx: -1, peak: 0, background: bg, z: 0, ratio: 0 };
+  let best: Peak = { idx: -1, width: W, peak: 0, background: bg, z: 0, ratio: 0 };
+  // Separate runs of windows at or above the detection threshold (z ≥ zMin).
+  const thr = bg + zMin * Math.sqrt(bg + 1);
+  let clusters = 0;
+  let inRun = false;
   for (let i = 0; i < sums.length; i++) {
     const p = sums[i] as number;
+    if (p >= thr && !inRun) clusters++;
+    inRun = p >= thr;
     if (p > best.peak)
-      best = { idx: i, peak: p, background: bg, z: (p - bg) / Math.sqrt(bg + 1), ratio: p / bg };
+      best = { idx: i, width: W, peak: p, background: bg, z: (p - bg) / Math.sqrt(bg + 1), ratio: p / bg };
   }
+  return { ...best, clusters };
+}
+
+/** Strongest peak: the 20 ms scale, or the 10 ms scale when it is stronger and not a lattice. */
+function strongestPeak(h: LagHistogram, zMin: number): Peak {
+  const wide = peakAt(h, WIDE_WIDTH);
+  const narrow = peakAt(h, NARROW_WIDTH, zMin);
+  const { clusters: _c, ...best } = narrow.z > wide.z && narrow.clusters <= NARROW_MAX_PEAKS ? narrow : wide;
   return best;
 }
 
 /**
  * Detects synchronised retries (no jitter) from dependency arrival times during the fault.
- * Detected when the strongest lag peak has z ≥ zMin (default 5) and ≥ ratioMin× (1.25) the background
- * (p90 of 4-bin sums, see strongestPeak) and ≥ minPeak pairs, and the control (steady-state) arrivals show no comparable peak at
+ * Detected when the strongest lag peak (10 or 20 ms window, see NARROW_WIDTH) has z ≥ zMin (default 5)
+ * and ≥ ratioMin× (1.25) the background (p90 of the window sums, see peakAt) and ≥ minPeak pairs, and the control (steady-state) arrivals show no comparable peak at
  * the same lag (workload periodicity). The background grows with rate², so the ratio stays modest at high
  * traffic while z grows; z is the primary criterion.
  */
@@ -410,16 +440,16 @@ export function detectSynchronizedRetries(
   const ratioMin = opts.ratioMin ?? 1.25;
   const minPeak = opts.minPeak ?? 8;
   const h = lagHistogram(faultArrivals, opts);
-  const p = strongestPeak(h);
-  const lagMs = p.idx >= 0 ? h.minLagMs + (p.idx + 2) * h.binMs : null;
+  const p = strongestPeak(h, zMin);
+  const lagMs = p.idx >= 0 ? h.minLagMs + (p.idx + p.width / 2) * h.binMs : null;
   // Control: the same statistic at the SAME lag on steady-state arrivals (workload periodicity check).
   let controlZ: number | null = null;
   let controlExcess = 0;
   if (controlArrivals && controlArrivals.length >= 10 && p.idx >= 0) {
     const hc = lagHistogram(controlArrivals, opts);
     let at = 0;
-    for (let k = 0; k < 4; k++) at += hc.counts[p.idx + k] ?? 0;
-    const bgc = strongestPeak(hc).background;
+    for (let k = 0; k < p.width; k++) at += hc.counts[p.idx + k] ?? 0;
+    const bgc = peakAt(hc, p.width).background;
     controlZ = (at - bgc) / Math.sqrt(bgc + 1);
     // excess pairs per arrival (scale-free: the control window is usually shorter than the fault)
     controlExcess = (at - bgc) / controlArrivals.length;

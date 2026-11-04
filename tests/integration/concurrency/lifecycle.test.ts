@@ -11,7 +11,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { type CalibratedServer, startCalibratedServer } from "../../fixtures/servers/calibrated.js";
 import { REPO_ROOT } from "../../helpers/cli.js";
 import { makeTmpDir, type TmpDir } from "../../helpers/tmp.js";
-import { LEFTOVER, sw, walk } from "./helpers.js";
+import { LEFTOVER, startGatedProxy, sw, walk } from "./helpers.js";
 
 let srv: CalibratedServer;
 let shop: { url: string; close(): Promise<void> };
@@ -132,11 +132,22 @@ describe("Ctrl+C during a run", () => {
 
   it("bugs: exit 130, artifacts dir not left as pending-*, no leftovers", async () => {
     const CONTRACT = path.join(REPO_ROOT, "examples", "shop-express", "openapi.yaml");
-    const r = await sw(["bugs", "--target", shop.url, "--openapi", CONTRACT, "-f", "json", "-o", "out"], {
-      cwd: tmp.path,
-      env: env({ SW_TEST_SIGINT_AFTER_MS: "2500" }),
-      timeoutMs: 90_000,
-    });
+    // A fixed delay raced the run (a fast Linux box finished `bugs` before 2.5 s). Instead, Ctrl+C is
+    // sent shortly after the target has seen 15 requests, and every later request is held for 3 s,
+    // so the run is guaranteed to be in flight (requests outstanding) when the signal arrives.
+    const trigger = path.join(userCfg.path, `sigint-${Date.now()}`);
+    const proxy = await startGatedProxy(shop.url, { afterRequests: 15, triggerFile: trigger, holdMs: 3000 });
+    let r: Awaited<ReturnType<typeof sw>>;
+    try {
+      r = await sw(["bugs", "--target", proxy.url, "--openapi", CONTRACT, "-f", "json", "-o", "out"], {
+        cwd: tmp.path,
+        env: env({ SW_TEST_SIGINT_WHEN_FILE: trigger, SW_TEST_SIGINT_DELAY_MS: "100" }),
+        timeoutMs: 90_000,
+      });
+    } finally {
+      await proxy.close();
+    }
+    expect(proxy.seen).toBeGreaterThan(15);
     expect([130], r.stderr.slice(-1500)).toContain(r.exitCode);
     expect(r.mainReturned && !r.timedOut).toBe(true);
     expect(leftovers()).toEqual([]);
