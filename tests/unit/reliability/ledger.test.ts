@@ -104,7 +104,10 @@ describe("ledger writes", () => {
         if (!["ENOENT", "EPERM", "EACCES", "EBUSY"].includes((e as NodeJS.ErrnoException).code ?? ""))
           throw e;
       }
-      await new Promise((r) => setTimeout(r, 2));
+      // 25 ms, not 2: on Windows a rename cannot replace a file that is open, and a reader re-opening it every
+      // 2 ms (and once in 8 runs at 10 ms) starved the writers past their 5 s retry budget. Product readers read once (cleanup),
+      // never in a loop, so they cannot starve writers; 25 ms still samples the file many times per run.
+      await new Promise((r) => setTimeout(r, 25));
     }
     const results = await all;
     for (const r of results) {

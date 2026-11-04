@@ -148,6 +148,11 @@ jobs:
           npm pack --pack-destination "$RUNNER_TEMP"
           echo "tgz=$(ls "$RUNNER_TEMP"/second-world-*.tgz)" >> "$GITHUB_OUTPUT"
           mkdir -p "$RUNNER_TEMP/action-project"
+          # The recommended setup: second-world as a devDependency of the project, next to typescript
+          # (an optional peer that `sw inspect` needs). The action then runs the project's own `sw`.
+          cd "$RUNNER_TEMP/action-project"
+          npm init -y > /dev/null
+          npm i -D "$(ls "$RUNNER_TEMP"/second-world-*.tgz)" typescript@6 > /dev/null
       - name: Run the action (static inspect of an example app, no network)
         id: sw
         uses: ./
@@ -166,5 +171,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "exit-code=$CODE report-dir=$DIR"
-          test -n "$CODE"
+          # 0 = clean, 1 = findings at/above --fail-on (orders-jobs-api has planted defects); anything else is a failure.
+          case "$CODE" in 0|1) ;; *) echo "unexpected exit code '$CODE'"; exit 1 ;; esac
           test -f "$DIR/report.json"
+          test -f "$DIR/report.sarif"

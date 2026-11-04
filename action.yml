@@ -81,7 +81,9 @@ runs:
         SW_IN_OUT: ${{ inputs.out-dir }}
         SW_IN_PACKAGE: ${{ inputs.package }}
       run: |
-        set -uo pipefail
+        # GitHub runs `bash -e`: a non-zero sw exit must not end the step before the outputs are written
+        # (exit-code, report-dir, sarif-file) and the SARIF upload runs. The exit code is re-raised below.
+        set +e -uo pipefail
         # Native absolute path (on Windows runners `pwd` would give /d/a/... which JS actions cannot read).
         out="$(node -e 'const d=require("node:path").resolve(process.argv[1]);require("node:fs").mkdirSync(d,{recursive:true});console.log(d)' "$SW_IN_OUT")" || exit 1
         # Inputs are split on whitespace into an argv array; nothing goes through a shell eval.

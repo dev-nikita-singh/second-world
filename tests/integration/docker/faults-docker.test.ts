@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { execa } from "execa";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   cleanupAll,
   type LedgerEntry,
@@ -113,6 +113,14 @@ describe.skipIf(!dockerAvailable)("LIVE docker fault injector", () => {
     if (dir) rmSync(dir, { recursive: true, force: true });
   }, 120_000);
 
+  // A failed assertion must not leave the shared container paused/stopped/disconnected for the next test
+  // (on podman one Docker-specific expectation once cascaded into four failures). All no-ops when fine.
+  afterEach(async () => {
+    await docker(["unpause", NAME]);
+    await docker(["start", NAME]);
+    await docker(["network", "connect", NET, NAME]);
+  }, 60_000);
+
   it("capabilities: available, container faults only", async () => {
     const caps = await new DockerInjector({ ledgerPath: ledger, watchdog: false }).capabilities();
     expect(caps).toMatchObject({ available: true, faults: ["container"] });
@@ -121,7 +129,8 @@ describe.skipIf(!dockerAvailable)("LIVE docker fault injector", () => {
   it("pause: requests hang while paused, answered after revert; ledger tracks it", async () => {
     const inj = new DockerInjector({ ledgerPath: ledger, watchdog: false });
     const f = await inj.apply({ type: "container", action: "pause", container: NAME });
-    expect(await state()).toEqual({ running: true, paused: true });
+    // Only .State.Paused: Docker reports a paused container as Running=true, Podman as Running=false.
+    expect((await state()).paused).toBe(true);
     expect(readLedger(ledger).map((e) => e.id)).toEqual([f.id]);
     expect(await get(1000)).toBeNull();
     await f.revert();

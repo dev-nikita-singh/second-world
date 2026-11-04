@@ -62,7 +62,9 @@ describe("sw history export --to jsonl", () => {
     writeFileSync(tmp.join("sw.config.json"), `${JSON.stringify({ history: { backend: "jsonl" } })}\n`);
     const list = await runCli(["history", "list", "--json"], { cwd: tmp.path, env });
     expect(list.exitCode, list.stderr).toBe(0);
-    expect(new Set((JSON.parse(list.stdout) as { id: string }[]).map((x) => x.id))).toEqual(new Set([a.id, b.id]));
+    expect(new Set((JSON.parse(list.stdout) as { id: string }[]).map((x) => x.id))).toEqual(
+      new Set([a.id, b.id]),
+    );
     const show = await runCli(["history", "show", "baseline:main"], { cwd: tmp.path, env });
     expect(show.exitCode, show.stderr).toBe(0);
     const v = await runCli(["history", "verify", "--json"], { cwd: tmp.path, env });

@@ -31,7 +31,8 @@ const PID_LABEL = `io.second-world.pid=${process.pid}`;
 const SERVER = `import http from "node:http";
 import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
-const inContainer = existsSync("/.dockerenv");
+// /.dockerenv (Docker) or /run/.containerenv (Podman), the same check as src/core/probe.
+const inContainer = existsSync("/.dockerenv") || existsSync("/run/.containerenv");
 const { delayMs } = JSON.parse(readFileSync(new URL("./delay.json", import.meta.url), "utf8"));
 const server = http.createServer((req, res) => {
   if (req.url === "/healthz") { res.statusCode = inContainer ? 200 : 503; res.end(inContainer ? "ok " + os.hostname() : "not in a container"); return; }
@@ -42,7 +43,7 @@ server.listen(Number(process.env.PORT ?? 0), process.env.HOST ?? "127.0.0.1");
 `;
 
 const TEST = `import { existsSync } from "node:fs";
-if (!existsSync("/.dockerenv")) { console.error("tests must run inside the docker sandbox"); process.exit(1); }
+if (!existsSync("/.dockerenv") && !existsSync("/run/.containerenv")) { console.error("tests must run inside the docker sandbox"); process.exit(1); }
 console.log("unit tests passed in container", process.platform, process.arch);
 `;
 
