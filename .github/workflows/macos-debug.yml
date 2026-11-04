@@ -39,20 +39,13 @@ jobs:
       - run: npm ci
       - run: sysctl -n machdep.cpu.brand_string hw.ncpu hw.perflevel0.logicalcpu hw.perflevel1.logicalcpu || true
       - name: A/A debug
-        run: node .github/debug/aa-debug.mjs ${{ inputs.aa || '8' }}
+        run: node .github/debug/aa-debug.mjs ${{ inputs.aa || '4' }}
         continue-on-error: true
-      - name: A/A debug under CPU load (2 busy loops)
-        shell: bash
-        run: |
-          node -e 'for(;;){}' & b1=$!
-          node -e 'for(;;){}' & b2=$!
-          node .github/debug/aa-debug.mjs ${{ inputs.aa || '8' }} || true
-          kill $b1 $b2
       - name: tests repeated
         shell: bash
         run: |
           fails=0
-          for i in $(seq 1 ${{ inputs.repeat || '1' }}); do
+          for i in $(seq 1 ${{ inputs.repeat || '0' }}); do
             echo "::group::round $i"
             npx vitest run --project integration ${{ inputs.files || 'tests/integration/cli/experiments.test.ts tests/integration/stress/stress-lab.test.ts tests/integration/robust/double-sigint.test.ts' }} || fails=$((fails+1))
             echo "::endgroup::"

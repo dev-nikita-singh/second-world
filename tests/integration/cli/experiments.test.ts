@@ -14,7 +14,7 @@ import { REPO_ROOT, runCli } from "../../helpers/cli.js";
 const env = { SW_USER_CONFIG_DIR: join(tmpdir(), "sw-no-user-config") };
 
 describe("sw whatif --aa (subprocess)", () => {
-  it("A/A on the tiny server: exit 0, no significant change", async () => {
+  it("A/A on the tiny server: exit 0, or exit 1 with the AA-difference limitation", async () => {
     const dir = mkdtempSync(join(tmpdir(), "sw-whatif-cli-"));
     mkdirSync(join(dir, ".git"));
     writeFileSync(
@@ -43,20 +43,36 @@ describe("sw whatif --aa (subprocess)", () => {
         timeoutMs: 120_000,
       },
     );
-    expect(r.exitCode, `${r.stderr.slice(-1500)}\n${aaSummary(r.stdout)}`).toBe(0);
+    const why = `${r.stderr.slice(-1500)}\n${aaSummary(r.stdout)}`;
+    expect([0, 1], why).toContain(r.exitCode);
     const res = JSON.parse(r.stdout).results[0];
     expect(res.engine).toBe("whatif");
     expect(res.data.mode).toBe("aa");
     const verdicts = (res.data.comparisons as Array<{ verdict: string }>).map((c) => c.verdict);
     expect(verdicts.length).toBeGreaterThan(0);
-    expect(
-      verdicts.every((v) => v === "no-significant-change" || v === "inconclusive"),
-      verdicts.join(","),
-    ).toBe(true);
-    // The A/A guarantee is "never improved/regressed against itself" (above). Whether 5 × 800 ms runs are
-    // precise enough to also show equivalence depends on the machine: on shared macOS CI runners both metrics
-    // were honestly "inconclusive". tests/integration/experiments/whatif-shop.test.ts checks the equivalence
-    // bounds whenever equivalence is shown.
+    const differs = verdicts.some((v) => v === "improved" || v === "regressed");
+    const aaLimitation = (res.limitations as Array<{ code: string; impact: string }>).find(
+      (l) => l.code === "WHATIF-AA-DIFFERENCE",
+    );
+    // An A/A run tests the ENVIRONMENT: identical arms are compared at alpha 0.05 (Holm), so a significant
+    // difference is a legitimate, reported outcome, not a bug. It is rare on a quiet machine (32/32 standalone
+    // runs on macOS CI runners were clean) but happened under the full parallel suite on 3-vCPU macOS
+    // runners, where run-to-run noise is not exchangeable. What must always hold is the contract: exit 0
+    // when no verdict is improved/regressed; otherwise exit 1, status "failed" and the invalidating
+    // WHATIF-AA-DIFFERENCE limitation that tells the user the environment is too unstable for comparisons.
+    if (differs) {
+      expect(r.exitCode, why).toBe(1);
+      expect(res.status).toBe("failed");
+      expect(aaLimitation?.impact).toBe("invalidates");
+    } else {
+      expect(r.exitCode, why).toBe(0);
+      expect(res.status).toBe("passed");
+      expect(aaLimitation).toBeUndefined();
+      expect(verdicts.every((v) => v === "no-significant-change" || v === "inconclusive")).toBe(true);
+    }
+    // Whether 5 x 800 ms runs are precise enough to also show equivalence depends on the machine: on shared
+    // macOS CI runners both metrics were honestly "inconclusive". tests/integration/experiments/whatif-shop.test.ts
+    // checks the equivalence bounds whenever equivalence is shown.
     const list = await runCli(["history", "list", "--json"], { cwd: dir, env });
     expect(JSON.parse(list.stdout)[0]).toMatchObject({ label: "whatif" });
   }, 130_000);
@@ -127,8 +143,11 @@ describe("sw evolve --sandbox process --yes (subprocess, temp git repo)", () => 
         `"${process.execPath}" test.mjs`,
         "--health",
         "/healthz",
+        // 7, not 5: with 3 metrics x 2 benchmarked candidates Holm needs p < 0.05/6 at its first step, and
+        // 5 vs 5 runs reach only p = 0.0079 with complete separation; one stalled run on a loaded runner made
+        // fix/fast's p95 gain "inconclusive" (counted as 0), so fix/slower tied it on the front (macOS CI).
         "--repetitions",
-        "5",
+        "7",
         "--sandbox",
         "process",
         "--json",
