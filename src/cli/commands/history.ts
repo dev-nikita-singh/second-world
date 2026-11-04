@@ -1,11 +1,11 @@
 /**
- * `sw history list|show|diff|baseline|trend|verify|prune`. See docs/09-cli-and-api.md §1 and
- * docs/03-engines/evidence-and-history.md. Store: src/engines/history (JSONL, hash-checked reports).
+ * `sw history list|show|diff|baseline|trend|verify|prune|export`. See docs/09-cli-and-api.md §1 and
+ * docs/03-engines/evidence-and-history.md. Store: src/engines/history (JSONL or SQLite, hash-checked reports).
  * Exit codes: 0 ok; 1 when `diff` finds regressions or `verify` finds a corrupted history or a broken
  * audit-log hash chain (docs/11 §3); 2 unknown run / bad args.
  */
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { ExitCode, SecondWorldError } from "../../core/errors.js";
 import { type AuditVerifyResult, verifyAuditLog } from "../../core/safety/guard.js";
 import type { World } from "../../core/world.js";
@@ -314,4 +314,43 @@ export async function historyPrune(
     }
     process.exitCode = 0;
   });
+}
+
+/** `sw history export --to jsonl`: copy SQLite history into the JSONL files (to switch `history.backend` back). */
+export async function historyExport(o: { to?: string; json?: boolean }, g: GlobalOptions): Promise<void> {
+  const to = o.to ?? "jsonl";
+  if (to !== "jsonl")
+    throw new SecondWorldError(
+      "SW_CLI_BAD_ARG",
+      `--to ${to}: only "jsonl" is supported`,
+      ExitCode.ConfigInvalid,
+    );
+  const world = await worldFromGlobals(g);
+  try {
+    const dir = resolve(world.config.cwd, world.config.config.history.dir);
+    if (!existsSync(join(dir, "history.db")))
+      throw new SecondWorldError(
+        "SW_HISTORY_NO_SQLITE",
+        `no SQLite history at ${join(dir, "history.db")}`,
+        ExitCode.ConfigInvalid,
+        {
+          hint: "nothing to export: this project has no history.db (history.backend was never sqlite)",
+        },
+      );
+    if (g.dryRun) {
+      out(`(dry run) would export ${join(dir, "history.db")} to ${join(dir, "runs.jsonl")}`);
+      process.exitCode = 0;
+      return;
+    }
+    const { exportHistoryToJsonl } = await import("../../engines/history/index.js");
+    const r = await exportHistoryToJsonl({ dir });
+    if (o.json) out(JSON.stringify({ ...r, dir }, null, 2));
+    else
+      out(
+        `exported ${r.exported} run(s) and ${r.baselines} baseline(s) to ${join(dir, "runs.jsonl")}; set history.backend: "jsonl" to use them`,
+      );
+    process.exitCode = 0;
+  } finally {
+    await world.close();
+  }
 }

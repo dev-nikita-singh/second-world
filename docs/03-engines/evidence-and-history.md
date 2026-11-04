@@ -142,8 +142,8 @@ Enable it in the config: `history: { backend: "sqlite" }`. Implementation: `src/
   JSONL files are never modified, so switching back is always possible.
 - **Going back to JSONL.** Set `history.backend: "jsonl"`. The JSONL history then shows the runs it had before
   the switch; runs recorded while on SQLite stay in `history.db` (and show again if you switch back). To copy
-  them into the JSONL files, call `exportSqliteHistoryToJsonl({ cwd })` from
-  `src/engines/history/sqlite-store.ts` (idempotent; report bytes verbatim). There is no CLI command for it in 0.x.
+  them into the JSONL files first, run `sw history export --to jsonl` (or `exportHistoryToJsonl({ dir })` from the
+  history engine; idempotent; report bytes verbatim, so `verify` passes on the JSONL side).
 - **verify.** `sw history verify` on SQLite runs `PRAGMA quick_check` (problem `db-integrity`) and then the same
   per-run checks as JSONL: unreadable index record (`corrupt-index-line`), `missing-report`,
   `checksum-mismatch`, `unreadable-report`, `id-mismatch`, `baseline-missing-run`. The audit-log hash-chain check

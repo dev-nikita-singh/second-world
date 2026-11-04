@@ -186,7 +186,7 @@ Global flags go **before** the command (`sw --yes bugs …`, `sw --dry-run perf`
 | `sw report [reports...] [--last] [--run <id>]` | Combine and/or re-render earlier `report.json` files and history runs into any format (`-f`, `-o`); verdict recomputed at `--fail-on`. No network |
 | `sw run <workflow>` / `sw run --list` | Run a config workflow (`workflows.<name>`: a DAG of engine steps) as one run: one combined report, one history entry; `--dry-run` validates every step |
 | `sw plugins list\|check [--json]` | Plugins from the config (`plugins: [...]`): what they contribute, and whether they load (exit 2 if a required one is broken) |
-| `sw history list\|show\|diff\|baseline\|trend\|verify\|prune` | Run history: list, show, compare (`id[,id…]`, `last:N`, `label:<name>[:N]`, `baseline:<name>`; statistics with ≥ 5 runs per side), named baselines, trends, integrity check, retention |
+| `sw history list\|show\|diff\|baseline\|trend\|verify\|prune\|export` | Run history: list, show, compare (`id[,id…]`, `last:N`, `label:<name>[:N]`, `baseline:<name>`; statistics with ≥ 5 runs per side), named baselines, trends, integrity check, retention, `export --to jsonl` (copy SQLite history back to JSONL) |
 
 Global flags: `-c/--config`, `-p/--profile`, `--set key=value`, `-f/--format`, `-o/--out`, `--fail-on`,
 `--seed`, `--label`, `--yes`, `--approve-disruptive`, `--dry-run`, `--no-color`, `--quiet`, `--verbose`,

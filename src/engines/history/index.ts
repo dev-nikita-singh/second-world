@@ -179,3 +179,16 @@ export const historyEngine = {
   migrateRun,
   PRIMARY_METRICS,
 };
+
+/**
+ * Going back from `history.backend: "sqlite"` to JSONL: copies every SQLite run (report bytes unchanged,
+ * so checksums stay valid) and baseline that the JSONL files do not have yet. Idempotent. node:sqlite is
+ * loaded lazily, like the store itself. Run it while no other process writes history.
+ */
+export async function exportHistoryToJsonl(opts: {
+  cwd?: string;
+  dir?: string;
+}): Promise<{ exported: number; baselines: number }> {
+  const m = await import("./sqlite-store.js");
+  return m.exportSqliteHistoryToJsonl(opts);
+}

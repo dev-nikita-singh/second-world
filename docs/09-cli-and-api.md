@@ -69,7 +69,7 @@ Global flags go before or after the command (`sw --dry-run bugs …` or `sw bugs
 | `sw analyze [reports...]` | Deterministic summary across earlier reports |
 | `sw report [reports...]` | Combine and/or re-render earlier reports (files, history runs) in any format |
 | `sw run <workflow>` | Run a workflow from the config (a DAG of engine steps); `sw run --list` lists them |
-| `sw history list\|show\|diff\|baseline\|trend\|verify\|prune` | Experiment History |
+| `sw history list\|show\|diff\|baseline\|trend\|verify\|prune\|export` | Experiment History |
 | `sw plugins list\|check` | Plugins from the config (docs/10) |
 
 Engine commands that produce a report (perf, stress, inspect, bugs, agent, reliability run,
@@ -462,6 +462,7 @@ $ sw run nightly -f json,junit
 | `sw history trend` | Metric trend with anomaly / change-point detection; `--metric <name>` (default `p95`, or e.g. `performance.http.p95`), `--endpoint <ep>` (e.g. `'GET /api/products'`), `--limit <n>`, `--json` |
 | `sw history verify` | Verify report hashes and index integrity (exit 1 if corrupted); `--json` |
 | `sw history prune` | Retention: keep the newest N runs; `--keep <n>` (default 50), `--no-compact` (remove pruned runs entirely instead of keeping their summary), `--json` |
+| `sw history export` | Copy SQLite history (`history.db`) into the JSONL files so `history.backend` can go back to `jsonl`; `--to jsonl` (the only target), `--json`, `--dry-run`. Idempotent; exit 2 if there is no `history.db`. Run it while no other process writes history |
 
 ### `sw plugins`
 

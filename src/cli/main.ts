@@ -483,7 +483,9 @@ export function buildProgram(): Command {
       return runCommand(name, o, cmd.optsWithGlobals<GlobalOptions>());
     });
 
-  const history = program.command("history").description("experiment history: list, compare, trend, verify");
+  const history = program
+    .command("history")
+    .description("experiment history: list, compare, trend, verify, export");
   const hist = () => import("./commands/history.js");
   history
     .command("list")
@@ -546,6 +548,12 @@ export function buildProgram(): Command {
     .option("--no-compact", "remove pruned runs entirely instead of keeping their summary")
     .option("--json", "JSON output")
     .action(async (o, cmd: Command) => (await hist()).historyPrune(o, cmd.optsWithGlobals<GlobalOptions>()));
+  history
+    .command("export")
+    .description("copy SQLite history into the JSONL files (to switch history.backend back to jsonl)")
+    .option("--to <backend>", "target backend (only jsonl)", "jsonl")
+    .option("--json", "JSON output")
+    .action(async (o, cmd: Command) => (await hist()).historyExport(o, cmd.optsWithGlobals<GlobalOptions>()));
 
   const plugins = program.command("plugins").description("plugins from the config: list, check (docs/10)");
   plugins
