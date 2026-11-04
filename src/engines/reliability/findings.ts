@@ -171,7 +171,9 @@ export function buildFindings(
     ev.push(faultNote);
     const rec = last.recovery?.recovered
       ? `recovered in ${((last.recovery.recoveryMs ?? 0) / 1000).toFixed(1)} s`
-      : "no recovery observed";
+      : last.recovery?.degradedAtEnd === false
+        ? "recovery not confirmed (recovery phase too short)"
+        : "no recovery observed";
     findings.push(
       createFinding(
         {

@@ -32,8 +32,29 @@ All notable changes to SECOND WORLD are documented here. The format follows
 - `report.formats` and `history.backend` accept plugin ids (`namespace/name`) (28c6501).
 - GitHub Actions in the workflows and `action.yml` are pinned to commit SHAs (0d02d76).
 
+### Security
+
+- `sw replay`: the "only load invariant modules inside the project" check compared paths without resolving
+  symlinks, so a symlink inside the project pointing outside it passed and its code could be imported. Paths are
+  now compared as real paths (this also fixes a false "outside the project" on macOS, where `/var` links to
+  `/private/var`).
+
 ### Fixed
 
+- Performance Lab with `workers > 1` could count a VU's first iteration as warmup (timers fire up to ~1.5 ms
+  early on Linux), under-reporting requests (100 of 101). VUs now never start before their scheduled instant.
+- Reliability: the jitter detector missed constant-delay retries with precise timers (Linux/macOS); it now also
+  scores a 10 ms window, guarded against periodic lattices.
+- Reliability: `no-circuit-breaker` could be missed on slow machines; the late-fault client outcome now counts
+  only requests answered before the revert (in-flight ones were answered by the restored dependency).
+- Reliability: a recovery phase too short to confirm recovery no longer reports a false "No recovery within N s";
+  `slow-recovery` needs the app to still be out of bounds at the end, otherwise limitation `recovery-unconfirmed`.
+- JSONL history: a reader no longer warns of an "interrupted write" when another process is appending right now
+  (the trailing partial line is re-read once).
+- Worker threads from TypeScript sources (tests, development) work on Node 22, which ignores `--import` loader
+  hooks in workers. Built packages were not affected.
+- GitHub Action: a non-zero `sw` exit ended the step before `exit-code`/`report-dir`/`sarif-file` were set and
+  before the SARIF upload (GitHub runs `bash -e`).
 - `sw … | head` no longer crashes with an unhandled `EPIPE` on Linux/macOS (28c6501).
 - The config warning about a raw secret (`auth.x.token`) was itself mangled by log redaction; reworded (28c6501).
 - docs/quickstart.md re-run end to end and rewritten from real output; its two "known issue" notes were stale

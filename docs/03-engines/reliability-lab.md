@@ -33,9 +33,9 @@ Out-of-process faults (Docker, Toxiproxy) are recorded in a persistent **ledger*
 |---|---|
 | Failure/timeout rate during fault | Windowed counters, 1 s resolution |
 | Error propagation | Compare per-route error rates. Routes that are unrelated (per the System Model graph) but degraded are flagged as **isolation failure** |
-| Recovery time (MTTR-like) | First timestamp after revert where rolling p95 and error rate stay within steady-state bounds for 3 windows |
+| Recovery time (MTTR-like) | First timestamp after revert where rolling p95 and error rate stay within steady-state bounds for 3 windows; slow recovery is reported only if the last 2 windows with traffic are still out of bounds, otherwise limitation `recovery-unconfirmed` (recovery phase too short to confirm; use ≥ 5 s) |
 | Retry behaviour | Count requests seen at the proxy per client request (amplification factor). Detect retry storms (amplification > 3) and missing jitter (synchronised spikes, using autocorrelation of arrival times) |
-| Circuit breaker | Detect the open state: fast failures (latency ≪ timeout) after N failures. Half-open probes after a cooldown |
+| Circuit breaker | Detect the open state: fast failures (latency ≪ timeout) after N failures. Half-open probes after a cooldown; the client outcome (errors, p50) is judged only on requests answered before the revert (in-flight ones are answered by the restored dependency) |
 | Duplicate operations | Invariant checks after the fault (e.g. count orders by idempotency key) |
 | Timeout correctness | Client latency ≈ configured timeout ± tolerance while the dependency is black-holed. "No outbound timeout" needs nothing answered during the black-hole **and** at least 3 requests observed waiting longer than `maxOutboundBudget` (default 30 s: the longest plausible timeout × attempts + backoff). With a shorter observable window (client `workload.timeout` or fault duration below the budget) "no timeout" and "a longer timeout chain" look the same, so the result is inconclusive with the limitation `timeout-window-too-short` (numbers + hint: raise `workload.timeout` and the fault duration above the suspected budget, or set `maxOutboundBudget` to the app's real budget), never a defect |
 

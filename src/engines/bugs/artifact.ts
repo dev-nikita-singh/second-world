@@ -7,7 +7,8 @@
  * session and FAILS SAFE: anything it cannot resolve yields a reason → classification
  * "inconclusive", never a false "does not reproduce".
  */
-import { isAbsolute, relative, resolve } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { BugCase, CaseContext } from "./cases.js";
 import { matchesPattern } from "./contract.js";
 import { ROLE_EXPIRED, ROLE_INVALID } from "./http.js";
@@ -32,12 +33,33 @@ function absRef(ref: string | InvRef, cwd: string): InvRef {
  * only loads invariant modules inside the current project (docs/11 threat model T6). Returns the
  * reason when `ref` points elsewhere.
  */
+/**
+ * Real path of `p`, also when `p` (or its tail) does not exist: the nearest existing ancestor is resolved
+ * and the rest appended. Without this, macOS `/var/…` (a symlink to `/private/var/…`) compared against a
+ * realpath'd project root looked "outside", and a symlink inside the project pointing elsewhere looked inside.
+ */
+function realish(p: string): string {
+  let head = resolve(p);
+  const tail: string[] = [];
+  while (!existsSync(head)) {
+    const up = dirname(head);
+    if (up === head) return resolve(p);
+    tail.unshift(basename(head));
+    head = up;
+  }
+  try {
+    return join(realpathSync.native(head), ...tail);
+  } catch {
+    return resolve(p);
+  }
+}
+
 function outsideProject(ref: string | InvRef, cwd: string): string | undefined {
   const r = typeof ref === "string" ? { module: ref } : ref;
   const hash = r.module.lastIndexOf("#");
   const path = hash > 1 ? r.module.slice(0, hash) : r.module;
   const file = isAbsolute(path) ? resolve(path) : resolve(cwd, path);
-  const rel = relative(resolve(cwd), file);
+  const rel = relative(realish(cwd), realish(file));
   if (rel !== "" && !rel.startsWith("..") && !isAbsolute(rel)) return undefined;
   return `invariant module ${file} is outside the project (${resolve(cwd)}); replay only loads project code`;
 }

@@ -644,6 +644,7 @@ function analyse(
   if (
     plan.detectors.has("recovery") &&
     !base.recovery.recovered &&
+    base.recovery.degradedAtEnd === true &&
     recWindows.filter((w) => w.requests > 0).length >= 3 &&
     !t.cancelled
   ) {
@@ -652,7 +653,7 @@ function analyse(
       kind: "detector",
       severity: "medium",
       title: `No recovery within ${Math.round(input.recovery / 1000)} s after ${input.dependency} was restored`,
-      description: `p95 ≤ ${fmt(bounds.p95Ms)} ms and error rate ≤ ${fmt(bounds.errorRate * 100)}% did not hold for 3 consecutive 1 s windows after the revert.`,
+      description: `p95 ≤ ${fmt(bounds.p95Ms)} ms and error rate ≤ ${fmt(bounds.errorRate * 100)}% did not hold for 3 consecutive 1 s windows after the revert, and the last windows of the recovery phase were still out of bounds.`,
       recommendation:
         "Check connection pools, caches and breakers that stay degraded after the dependency recovers",
       metrics: [
@@ -720,12 +721,22 @@ function analyse(
 
     // ---- circuit breaker
     if (plan.detectors.has("breaker") && plan.sustained && input.duration >= 3000) {
-      const fw = windowize(records, arrivals, tF0, tF1, plan.affected ? { routes: plan.affected } : {});
+      const fwOpts = plan.affected ? { routes: plan.affected } : {};
+      const fw = windowize(records, arrivals, tF0, tF1, fwOpts);
+      // Client outcome only from requests answered before the revert (see detectCircuitBreaker).
+      const decided = windowize(
+        records.filter((r) => r.end < tF1),
+        arrivals,
+        tF0,
+        tF1,
+        fwOpts,
+      );
       const half = tF0 + (tF1 - tF0) / 2;
       base.breaker = detectCircuitBreaker(
         fw,
         amp.steadyRatio,
         arrivals.filter((a) => a >= half && a < tF1),
+        { decided },
       );
       if (base.breaker.verdict === "no-breaker") {
         det.push({
@@ -1107,6 +1118,19 @@ export async function executeReliability(
           impact: "reduces-confidence",
         });
       }
+    // Recovery not confirmed (no 3 in-bounds windows in a row) but not degraded at the end either:
+    // the recovery phase was too short to measure a recovery that was still settling. No finding.
+    const unconfirmed = plan.detectors.has("recovery")
+      ? runs.find((r) => r.recovery && !r.recovery.recovered && r.recovery.degradedAtEnd === false)
+      : undefined;
+    if (unconfirmed?.recovery) {
+      const rc = unconfirmed.recovery;
+      limitations.push({
+        code: "recovery-unconfirmed",
+        message: `Recovery after ${input.dependency} was restored not confirmed in run ${unconfirmed.index + 1}: ${rc.consecutive} consecutive 1 s windows within p95 ≤ ${fmt(rc.bounds.p95Ms)} ms and error rate ≤ ${fmt(rc.bounds.errorRate * 100)}% did not fit in the ${Math.round(input.recovery / 1000)} s recovery phase, but its last windows were within bounds (still settling, not stuck), so no slow-recovery is reported. Use a recovery phase of at least ${rc.consecutive + 2} s to measure recovery time.`,
+        impact: "reduces-confidence",
+      });
+    }
     // Black-hole watched for too short a time to tell "no timeout" from "long timeout chain".
     const shortRun = runs.find((r) => r.timeout?.windowTooShort);
     if (shortRun?.timeout) {
@@ -1140,13 +1164,13 @@ export async function executeReliability(
         failure: "Failure = transport error or HTTP 5xx; latency = client send → body consumed",
         windows: "1 s windows by request start time",
         recovery:
-          "First window after revert from which 3 consecutive windows with traffic keep p95 and error rate within steady-state bounds",
+          "First window after revert from which 3 consecutive windows with traffic keep p95 and error rate within steady-state bounds; slow recovery only when none is found AND the last 2 windows with traffic are still out of bounds (otherwise limitation recovery-unconfirmed)",
         amplification:
           "Dependency calls seen by the proxy ÷ client requests (affected routes), fault vs steady state; storm > 3x",
         jitter:
           "Lag histogram (pairwise inter-arrival lags 10–1000 ms, 5 ms bins) of dependency calls = autocorrelation of the arrival process; strongest 20 ms-window peak (or 10 ms-window peak for precise timers, when it is not a lattice) z ≥ 5 and ≥ 1.25x the p90 of all window sums of that width (robust to timer-tick lattices), absent from the steady-state control",
         breaker:
-          "Second half of a sustained failure: calls per request ≤ 0.5× baseline → breaker; ≥ 0.8× with ≥ 50% client errors → no breaker",
+          "Second half of a sustained failure: calls per request ≤ 0.5× baseline → breaker; ≥ 0.8× with ≥ 50% client errors → no breaker. Client errors and latency only from requests answered before the revert (in-flight ones are answered by the restored dependency)",
         timeout:
           "Black-holed dependency: requests answered during the fault → timeout present; none answered, latency tracking the revert/client timeout AND ≥ 3 requests observed waiting ≥ maxOutboundBudget → no timeout; none answered within a shorter observable window → inconclusive (limitation timeout-window-too-short)",
         ...(input.invariants.length > 0

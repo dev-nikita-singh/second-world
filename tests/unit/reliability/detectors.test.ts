@@ -151,6 +151,33 @@ describe("circuit breaker detection", () => {
     expect(r.lateRatio).toBe(4);
   });
 
+  it("judges client errors only on requests answered before the revert (in-flight ones are censored)", () => {
+    // 5 s fault, no breaker: every request answered during the fault timed out (1 s client timeout);
+    // the ones started in the last second were still in flight at the revert and then succeeded.
+    const all = [
+      ...Array.from({ length: 4 }, () =>
+        win({ requests: 20, proxy: 2000, errors: 20, errorRate: 1, p50: 1000 }),
+      ),
+      win({ requests: 24, proxy: 2000, errors: 0, errorRate: 0, p50: 300 }),
+      win({ requests: 0, proxy: 0, p50: Number.NaN, p95: Number.NaN }),
+    ];
+    // Unfiltered, the late half (windows 3-5) is 20/44 = 45% errors: below the no-breaker bar.
+    expect(detectCircuitBreaker(all, 1).verdict).toBe("inconclusive");
+    const decided = all.map((w, i) =>
+      i >= 4 ? win({ requests: 0, proxy: w.proxy, p50: Number.NaN, p95: Number.NaN }) : w,
+    );
+    const r = detectCircuitBreaker(all, 1, [], { decided });
+    expect(r.verdict).toBe("no-breaker");
+    expect(r.lateErrorRate).toBe(1);
+    expect(r.lateRatio).toBeCloseTo(4000 / 44, 6);
+  });
+
+  it("is inconclusive when nothing late in the fault was answered before the revert", () => {
+    const all = Array.from({ length: 5 }, () => win({ requests: 10, proxy: 10, errors: 0, p50: 2000 }));
+    const decided = all.map((w, i) => (i >= 1 ? win({ requests: 0, proxy: w.proxy }) : w));
+    expect(detectCircuitBreaker(all, 1, [], { decided }).verdict).toBe("inconclusive");
+  });
+
   it("is inconclusive when the fault does not cause failures or is too short", () => {
     expect(detectCircuitBreaker([win({}), win({})], 1).verdict).toBe("inconclusive");
     const ok = Array.from({ length: 5 }, () => win({ proxy: 10 }));
@@ -230,6 +257,22 @@ describe("recovery time", () => {
     const never = recoveryTime([win({}), win({ errorRate: 1 }), win({}), win({})], bounds);
     expect(never.recovered).toBe(false);
     expect(never.recoveryMs).toBeNull();
+  });
+  it("is degraded at the end only when the last 2 windows with traffic are out of bounds", () => {
+    // Backlog drain right after the revert, then healthy: not confirmed in a 3 s phase, not degraded.
+    const settling = recoveryTime([win({ p95: 120 }), win({}), win({})], bounds);
+    expect(settling.recovered).toBe(false);
+    expect(settling.degradedAtEnd).toBe(false);
+    // Stuck: still failing at the end of the phase.
+    const stuck = recoveryTime([win({}), win({ errorRate: 0.5 }), win({ p95: 400 })], bounds);
+    expect(stuck.recovered).toBe(false);
+    expect(stuck.degradedAtEnd).toBe(true);
+    // One slow last window (e.g. a starved generator) is not enough; empty windows are skipped.
+    expect(recoveryTime([win({}), win({}), win({ p95: 400 })], bounds).degradedAtEnd).toBe(false);
+    expect(
+      recoveryTime([win({ p95: 400 }), win({ errorRate: 1 }), win({ requests: 0 })], bounds).degradedAtEnd,
+    ).toBe(true);
+    expect(recoveryTime([win({}), win({}), win({})], bounds).degradedAtEnd).toBe(false);
   });
   it("derives bounds from steady state", () => {
     const s = phaseStats([{ route: "r", start: 0, end: 20, status: 200 }], 0, 1000);

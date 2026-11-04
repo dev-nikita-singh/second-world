@@ -200,7 +200,17 @@ export interface RecoveryResult {
   recoveryMs: number | null;
   bounds: RecoveryBounds;
   consecutive: number;
+  /**
+   * Still out of bounds at the end of the recovery phase: the last `END_WINDOWS` (2) windows with
+   * traffic (or the only one) all violate the bounds. Only then is "no recovery within R s" a
+   * measured fact; `recovered: false` with `degradedAtEnd: false` means recovery was not confirmed
+   * (the phase was too short for `consecutive` in-bounds windows after a transient), not a failure.
+   */
+  degradedAtEnd?: boolean;
 }
+
+/** Trailing windows with traffic that must all be out of bounds for "still degraded at the end". */
+const END_WINDOWS = 2;
 
 /**
  * Recovery time (MTTR-like): first window after revert from which `consecutive` (default 3)
@@ -213,23 +223,32 @@ export function recoveryTime(
   consecutive = 3,
   windowMs = 1000,
 ): RecoveryResult {
+  const inBounds = (w: WindowStat): boolean => w.errorRate <= bounds.errorRate && !(w.p95 > bounds.p95Ms);
+  const withTraffic = windows.filter((w) => w.requests > 0);
+  const tail = withTraffic.slice(-END_WINDOWS);
+  const degradedAtEnd = tail.length > 0 && tail.every((w) => !inBounds(w));
   let runStart = -1;
   let run = 0;
   for (let i = 0; i < windows.length; i++) {
     const w = windows[i] as WindowStat;
     if (w.requests === 0) continue;
-    const ok = w.errorRate <= bounds.errorRate && !(w.p95 > bounds.p95Ms);
-    if (ok) {
+    if (inBounds(w)) {
       if (run === 0) runStart = i;
       run++;
       if (run >= consecutive)
-        return { recovered: true, recoveryMs: runStart * windowMs, bounds, consecutive };
+        return {
+          recovered: true,
+          recoveryMs: runStart * windowMs,
+          bounds,
+          consecutive,
+          degradedAtEnd: false,
+        };
     } else {
       run = 0;
       runStart = -1;
     }
   }
-  return { recovered: false, recoveryMs: null, bounds, consecutive };
+  return { recovered: false, recoveryMs: null, bounds, consecutive, degradedAtEnd };
 }
 
 /** Default steady-state bounds from steady stats (+ explicit thresholds when given). */
@@ -506,13 +525,17 @@ export interface BreakerResult {
  * Circuit breaker detection during a sustained failure: an open breaker stops calling the dependency
  * (late calls/request ≪ baseline) and fails fast (late latency ≪ early). No breaker: the dependency is
  * still called ≥ 0.8× baseline per request in the second half of the fault while clients see failures.
- * `windows` = 1 s windows covering the fault only.
+ * `windows` = 1 s windows covering the fault only (all requests started in them: calls per request).
+ * `opts.decided` = the same windows built only from requests that FINISHED before the revert: client
+ * outcome (errors, latency) is judged on those. A request still in flight at the revert was answered
+ * by the restored dependency, so its success says nothing about the behaviour during the fault (it
+ * would dilute the late error rate by up to one client timeout's worth of requests).
  */
 export function detectCircuitBreaker(
   windows: readonly WindowStat[],
   baselineRatio: number | null,
   lateArrivals: readonly number[] = [],
-  opts: { minFailures?: number } = {},
+  opts: { minFailures?: number; decided?: readonly WindowStat[] } = {},
 ): BreakerResult {
   const empty: BreakerResult = {
     verdict: "inconclusive",
@@ -530,16 +553,27 @@ export function detectCircuitBreaker(
   }
   const sum = (ws: readonly WindowStat[], f: (w: WindowStat) => number): number =>
     ws.reduce((a, w) => a + f(w), 0);
+  const decided = opts.decided && opts.decided.length === windows.length ? opts.decided : windows;
+  const half = Math.floor(windows.length / 2);
   const early = windows.slice(0, 1);
-  const late = windows.slice(Math.floor(windows.length / 2));
+  const late = windows.slice(half);
+  const dEarly = decided.slice(0, 1);
+  const dLate = decided.slice(half);
   const eReq = sum(early, (w) => w.requests);
   const lReq = sum(late, (w) => w.requests);
-  const failures = sum(windows, (w) => w.errors);
+  const lDecided = sum(dLate, (w) => w.requests);
+  const failures = sum(decided, (w) => w.errors);
   if (lReq < 3 || eReq < 1) return { ...empty, reason: "not enough client requests during the fault" };
+  if (lDecided < 3)
+    return {
+      ...empty,
+      reason:
+        "not enough client requests answered during the second half of the fault (client timeout longer than the fault?)",
+    };
   const earlyRatio = sum(early, (w) => w.proxy ?? 0) / eReq;
   const lateRatio = sum(late, (w) => w.proxy ?? 0) / lReq;
-  const lateErrors = sum(late, (w) => w.errors);
-  const lateErrorRate = lateErrors / lReq;
+  const lateErrors = sum(dLate, (w) => w.errors);
+  const lateErrorRate = lateErrors / lDecided;
   const p50s = (ws: readonly WindowStat[]): number | null => {
     const v = ws
       .map((w) => w.p50)
@@ -547,8 +581,8 @@ export function detectCircuitBreaker(
       .sort((a, b) => a - b);
     return v.length ? (v[Math.floor(v.length / 2)] as number) : null;
   };
-  const earlyP50 = p50s(early);
-  const lateP50 = p50s(late);
+  const earlyP50 = p50s(dEarly);
+  const lateP50 = p50s(dLate);
   const sortedLate = [...lateArrivals].sort((a, b) => a - b);
   const gaps: number[] = [];
   for (let i = 1; i < sortedLate.length; i++)

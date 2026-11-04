@@ -4,7 +4,7 @@
  * artifact names outside the current project, because importing a module runs its code.
  * Also: suggested-test export writes only basenames inside the chosen directory.
  */
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, symlinkSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import fc from "fast-check";
@@ -67,6 +67,41 @@ describe("replay artifacts cannot load code from outside the project", () => {
     for (const m of [join(project, "inv.mjs"), "inv.mjs", "./sub/../inv.mjs"]) {
       const r = await hydrateForReplay(caseWith(m), fakeSession(project));
       expect(r.ok, m).toBe(true);
+    }
+  });
+
+  // macOS: /var is a symlink to /private/var, so the project root (realpath'd) and a module path
+  // (as written in the artifact) can name the same place differently. A link to the project
+  // (junction on Windows: no admin rights needed) reproduces that on every OS.
+  it("the project reached through a symlink: a missing module inside is 'cannot be loaded', not 'outside'", async () => {
+    const links = await makeTmpDir("sw-sec-link-"); // not under tmp: another test lists tmp exactly
+    const link = join(links.path, "project-link");
+    symlinkSync(project, link, "junction");
+    for (const [cwd, mod] of [
+      [project, join(link, "gone", "inv.mjs")],
+      [link, join(project, "gone", "inv.mjs")],
+    ] as const) {
+      const r = await hydrateForReplay(caseWith(mod), fakeSession(cwd));
+      expect(r.ok, mod).toBe(false);
+      if (!r.ok) expect(r.reason, mod).not.toMatch(/outside the project/);
+    }
+    const ok = await hydrateForReplay(caseWith(join(link, "inv.mjs")), fakeSession(project));
+    expect(ok.ok).toBe(true);
+    await links.cleanup();
+  });
+
+  it("a symlink inside the project pointing outside it is outside (module never imported)", async () => {
+    const g = globalThis as { __swPwned?: number };
+    delete g.__swPwned;
+    const escapeLink = join(project, "escape");
+    symlinkSync(outside, escapeLink, "junction");
+    try {
+      const r = await hydrateForReplay(caseWith("escape/evil.mjs"), fakeSession(project));
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toMatch(/outside the project/);
+      expect(g.__swPwned).toBeUndefined();
+    } finally {
+      rmSync(escapeLink, { recursive: false, force: true });
     }
   });
 });
