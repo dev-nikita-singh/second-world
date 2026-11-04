@@ -7,13 +7,16 @@
 #    `id-token: write` lets npm mint the Sigstore provenance attestation (OIDC), nothing else.
 #    The npm token comes from the `npm` environment (add required reviewers there for a manual gate).
 #
-# Not run in this repository yet: it needs a GitHub repo, an `npm` environment with secret NPM_TOKEN
-# (an npm automation/granular token for the package), and a public repo for provenance.
+# A real publish needs an `npm` environment with secret NPM_TOKEN (a granular npm token for the
+# package). A manual run (Actions → Release → Run workflow) is a rehearsal: every verify step, then
+# `npm publish --dry-run` in the `rehearse` job. Nothing is uploaded and no token is needed; the
+# `publish` job only runs for a pushed tag.
 name: Release
 
 on:
   push:
     tags: ["v*.*.*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -39,15 +42,16 @@ jobs:
     env:
       DOCKER_HOST: tcp://127.0.0.1:1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.x
           cache: npm
       - run: npm ci
       - name: Tag matches package.json version
+        if: github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
@@ -78,9 +82,28 @@ jobs:
           npx sw init --target http://127.0.0.1:3000
           npx sw config validate
 
+  rehearse:
+    name: npm publish --dry-run (manual run)
+    needs: verify
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - name: Publish rehearsal (nothing is uploaded)
+        run: npm publish --dry-run --access public
+
   publish:
     name: npm publish (provenance)
     needs: verify
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: npm
@@ -88,10 +111,10 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.x
           registry-url: https://registry.npmjs.org

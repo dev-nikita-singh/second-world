@@ -47,7 +47,7 @@ Then pick one way to install it (paths below are relative to wherever you put th
 | Global | `npm i -g ./second-world-0.1.0.tgz` | `sw doctor` |
 | One-off, no install | `npx --yes --package ./second-world-0.1.0.tgz sw doctor` | — |
 | Docker | `docker build -t second-world .` (in the clone) | `docker run --rm second-world doctor` |
-| GitHub Actions | `uses: <owner>/second-world@<ref>` ([below](#github-actions)) | — |
+| GitHub Actions | `uses: dev-nikita-singh/second-world@v0.1.0` ([below](#github-actions)) | — |
 
 Once a release is published to npm, the same commands work with the package name: `npm i -D second-world`,
 `npm i -g second-world`, `npx second-world doctor`.
@@ -96,7 +96,7 @@ steps:
   - uses: actions/checkout@v4
   - run: npm ci
   - run: npm start &                    # your service; make sure it is ready before the next step
-  - uses: <owner>/second-world@<ref>
+  - uses: dev-nikita-singh/second-world@v0.1.0
     with:
       command: bugs                       # perf, stress, inspect, "reliability run <scenario>", ...
       config: sw.config.ts                # optional; default: auto-discover

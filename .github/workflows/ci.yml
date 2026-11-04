@@ -39,10 +39,10 @@ jobs:
       # Unreachable daemon → tests/integration/docker/helpers.ts `docker info` fails → live Docker tests skip.
       DOCKER_HOST: tcp://127.0.0.1:1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -74,10 +74,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.x
           cache: npm
@@ -96,10 +96,10 @@ jobs:
     # `docker version --format '{{.Server.Version}}' || docker info --format '{{.Version.Version}}'`). Remove once this job has passed on GitHub.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.x
           cache: npm
@@ -126,3 +126,45 @@ jobs:
         run: docker version --format '{{.Server.Version}}' || docker info --format '{{.Version.Version}}'
       - name: Live Docker tests (podman)
         run: npx vitest run tests/integration/docker tests/e2e/evolve-cli.test.ts
+
+  action:
+    name: GitHub Action (uses ./, packed tarball)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      - name: Pack the tarball the action installs
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination "$RUNNER_TEMP"
+          echo "tgz=$(ls "$RUNNER_TEMP"/second-world-*.tgz)" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/action-project"
+      - name: Run the action (static inspect of an example app, no network)
+        id: sw
+        uses: ./
+        with:
+          command: inspect
+          args: ${{ github.workspace }}/examples/orders-jobs-api --no-history
+          working-directory: ${{ runner.temp }}/action-project
+          package: ${{ steps.pack.outputs.tgz }}
+          upload-sarif: "false"
+        continue-on-error: true
+      - name: Action outputs are set
+        shell: bash
+        env:
+          CODE: ${{ steps.sw.outputs.exit-code }}
+          DIR: ${{ steps.sw.outputs.report-dir }}
+        run: |
+          set -euo pipefail
+          echo "exit-code=$CODE report-dir=$DIR"
+          test -n "$CODE"
+          test -f "$DIR/report.json"

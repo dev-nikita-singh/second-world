@@ -4,6 +4,15 @@
   "description": "Intelligent software experimentation, testing and optimization engine",
   "type": "module",
   "license": "MIT",
+  "author": "The SECOND WORLD contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dev-nikita-singh/second-world.git"
+  },
+  "homepage": "https://github.com/dev-nikita-singh/second-world#readme",
+  "bugs": {
+    "url": "https://github.com/dev-nikita-singh/second-world/issues"
+  },
   "engines": {
     "node": ">=22.19.0"
   },

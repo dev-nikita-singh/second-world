@@ -66,7 +66,7 @@ runs:
   using: composite
   steps:
     - if: inputs.node-version != ''
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: ${{ inputs.node-version }}
 
@@ -111,7 +111,7 @@ runs:
         echo "sw exited $code; reports in $out"
 
     - if: inputs.upload-sarif == 'true' && steps.run.outputs.sarif-file != ''
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
       with:
         sarif_file: ${{ steps.run.outputs.sarif-file }}
         category: ${{ inputs.sarif-category }}
