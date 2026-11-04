@@ -65,7 +65,7 @@ docs/17, docs/02 ADR 008). Build it for real with `node:sqlite` (Node ≥ 22.19 
   history, exit codes, dry-run, Ctrl+C as other engine commands.
 - docs/quickstart.md has two "known issue being fixed" notes (≈ line 215: stress report does not mention the
   safety.maxRps cap; ≈ line 285: printed curl commands not copy-paste ready — auth header placeholder and BOLA repro
-  `{{…}}` path variable). Verify against the CURRENT code (commit 3935628 may have fixed the first). Fix what is
+  `{{…}}` path variable). Verify against the CURRENT code (commit ea7537e may have fixed the first). Fix what is
   still broken (owner of the engine files: you, for these fixes only — reporting/curl rendering and stress
   message), add regression tests, remove or correct the notes. Re-run the quickstart commands end to end and make
   every printed output in quickstart.md match reality.

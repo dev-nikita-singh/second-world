@@ -63,7 +63,7 @@
 - DONE tests: from-config.ts (copy example to temp, SW_* port overrides, scoring), from-config.suite.ts, from-config-express.test.ts / from-config-fastify.test.ts (4 commands each, recall 1 / precision 1, examples/ hash unchanged). 10 tests, ~2 min.
 - Decision: retryOn ["transport","timeout"] — retrying 5xx makes fastify replay the stored order, which hides no-circuit-breaker.
 - Decision: fastify duplicates via dependency-latency (1.5 s), not dependency-timeout: with client timeout 1 s the engine flags outbound-no-timeout on fastify (FP; its 4x2 s budget exceeds the fault). Reported to main.
-- DONE after main's 49dc1ca: express config `reliability.maxOutboundBudget: "800ms"` (otherwise outbound-no-timeout is inconclusive with 1 s client timeout). Fastify README: dependency-timeout is now inconclusive, not listed.
+- DONE after main's a79f58c: express config `reliability.maxOutboundBudget: "800ms"` (otherwise outbound-no-timeout is inconclusive with 1 s client timeout). Fastify README: dependency-timeout is now inconclusive, not listed.
 - DONE READMEs: "Finding them with sw.config.ts" (commands + defect→command→finding table) in both.
 - Biome reformatted fastify src (signature wraps) → lines re-synced.
 - FINAL: tests/integration/examples + bugs + reliability: 25 files, 137 passed; tsc clean.

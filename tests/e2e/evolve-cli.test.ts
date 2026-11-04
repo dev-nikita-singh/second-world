@@ -1,7 +1,7 @@
 /**
  * `sw evolve` from the CLI (owner: sw-qa, wave 5). docs/03-engines/experiments.md Part B, docs/09 §1 exit codes.
  *
- * Regression (fixed in fed5901): in the docker sandbox an app listening on 127.0.0.1 never became healthy;
+ * Regression (fixed in 1faacab): in the docker sandbox an app listening on 127.0.0.1 never became healthy;
  * the run retried every rep for 30 s each (5 min), gave no hint about $HOST and exited 70 ("bug in
  * SECOND WORLD"). Now: hint about $HOST, arm skipped after 2 failed starts, baseline never healthy → exit 5.
  */
