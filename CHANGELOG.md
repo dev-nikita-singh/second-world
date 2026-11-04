@@ -6,6 +6,39 @@ All notable changes to SECOND WORLD are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Real SQLite history backend: `history.backend: "sqlite"` uses Node's built-in `node:sqlite`
+  (`.second-world/history/history.db`, WAL, transactions, schema migrations). It behaves the same as the
+  JSONL store (one contract suite runs against both). Existing JSONL history is imported once and left
+  unchanged. At 10,000 runs `list`/`show` go from ~150 ms to ~1 ms and `verify` from 29 s to 5 s (d26f518).
+- `sw history export --to jsonl`: copy SQLite history back into the JSONL files (a580b78).
+- Plugin system (docs/10): `plugins: [...]` in the config (package names from the project's `node_modules`,
+  or relative paths; `{ name, optional, options }`), `definePlugin` with an `apiVersion` check from the new
+  `second-world/plugin` entry. Plugins can add report formats (`-f ns/name`), architecture rules, Bug Hunter
+  assertions, history stores and lifecycle hooks; unsupported extension points fail with a clear error.
+  `sw plugins list|check [--json]`, global `--no-plugins`; plugins never load under `--no-config-code` (372ebba).
+- `sw report [reports...] [--last] [--run <id>]`: combine and re-render earlier reports and history runs in any
+  format; no network (372ebba).
+- `sw run <workflow>` and `sw run --list`: run a config workflow (a DAG of engine steps) as one run with one
+  combined report and one history entry; `--dry-run` validates every step (372ebba).
+- CI: a job that runs the repository's own GitHub Action; the release workflow has a manual rehearsal mode
+  (every check, then `npm publish --dry-run`) (dfb3f52).
+
+### Changed
+
+- `history.backend: "sqlite"` no longer silently uses JSONL; it falls back to JSONL with a warning only when
+  `node:sqlite` is unavailable. Only node:sqlite's own ExperimentalWarning is hidden (d26f518).
+- `report.formats` and `history.backend` accept plugin ids (`namespace/name`) (372ebba).
+- GitHub Actions in the workflows and `action.yml` are pinned to commit SHAs (dfb3f52).
+
+### Fixed
+
+- `sw … | head` no longer crashes with an unhandled `EPIPE` on Linux/macOS (372ebba).
+- The config warning about a raw secret (`auth.x.token`) was itself mangled by log redaction; reworded (372ebba).
+- docs/quickstart.md re-run end to end and rewritten from real output; its two "known issue" notes were stale
+  (the stress rate-cap message and copy-paste-ready curl were already fixed) and are now regression-tested (372ebba).
+
 ## [0.1.0] - 2026-11-01
 
 First release candidate. Not yet published to npm: publishing needs a GitHub repository and an npm token
