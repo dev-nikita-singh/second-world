@@ -20,6 +20,7 @@
  * All values come from the contract, configured values and harvested ids. Output is a list
  * of untrusted proposals; the engine validates each one.
  */
+import { envelopeOf } from "../../bugs/cases.js";
 import type { Operation } from "../../bugs/contract.js";
 import {
   baseRequest,
@@ -587,15 +588,19 @@ export class HeuristicPlanner implements Planner {
       { kind: "schema-valid", step: 1 },
       { kind: "no-5xx" },
     ];
-    // Top-level scalar fields sent on create must read back unchanged.
+    // Top-level scalar fields sent on create must read back unchanged, inside the response envelope the id
+    // pointer names ("/transaction/id" → "/transaction/<field>"). A field the read does not return at all is
+    // another representation (categoryId → category.id), not a wrong value.
+    const env = envelopeOf(r.idPointer);
     if (isObject(create.body))
       for (const [k, v] of Object.entries(create.body).slice(0, 8))
         if (["string", "number", "boolean"].includes(typeof v))
           assertions.push({
             kind: "json",
             step: 1,
-            pointer: `/${k}`,
+            pointer: `${env}/${k.replace(/~/g, "~0").replace(/\//g, "~1")}`,
             equals: v,
+            ifPresent: true,
             rule: "bugs/state-model-mismatch",
           });
     const out: unknown[] = [
@@ -633,7 +638,12 @@ export class HeuristicPlanner implements Planner {
       `After ${up.key} changes ${change.pointer} of a ${r.name}, ${r.read.key} returns the updated value (no stale read)`,
       [toStep(tpl, "update"), this.readStep(r, role, "read after update")],
       [
-        { kind: "same-json", steps: [0, 1], pointer: change.pointer, rule: "bugs/state-model-mismatch" },
+        {
+          kind: "same-json",
+          steps: [0, 1],
+          pointer: `${envelopeOf(r.idPointer)}${change.pointer}`,
+          rule: "bugs/state-model-mismatch",
+        },
         { kind: "no-5xx" },
       ],
       {

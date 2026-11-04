@@ -41,6 +41,14 @@ All notable changes to SECOND WORLD are documented here. The format follows
 
 ### Fixed
 
+- `sw bugs` / `sw agent` ignored the OpenAPI `servers` path (`servers: [{ url: "/api" }]`, or an absolute URL's
+  path, or Swagger 2 `basePath`): every request went to `/transactions` instead of `/api/transactions`. The path
+  now applies when the target URL has none. Found by testing a real open-source API (gunjit-web/expense-tracker-api).
+- `sw bugs` / `sw agent` read-back checks (create → read) compared fields at the top of the response, so an API
+  that wraps resources (`{"transaction": {...}}`) got false "state-model mismatch" findings. Fields are now
+  compared inside the envelope named by `idPointer` (`/transaction/id` → `/transaction`), and a field the read
+  does not return at all (`categoryId` → `category.id`) is no longer a mismatch. Agent scenarios gain
+  `ifPresent` on `json` assertions.
 - Performance Lab with `workers > 1` could count a VU's first iteration as warmup (timers fire up to ~1.5 ms
   early on Linux), under-reporting requests (100 of 101). VUs now never start before their scheduled instant.
 - Reliability: the jitter detector missed constant-delay retries with precise timers (Linux/macOS); it now also

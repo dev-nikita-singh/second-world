@@ -104,6 +104,8 @@ export const AssertionSchema = z.discriminatedUnion("kind", [
       equals: z.json().optional(),
       exists: z.boolean().optional(),
       type: z.enum(["string", "number", "integer", "boolean", "array", "object", "null"]).optional(),
+      /** With `equals`: a response without the field passes (another representation, not a wrong value). */
+      ifPresent: z.boolean().optional(),
       rule: Rule,
     })
     .strict(),

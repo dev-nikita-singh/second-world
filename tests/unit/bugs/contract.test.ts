@@ -3,7 +3,9 @@ import {
   type CaseStep,
   conformance,
   diffCommon,
+  envelopeOf,
   failureFingerprint,
+  modelReadExpectations,
   rebuildModelExpectations,
 } from "../../../src/engines/bugs/cases.js";
 import {
@@ -261,7 +263,22 @@ describe("helpers", () => {
     expect(rebuildModelExpectations(steps)[2]?.expect).toMatchObject({ status: [404, 410] });
     const sub = rebuildModelExpectations([steps[0] as CaseStep, steps[2] as CaseStep]);
     expect(sub[1]?.expect).toMatchObject({ status: [200] });
-    expect(sub[1]?.expectJson).toEqual([{ pointer: "/n", equals: 1 }]);
+    expect(sub[1]?.expectJson).toEqual([{ pointer: "/n", equals: 1, ifPresent: true }]);
+    // An enveloped resource ({"item": {...}}, id at /item/id) is compared inside the envelope.
+    const wrapped = rebuildModelExpectations([
+      steps[0] as CaseStep,
+      { request: req, expect: "none", model: { cmd: "read", v: "a", base: "/item" } },
+    ]);
+    expect(wrapped[1]?.expectJson).toEqual([{ pointer: "/item/n", equals: 1, ifPresent: true }]);
+  });
+  it("model read-back: envelope from the id pointer; escaped keys", () => {
+    expect(envelopeOf("/transaction/id")).toBe("/transaction");
+    expect(envelopeOf("/id")).toBe("");
+    expect(envelopeOf("/data/item/id")).toBe("/data/item");
+    expect(modelReadExpectations({ "a/b": 1, "c~d": 2 }, "/x")).toEqual([
+      { pointer: "/x/a~1b", equals: 1, ifPresent: true },
+      { pointer: "/x/c~0d", equals: 2, ifPresent: true },
+    ]);
   });
   it("diffCommon compares keys present in both", () => {
     expect(diffCommon({ a: 1, b: { c: 2 }, only: 1 }, { a: 1, b: { c: 3 } })).toEqual(["/b/c"]);

@@ -8,7 +8,7 @@ import type { Limitation } from "../../core/evidence/schemas.js";
 import { createRng } from "../../core/rng.js";
 import type { BudgetLease, EngineContext } from "../../core/types.js";
 import type { EvalEnv } from "./cases.js";
-import { type Contract, loadContract, type Operation } from "./contract.js";
+import { type Contract, loadContract, type Operation, targetWithBasePath } from "./contract.js";
 import { Dictionary } from "./dictionary.js";
 import type { GenContext } from "./generate.js";
 import { createHookRunner, type HookRunner } from "./hooks.js";
@@ -133,7 +133,8 @@ export async function openSession(
   const lease = ctx.safety.reserve(budget);
   const roles = roleSetup(input);
   const http = new BugsHttp(ctx, {
-    target: input.target,
+    // OpenAPI servers "/api" (or Swagger basePath) applies when the target has no path of its own.
+    target: targetWithBasePath(input.target, contract),
     timeoutMs: input.timeout,
     headers: input.headers,
     roles: input.auth.roles,

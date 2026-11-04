@@ -243,7 +243,11 @@ function evalAssertion(
           status: e.status,
           pointer: a.pointer,
         };
-      if (a.equals !== undefined && JSON.stringify(v) !== JSON.stringify(a.equals))
+      if (
+        a.equals !== undefined &&
+        !(a.ifPresent && v === undefined) &&
+        JSON.stringify(v) !== JSON.stringify(a.equals)
+      )
         return {
           ok: false,
           message: `${a.pointer}=${show(v)} != ${show(a.equals)}`,

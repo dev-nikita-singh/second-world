@@ -57,12 +57,46 @@ export interface CaseStep {
   mix?: MixStep[];
   expect: StepExpect;
   /** Expected JSON values (after substitution) — used by model-based steps. */
-  expectJson?: { pointer: string; equals: unknown }[];
+  /** `ifPresent`: a field the response does not contain is a different representation, not a mismatch. */
+  expectJson?: { pointer: string; equals: unknown; ifPresent?: boolean }[];
   /** Pointer of the varied input (for 5xx-on-invalid findings), e.g. "/qty" or "query:limit". */
   inputPointer?: string;
   label?: string;
   /** Model-based steps: the command, so expectations can be recomputed for any subsequence (ddmin). */
-  model?: { cmd: "create" | "read" | "update" | "delete"; v: string; fields?: Record<string, unknown> };
+  model?: {
+    cmd: "create" | "read" | "update" | "delete";
+    v: string;
+    fields?: Record<string, unknown>;
+    /** JSON pointer of the object that holds the resource in a read response ("" = the body itself). */
+    base?: string;
+  };
+}
+
+/** Escapes one JSON-pointer segment (RFC 6901). */
+function ptrSeg(k: string): string {
+  return k.replace(/~/g, "~0").replace(/\//g, "~1");
+}
+
+/**
+ * Read-back expectations of a model-based step: every field the model knows, under `base` (the response
+ * envelope, e.g. "/transaction" when the id is at "/transaction/id"). Only fields the response contains are
+ * compared: an API may return a field in another shape (`categoryId` → `category: { id }`).
+ */
+export function modelReadExpectations(
+  fields: Record<string, unknown>,
+  base = "",
+): NonNullable<CaseStep["expectJson"]> {
+  return Object.entries(fields).map(([k, equals]) => ({
+    pointer: `${base}/${ptrSeg(k)}`,
+    equals,
+    ifPresent: true,
+  }));
+}
+
+/** The envelope of a resource from its id pointer: "/transaction/id" → "/transaction", "/id" → "". */
+export function envelopeOf(idPointer: string): string {
+  const i = idPointer.lastIndexOf("/");
+  return i <= 0 ? "" : idPointer.slice(0, i);
 }
 
 const MODEL_OK = { create: [200, 201], read: [200], update: [200, 204], delete: [200, 202, 204] } as const;
@@ -93,10 +127,7 @@ export function rebuildModelExpectations(steps: CaseStep[]): CaseStep[] {
       };
     } else if (m.cmd === "read") {
       out.expect = { status: [...MODEL_OK.read], message: `existing resource ${m.v} not readable` };
-      out.expectJson = Object.entries(live.get(m.v) ?? {}).map(([k, equals]) => ({
-        pointer: `/${k}`,
-        equals,
-      }));
+      out.expectJson = modelReadExpectations(live.get(m.v) ?? {}, m.base ?? "");
     } else if (m.cmd === "update") {
       out.expect = { status: [...MODEL_OK.update], message: `update ${m.v} failed` };
       live.set(m.v, { ...(live.get(m.v) ?? {}), ...(m.fields ?? {}) });
@@ -591,6 +622,7 @@ export async function runCase(c0: BugCase, env: EvalEnv): Promise<CaseRun> {
         const m2 = new Set<string>();
         const want = substitute(e.equals, scope, m2);
         const got = getPointer(ex.json, e.pointer);
+        if (got === undefined && e.ifPresent) continue;
         if (m2.size === 0 && JSON.stringify(got) !== JSON.stringify(want)) {
           failures.push(
             mkFailure(

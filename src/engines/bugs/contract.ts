@@ -68,6 +68,55 @@ export interface Contract {
   resolver: SchemaResolver;
   validators: ValidatorCache;
   securitySchemes: Record<string, unknown>;
+  /**
+   * Path prefix every operation is served under, from OpenAPI 3 `servers[0].url` (relative "/api" or the path
+   * of an absolute URL, server variables replaced by their defaults) or Swagger 2 `basePath`. "" when none.
+   */
+  basePath: string;
+}
+
+/** The documented path prefix ("/api", "/v1"; "" for none). The host part of a server URL is ignored: the
+ *  target decides where requests go. */
+export function contractBasePath(doc: Record<string, unknown>): string {
+  let raw: string | undefined;
+  if (typeof doc.swagger === "string") {
+    if (typeof doc.basePath === "string") raw = doc.basePath;
+  } else if (Array.isArray(doc.servers) && isObject(doc.servers[0])) {
+    const s = doc.servers[0] as { url?: unknown; variables?: unknown };
+    if (typeof s.url === "string") {
+      const vars = isObject(s.variables) ? (s.variables as Record<string, { default?: unknown }>) : {};
+      raw = s.url.replace(/\{([^}]+)\}/g, (_m, n: string) => {
+        const d = vars[n]?.default;
+        return typeof d === "string" ? d : "";
+      });
+    }
+  }
+  if (raw === undefined || raw === "") return "";
+  let path = raw;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+    try {
+      path = new URL(raw).pathname;
+    } catch {
+      return "";
+    }
+  } else if (raw.startsWith("//")) {
+    return "";
+  }
+  if (!path.startsWith("/")) path = `/${path}`;
+  path = path.replace(/\/+$/, "");
+  return path === "/" ? "" : path;
+}
+
+/**
+ * The URL requests go to: the target, plus the contract's base path when the target names no path of its own
+ * (target "http://127.0.0.1:3300" + servers "/api" → "http://127.0.0.1:3300/api"). A target with a path wins.
+ */
+export function targetWithBasePath(target: string, contract: Pick<Contract, "basePath"> | undefined): string {
+  if (!contract?.basePath) return target;
+  const u = new URL(target);
+  if (u.pathname !== "/" && u.pathname !== "") return target;
+  u.pathname = contract.basePath;
+  return u.toString().replace(/\/$/, "");
 }
 
 function pathToRegex(path: string): RegExp {
@@ -269,6 +318,7 @@ export function indexContract(doc: Record<string, unknown>, label = "(inline)"):
     resolver,
     validators: validatorCacheFor(doc, version === "3.1" ? "2020-12" : "draft-07"),
     securitySchemes: securitySchemes as Record<string, unknown>,
+    basePath: contractBasePath(doc),
   };
   if (typeof info.title === "string") c.title = info.title;
   return c;

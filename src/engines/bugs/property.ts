@@ -4,7 +4,16 @@
  * docs/04-data-structures-and-algorithms.md §7.2, §7.6. Seeds are recorded for exact replay.
  */
 import fc from "fast-check";
-import { type BugCase, type CaseRun, type CaseStep, type EvalEnv, type Failure, runCase } from "./cases.js";
+import {
+  type BugCase,
+  type CaseRun,
+  type CaseStep,
+  type EvalEnv,
+  envelopeOf,
+  type Failure,
+  modelReadExpectations,
+  runCase,
+} from "./cases.js";
 import type { Operation } from "./contract.js";
 import { baseRequest, type DerivedResource, type GenContext, requestValidity } from "./generate.js";
 import { schemaToArbitrary } from "./generators/arbitrary.js";
@@ -215,9 +224,9 @@ export async function runModelTechnique(
       const step: CaseStep = {
         request: tpl,
         expect: { status: [200], message: `existing ${r.name} not readable` },
-        expectJson: Object.entries(item.fields).map(([k, val]) => ({ pointer: `/${k}`, equals: val })),
+        expectJson: modelReadExpectations(item.fields, envelopeOf(r.idPointer)),
         label: `read ${item.v}`,
-        model: { cmd: "read", v: item.v },
+        model: { cmd: "read", v: item.v, base: envelopeOf(r.idPointer) },
       };
       await exec(real, step, concretize(step, real.scope));
     }
