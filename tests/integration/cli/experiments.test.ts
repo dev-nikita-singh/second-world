@@ -43,7 +43,7 @@ describe("sw whatif --aa (subprocess)", () => {
         timeoutMs: 120_000,
       },
     );
-    expect(r.exitCode, r.stderr.slice(-2000)).toBe(0);
+    expect(r.exitCode, `${r.stderr.slice(-1500)}\n${aaSummary(r.stdout)}`).toBe(0);
     const res = JSON.parse(r.stdout).results[0];
     expect(res.engine).toBe("whatif");
     expect(res.data.mode).toBe("aa");
@@ -61,6 +61,27 @@ describe("sw whatif --aa (subprocess)", () => {
     expect(JSON.parse(list.stdout)[0]).toMatchObject({ label: "whatif" });
   }, 130_000);
 });
+
+/** Per-comparison and per-run numbers of an A/A JSON report, for the failure message. */
+function aaSummary(stdout: string): string {
+  try {
+    const res = JSON.parse(stdout).results[0];
+    const lines = [
+      `status ${res.status}; limitations ${res.limitations.map((l: { code: string }) => l.code).join(",")}`,
+    ];
+    for (const c of res.data.comparisons)
+      lines.push(
+        `${c.metric}: ${c.verdict} rel ${c.relativeChange.toFixed(4)} CI [${c.ci.lower.toFixed(4)}, ${c.ci.upper.toFixed(4)}] p ${c.p.toFixed(4)} pHolm ${c.pAdjusted.toFixed(4)}`,
+      );
+    for (const run of res.data.runs)
+      lines.push(
+        `#${run.index} ${run.arm} ${run.status} p50 ${run.metrics.p50?.toFixed(2)} p95 ${run.metrics.p95?.toFixed(2)}`,
+      );
+    return lines.join("\n");
+  } catch {
+    return stdout.slice(0, 1500);
+  }
+}
 
 describe("sw evolve --sandbox process --yes (subprocess, temp git repo)", () => {
   let repo: TempRepo;

@@ -9,7 +9,7 @@ on:
         description: test files
         default: tests/integration/cli/experiments.test.ts tests/integration/stress/stress-lab.test.ts tests/integration/robust/double-sigint.test.ts
       repeat:
-        default: "3"
+        default: "1"
       aa:
         default: "8"
 permissions:
@@ -39,14 +39,20 @@ jobs:
       - run: npm ci
       - run: sysctl -n machdep.cpu.brand_string hw.ncpu hw.perflevel0.logicalcpu hw.perflevel1.logicalcpu || true
       - name: A/A debug
-        if: inputs.aa != '0'
         run: node .github/debug/aa-debug.mjs ${{ inputs.aa || '8' }}
         continue-on-error: true
+      - name: A/A debug under CPU load (2 busy loops)
+        shell: bash
+        run: |
+          node -e 'for(;;){}' & b1=$!
+          node -e 'for(;;){}' & b2=$!
+          node .github/debug/aa-debug.mjs ${{ inputs.aa || '8' }} || true
+          kill $b1 $b2
       - name: tests repeated
         shell: bash
         run: |
           fails=0
-          for i in $(seq 1 ${{ inputs.repeat || '3' }}); do
+          for i in $(seq 1 ${{ inputs.repeat || '1' }}); do
             echo "::group::round $i"
             npx vitest run --project integration ${{ inputs.files || 'tests/integration/cli/experiments.test.ts tests/integration/stress/stress-lab.test.ts tests/integration/robust/double-sigint.test.ts' }} || fails=$((fails+1))
             echo "::endgroup::"

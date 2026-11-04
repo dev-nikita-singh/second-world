@@ -3,6 +3,12 @@
  * flight (report temp files, history body temp files, the history `.lock`) must not be left behind.
  * The handler now removes this process's own temp files and lock synchronously before exiting
  * (src/cli/run-common.ts). docs/02-architecture.md §4.6.
+ *
+ * The "burst" case reproduces the race that the directory sweep alone lost (macOS CI left
+ * `.report.json.<pid>.<hex>.tmp` and `.lock.tmp-<pid>-<hex>`): an async temp create queued on the libuv
+ * pool ran after the sweep, while the process was tearing down. With a 2-thread pool and 24 concurrent
+ * small writers some creates are always queued, so the old code leaked in ~1 run out of 3 on Windows too.
+ * Temps are now created on the main thread and registered (src/shared/util/fs-temp.ts).
  */
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -12,11 +18,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../helpers/tmp.js";
 import { LEFTOVER, TSX_LOADER, walk } from "../concurrency/helpers.js";
 
-const FIXTURE = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "fixtures",
-  "double-sigint-writer.ts",
-);
+const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+const FIXTURE = path.join(FIXTURES, "double-sigint-writer.ts");
+const BURST = path.join(FIXTURES, "double-sigint-burst.ts");
 
 let tmp: TmpDir;
 beforeEach(async () => {
@@ -47,4 +51,31 @@ describe("double Ctrl+C during writes", () => {
     }
     expect(leftovers).toEqual([]);
   }, 180_000);
+
+  it("exit 130 leaves no temp or lock files with temp creates queued on a busy thread pool (20 runs)", async () => {
+    const leftovers: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const root = tmp.join(`b${i}`);
+      const outDir = path.join(root, "out");
+      const hist = path.join(root, "history");
+      mkdirSync(outDir, { recursive: true });
+      mkdirSync(hist, { recursive: true });
+      const r = await execa(process.execPath, ["--import", TSX_LOADER, BURST, outDir, hist], {
+        reject: false,
+        timeout: 60_000,
+        env: { SW_TEST_SIGINT_AFTER_MS: String(300 + i * 13), UV_THREADPOOL_SIZE: "2" },
+        stdin: "ignore",
+        windowsHide: true,
+      });
+      expect(r.exitCode, String(r.stderr)).toBe(130);
+      const files = walk(root);
+      // The writers really were writing when the abort came (not a vacuous pass).
+      expect(
+        files.some((f) => /^out\/report-\d+\.json$/.test(f)),
+        files.join(","),
+      ).toBe(true);
+      for (const f of files) if (LEFTOVER.test(f)) leftovers.push(`run ${i}: ${f}`);
+    }
+    expect(leftovers).toEqual([]);
+  }, 240_000);
 });

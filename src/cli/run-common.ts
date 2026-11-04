@@ -9,6 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { ConfigError } from "../core/errors.js";
 import type { EngineResult } from "../core/evidence/schemas.js";
 import { createWorld, type World } from "../core/world.js";
+import { removeLiveTempsSync } from "../shared/util/fs-temp.js";
 import { loadOptionsFromGlobals, parseSeed } from "./commands/config.js";
 import { type GlobalOptions, VERSION } from "./main.js";
 import { colorEnabled, err, makeLogger, out, style, unicodeEnabled } from "./output.js";
@@ -116,10 +117,15 @@ export function installSignals(world: World, g: GlobalOptions, o: { reports?: bo
  * files and locks (history `.lock`, report-dir lock) that THIS process created (their names carry our pid): report temps
  * `.<name>.<pid>.<hex>.tmp` (src/shared/util/atomic-write.ts), history temps `<name>.tmp-<pid>-<hex>`
  * (src/engines/history/fsutil.ts) and `.lock` when its owner record is ours. Without it 10/10 hard
- * aborts during writes left files behind (tests/integration/robust/double-sigint.test.ts).
+ * aborts during writes left files behind (tests/integration/robust/double-sigint.test.ts). The directory
+ * sweep alone still missed temps whose async create was queued on the libuv pool when the handler ran
+ * (macOS CI): those writers now create temps synchronously and register them (src/shared/util/fs-temp.ts).
  * Best effort: never throws.
  */
 export function removeOwnTempFiles(world: World): void {
+  // Registered temps first (created on the main thread, so none can be missing from the registry), so a
+  // lock link still queued on the thread pool fails instead of creating `.lock` after the check below.
+  removeLiveTempsSync();
   try {
     const cwd = world.config.cwd;
     const cfg = world.config.config as { report?: { outDir?: string }; history?: { dir?: string } };

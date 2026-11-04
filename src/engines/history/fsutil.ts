@@ -4,20 +4,11 @@
  * docs/06-environments-and-portability.md §2 (Windows rename-over-existing: retry on EPERM/EBUSY).
  */
 import { randomBytes } from "node:crypto";
-import {
-  type FileHandle,
-  link,
-  mkdir,
-  open,
-  readFile,
-  rename,
-  stat,
-  unlink,
-  utimes,
-  writeFile,
-} from "node:fs/promises";
+import { closeSync, openSync, writeSync } from "node:fs";
+import { type FileHandle, link, mkdir, open, readFile, rename, stat, unlink, utimes } from "node:fs/promises";
 import { hostname } from "node:os";
 import path from "node:path";
+import { createTempSync, releaseTemp } from "../../shared/util/fs-temp.js";
 
 const RETRY_CODES = new Set(["EPERM", "EBUSY", "EACCES"]);
 
@@ -45,14 +36,16 @@ export const TMP_MARKER = ".tmp-";
 /**
  * Atomic write: write `<file>.tmp-<pid>-<rand>`, fsync, close, rename over the target.
  * Readers see either the old or the new content, never a partial file. A crash leaves at most a
- * `.tmp-` file that readers ignore.
+ * `.tmp-` file that readers ignore. The temp is created on the main thread and registered
+ * (src/shared/util/fs-temp.ts), then reopened without O_CREAT, so a hard exit removes it reliably.
  */
 export async function atomicWrite(file: string, data: string | Uint8Array): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}${TMP_MARKER}${process.pid}-${randomBytes(4).toString("hex")}`;
+  createTempSync(tmp);
   let fh: FileHandle | undefined;
   try {
-    fh = await open(tmp, "wx");
+    fh = await open(tmp, "r+");
     await fh.writeFile(data);
     await fh.sync();
     await fh.close();
@@ -62,6 +55,8 @@ export async function atomicWrite(file: string, data: string | Uint8Array): Prom
     if (fh) await fh.close().catch(() => {});
     await unlink(tmp).catch(() => {});
     throw e;
+  } finally {
+    releaseTemp(tmp);
   }
 }
 
@@ -176,7 +171,9 @@ async function unreadableLockIsStale(file: string, staleMs: number): Promise<boo
  */
 async function createLockFile(file: string, info: LockInfo): Promise<boolean> {
   const tmp = `${file}${TMP_MARKER}${process.pid}-${info.token}`;
-  await writeFile(tmp, JSON.stringify(info), { flag: "wx" });
+  // Main-thread creation + registration: a hard exit removes the temp (src/shared/util/fs-temp.ts); a
+  // link still queued on the thread pool then fails with ENOENT instead of creating the lock late.
+  createTempSync(tmp, JSON.stringify(info));
   try {
     await link(tmp, file);
     return true;
@@ -185,19 +182,23 @@ async function createLockFile(file: string, info: LockInfo): Promise<boolean> {
     // no hard links here (FAT, some network shares) or a transient refusal: O_EXCL is still correct
   } finally {
     await unlink(tmp).catch(() => {});
+    releaseTemp(tmp);
   }
+  // O_EXCL fallback, synchronous for the same reason: the lock exists with its content before any
+  // signal handler can run (the hard-exit path removes a lock whose owner record is ours).
+  let fd: number;
   try {
-    const fh = await open(file, "wx");
-    try {
-      await fh.writeFile(JSON.stringify(info));
-    } finally {
-      await fh.close();
-    }
-    return true;
+    fd = openSync(file, "wx");
   } catch (e) {
     if (code(e) === "EEXIST") return false;
     throw e;
   }
+  try {
+    writeSync(fd, JSON.stringify(info));
+  } finally {
+    closeSync(fd);
+  }
+  return true;
 }
 
 /** Like unreadableLockIsStale, but a vanished lock is not "old" (there is nothing to remove). */
@@ -227,9 +228,8 @@ async function breakStaleLock(
   heartbeatStaleMs: number,
 ): Promise<void> {
   const breaker = `${file}.break`;
-  let fh: FileHandle;
   try {
-    fh = await open(breaker, "wx");
+    createTempSync(breaker); // registered: a hard exit inside the critical section removes it
   } catch (e) {
     if (code(e) !== "EEXIST" && !RETRY_CODES.has(code(e) ?? "")) throw e;
     // Another waiter is breaking it right now; clear a breaker file abandoned by a crashed process.
@@ -243,7 +243,6 @@ async function breakStaleLock(
     return;
   }
   try {
-    await fh.close();
     const cur = await readLock(file);
     const stillStale = cur
       ? (seen === null || cur.token === seen.token) &&
@@ -252,6 +251,7 @@ async function breakStaleLock(
     if (stillStale) await unlink(file).catch(() => {});
   } finally {
     await unlink(breaker).catch(() => {});
+    releaseTemp(breaker);
   }
 }
 

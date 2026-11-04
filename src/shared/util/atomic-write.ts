@@ -5,10 +5,14 @@
  *
  * Windows: `rename` over an existing file can fail transiently with EPERM/EBUSY/EACCES
  * while antivirus or an indexer holds a handle; we retry with a short backoff.
+ *
+ * The temp is created on the main thread and registered (src/shared/util/fs-temp.ts) so a hard exit
+ * (second Ctrl+C) removes it reliably; the data is then written without O_CREAT.
  */
 import { randomBytes } from "node:crypto";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createTempSync, releaseTemp } from "./fs-temp.js";
 
 const RETRYABLE = new Set(["EPERM", "EBUSY", "EACCES", "EEXIST", "ENOTEMPTY"]);
 
@@ -32,18 +36,28 @@ export async function writeFileAtomic(
   const dir = path.dirname(file);
   await mkdir(dir, { recursive: true });
   const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`);
-  await writeFile(tmp, data);
+  createTempSync(tmp);
+  try {
+    // "r+": never re-creates a temp that a hard exit already removed.
+    await writeFile(tmp, data, { flag: "r+" });
+  } catch (e) {
+    await rm(tmp, { force: true }).catch(() => undefined);
+    releaseTemp(tmp);
+    throw e;
+  }
   const doRename = opts.renameImpl ?? rename;
   const retries = Math.max(1, opts.retries ?? 10);
   let delay = opts.retryDelayMs ?? 10;
   for (let attempt = 1; ; attempt++) {
     try {
       await doRename(tmp, file);
+      releaseTemp(tmp);
       return;
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code ?? "";
       if (attempt >= retries || !RETRYABLE.has(code)) {
         await rm(tmp, { force: true }).catch(() => undefined);
+        releaseTemp(tmp);
         throw e;
       }
       await sleep(delay);
