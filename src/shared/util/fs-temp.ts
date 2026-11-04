@@ -21,29 +21,27 @@ const live = new Set<string>();
  * a live temp of this process. Throws like openSync (EEXIST, ENOENT …); nothing is registered then.
  */
 export function createTempSync(file: string, content?: string | Uint8Array): void {
+  // Registered only once WE created it: a contender's EEXIST on a shared name (`<lock>.break`) must not
+  // unregister the winner's file. Nothing can run between openSync and add (same synchronous turn).
+  const fd = openSync(file, "wx");
   live.add(file);
-  let fd: number | undefined;
   try {
-    fd = openSync(file, "wx");
     if (content !== undefined) {
       const buf = typeof content === "string" ? Buffer.from(content) : content;
       let off = 0;
       while (off < buf.byteLength) off += writeSync(fd, buf, off, buf.byteLength - off);
     }
   } catch (e) {
-    live.delete(file);
-    if (fd !== undefined) {
-      try {
-        closeSync(fd);
-        unlinkSync(file);
-      } catch {
-        // best effort
-      }
+    closeSync(fd);
+    try {
+      unlinkSync(file);
+    } catch {
+      // best effort
     }
+    live.delete(file);
     throw e;
-  } finally {
-    if (fd !== undefined && live.has(file)) closeSync(fd);
   }
+  closeSync(fd);
 }
 
 /** The temp was renamed away or removed: stop tracking it. */

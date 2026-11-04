@@ -63,7 +63,7 @@ describe("double Ctrl+C during writes", () => {
       const r = await execa(process.execPath, ["--import", TSX_LOADER, BURST, outDir, hist], {
         reject: false,
         timeout: 60_000,
-        env: { SW_TEST_SIGINT_AFTER_MS: String(300 + i * 13), UV_THREADPOOL_SIZE: "2" },
+        env: { SW_TEST_SIGINT_AFTER_MS: String(20 + i * 13), UV_THREADPOOL_SIZE: "2" },
         stdin: "ignore",
         windowsHide: true,
       });

@@ -20,17 +20,26 @@ const world = {
 } as unknown as World;
 installSignals(world, { quiet: true } as never);
 
+// The clock starts at the first completed report write, so the abort always lands while the writers
+// are busy, however slowly this process started (tsx transpile on a loaded CI runner).
 const after = Number(process.env.SW_TEST_SIGINT_AFTER_MS ?? "50");
-setTimeout(() => {
-  process.emit("SIGINT", "SIGINT");
-  process.emit("SIGINT", "SIGINT");
-}, after);
+let armed = false;
+function arm(): void {
+  if (armed) return;
+  armed = true;
+  setTimeout(() => {
+    process.emit("SIGINT", "SIGINT");
+    process.emit("SIGINT", "SIGINT");
+  }, after);
+}
 
 const small = "y".repeat(2048);
 async function writer(w: number): Promise<void> {
   for (let i = 0; ; i++) {
-    if (w % 2 === 0) await writeFileAtomic(path.join(outDir, `report-${w}.json`), small);
-    else
+    if (w % 2 === 0) {
+      await writeFileAtomic(path.join(outDir, `report-${w}.json`), small);
+      arm();
+    } else
       await withLock(path.join(historyDir, ".lock"), () =>
         atomicWrite(path.join(historyDir, "runs", `r${w}-${i % 3}.json.gz`), small),
       );
