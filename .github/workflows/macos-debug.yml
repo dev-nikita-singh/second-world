@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest]
+        os: [macos-latest, ubuntu-latest]
         node: ["22.19.x", "24.x"]
     env:
       CI: "true"
@@ -37,7 +37,8 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - run: sysctl -n machdep.cpu.brand_string hw.ncpu hw.perflevel0.logicalcpu hw.perflevel1.logicalcpu || true
+      - if: runner.os == 'macOS'
+        run: sysctl -n machdep.cpu.brand_string hw.ncpu hw.perflevel0.logicalcpu hw.perflevel1.logicalcpu || true
       - name: A/A debug
         run: node .github/debug/aa-debug.mjs ${{ inputs.aa || '4' }}
         continue-on-error: true
