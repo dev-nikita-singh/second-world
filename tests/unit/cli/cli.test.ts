@@ -34,7 +34,10 @@ describe("program definition (in-process)", () => {
       "evolve",
       "model",
       "analyze",
+      "report",
+      "run",
       "history",
+      "plugins",
       "init",
     ]);
     const flags = p.options.map((o) => o.long);

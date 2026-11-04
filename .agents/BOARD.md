@@ -220,3 +220,13 @@ main (7b): cfb1f94 shared atomic writer (model/arch cache concurrent saves) · 3
 Unowned files (src/index.ts, package.json, other engines, docs/16): message main.
 | sw-gaps-w8 | DONE (3935628) | src/core/world.ts (stress input mapping only), src/engines/stress/**, src/engines/agent/planner/**, src/engines/bugs/{property,generate,cases}.ts (stateful only), tests/unit/{stress,agent,bugs}/** + tests/integration/{stress,agent,bugs}/** (new files) | 4 engine gaps found by sw-real2-w8 on orders-jobs-api |
 FINAL wave 8 (main): version 0.1.0 (6f3f8af); full suite twice in a row: 253 files, 2021 passed / 5 skipped / 0 failed (both runs); lint 0/0 --error-on-warnings; tsc clean. Merged to master.
+
+## Wave 9 (2026-11-04, branch `main`; master renamed to main). Plan + DoD: .agents/PLAN-wave9.md
+GitHub repo dev-nikita-singh/second-world (public) — blocked: the gh token cannot create repos (asked user). npm publish: NOT wanted yet.
+| Agent | Status | Owns | Task |
+|---|---|---|---|
+| sw-sqlite-w9 | running | see plan | real node:sqlite history backend + JSONL import + contract tests |
+| sw-plugins-w9 | DONE (uncommitted; commit with sw-sqlite-w9: world.ts uses history store.ts) | see plan | plugin system (docs/10) + `sw plugins list/check` |
+| sw-cli-w9 | DONE (uncommitted; quickstart issues were already fixed, regression tests added; plugins CLI wired) | see plan | `sw report`, `sw run`, quickstart known issues |
+| sw-linux-w9 | running | src/engines/performance/**, src/engines/reliability/** (detector), tests/integration/{performance,concurrency,examples,reliability}/** | 4 Linux-only integration failures (WSL run of dfb3f52) |
+| main | running | .github/**, package.json, CHANGELOG.md | GitHub repo + CI (Linux/macOS/Windows/docker/podman/Action), release rehearsal, local WSL Linux run |

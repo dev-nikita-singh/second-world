@@ -6,10 +6,10 @@ import { zodIssueLines } from "../../core/config/loader.js";
 import { type CreateEngineContextOptions, createEngineContext } from "../../core/context.js";
 import { ConfigError } from "../../core/errors.js";
 import type { EngineResult, Finding } from "../../core/evidence/schemas.js";
-import type { Engine } from "../../core/types.js";
+import type { Engine, EngineContext } from "../../core/types.js";
 import { hydrateForReplay } from "./artifact.js";
 import type { BugCase } from "./cases.js";
-import { ENGINE_VERSION, executeBugs, replayCase } from "./engine.js";
+import { type BugsDeps, ENGINE_VERSION, executeBugs, replayCase } from "./engine.js";
 import { type BugsInput, type BugsInputLoose, BugsInputSchema } from "./schema.js";
 import { openSession } from "./session.js";
 import type { BugsData, ReproductionArtifact } from "./types.js";
@@ -72,6 +72,16 @@ export async function runBugHunt(
 ): Promise<EngineResult<BugsData>> {
   const parsed = parseBugsInput(input);
   return executeBugs(parsed, createEngineContext(ctx ?? {}));
+}
+
+export type { BugsDeps };
+/** Engine run with extra contributions (plugin assertions, docs/10 §2); used by the world. */
+export function runBugsWith(
+  input: BugsInput,
+  ctx: EngineContext,
+  deps: BugsDeps,
+): Promise<EngineResult<BugsData>> {
+  return executeBugs(input, ctx, deps);
 }
 
 export interface ReplayResult {

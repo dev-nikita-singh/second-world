@@ -53,6 +53,8 @@ export interface LoadedInvariant {
   name: string;
   fn: (x: unknown) => InvariantResult | Promise<InvariantResult>;
   operations?: string[];
+  /** Plugin assertions (docs/10 §2) report as "bugs/assertion-failed"; module invariants as "bugs/invariant-violated". */
+  kind?: "invariant" | "assertion";
 }
 
 export async function loadInvariant(

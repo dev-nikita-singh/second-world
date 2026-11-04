@@ -34,6 +34,8 @@ export interface GlobalOptions {
   verbose?: boolean;
   jsonLogs?: boolean;
   configCode?: boolean;
+  /** commander `--no-plugins` → false */
+  plugins?: boolean;
 }
 
 function collect(v: string, prev: string[] = []): string[] {
@@ -49,7 +51,7 @@ export function buildProgram(): Command {
     .option("-c, --config <file>", "config path (default: auto-discover sw.config.*)")
     .option("-p, --profile <name>", "apply a config profile")
     .option("--set <key=value>", "override any config key (repeatable)", collect)
-    .option("-f, --format <list>", "report formats: tty,json,md,junit,sarif,html")
+    .option("-f, --format <list>", "report formats: tty,json,md,junit,sarif,html or a plugin format ns/name")
     .option("-o, --out <dir>", "report output dir")
     .addOption(
       new Option("--fail-on <sev>", "exit 1 threshold").choices([
@@ -70,6 +72,7 @@ export function buildProgram(): Command {
     .option("--verbose", "debug logging")
     .option("--json-logs", "JSON log lines on stderr")
     .option("--no-config-code", "only load JSON/YAML configs (never execute config code)")
+    .option("--no-plugins", "do not load plugins (config plugins are listed as disabled)")
     .showHelpAfterError("(run `sw --help` for usage)")
     .exitOverride();
 
@@ -454,6 +457,32 @@ export function buildProgram(): Command {
       return analyzeCommand(reports, o, cmd.optsWithGlobals<GlobalOptions>());
     });
 
+  program
+    .command("report")
+    .description(
+      "combine and/or re-render earlier reports (report.json files, history runs) in any format; no network",
+    )
+    .argument("[reports...]", "report.json files from previous runs")
+    .option("--last", "include the latest run in history")
+    .option("--run <id>", "include a history run (id, unique prefix or baseline:<name>; repeatable)", collect)
+    .option("--json", "print the combined report JSON on stdout")
+    .action(async (reports: string[], o: Record<string, unknown>, cmd: Command) => {
+      const { reportCommand } = await import("./commands/report.js");
+      return reportCommand(reports, o, cmd.optsWithGlobals<GlobalOptions>());
+    });
+
+  program
+    .command("run")
+    .description("run a workflow from the config (a DAG of engine steps: workflows.<name>)")
+    .argument("[workflow]", "workflow name (see `sw run --list`)")
+    .option("--list", "list the workflows defined in the config")
+    .option("--json", "print the combined report JSON on stdout (with --list: the workflows)")
+    .option("--no-history", "do not save this run to history")
+    .action(async (name: string | undefined, o: Record<string, unknown>, cmd: Command) => {
+      const { runCommand } = await import("./commands/run.js");
+      return runCommand(name, o, cmd.optsWithGlobals<GlobalOptions>());
+    });
+
   const history = program.command("history").description("experiment history: list, compare, trend, verify");
   const hist = () => import("./commands/history.js");
   history
@@ -518,6 +547,26 @@ export function buildProgram(): Command {
     .option("--json", "JSON output")
     .action(async (o, cmd: Command) => (await hist()).historyPrune(o, cmd.optsWithGlobals<GlobalOptions>()));
 
+  const plugins = program.command("plugins").description("plugins from the config: list, check (docs/10)");
+  plugins
+    .command("list")
+    .description("configured plugins: name, version, apiVersion, contributions, status")
+    .option("--json", "machine-readable output")
+    .action(async (o: { json?: boolean }, cmd: Command) => {
+      const { pluginsList } = await import("./commands/plugins.js");
+      return pluginsList(o, cmd.optsWithGlobals<GlobalOptions>());
+    });
+  plugins
+    .command("check")
+    .description(
+      "load + validate plugins and the config's references to them (exit 2 if a required plugin is broken)",
+    )
+    .option("--json", "machine-readable output")
+    .action(async (o: { json?: boolean }, cmd: Command) => {
+      const { pluginsCheck } = await import("./commands/plugins.js");
+      return pluginsCheck(o, cmd.optsWithGlobals<GlobalOptions>());
+    });
+
   program
     .command("init")
     .description("detect the project and write sw.config.ts with local-only safety defaults")
@@ -568,7 +617,29 @@ function isEntry(): boolean {
   }
 }
 
+/**
+ * `sw … | head`: when the reader closes the pipe, stdout/stderr emit EPIPE. Unhandled, that is an
+ * uncaught exception (exit 1 with a stack trace) in the middle of a run. Instead the closed stream
+ * becomes a sink: the run finishes normally (cleanup, history, exit code) and its remaining output is
+ * dropped, like any well-behaved Unix CLI.
+ */
+export function ignoreClosedPipes(
+  streams: readonly NodeJS.WriteStream[] = [process.stdout, process.stderr],
+): void {
+  for (const s of streams) {
+    s.on("error", (e: NodeJS.ErrnoException) => {
+      if (e.code !== "EPIPE" && e.code !== "ERR_STREAM_DESTROYED") throw e;
+      s.write = ((_chunk: unknown, enc?: unknown, cb?: unknown) => {
+        const done = typeof enc === "function" ? enc : cb;
+        if (typeof done === "function") (done as () => void)();
+        return true;
+      }) as typeof s.write;
+    });
+  }
+}
+
 if (isEntry()) {
+  ignoreClosedPipes();
   main().then(
     (code) => {
       process.exitCode = code;

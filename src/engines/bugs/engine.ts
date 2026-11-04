@@ -32,6 +32,7 @@ import {
 } from "./generate.js";
 import { toHar } from "./har.js";
 import { BudgetExhausted, type Exchange } from "./http.js";
+import type { LoadedInvariant } from "./invariants.js";
 import { inferSchema, mergeInferred } from "./json-schema.js";
 import { runModelTechnique, runPropertyTechnique } from "./property.js";
 import { RULES } from "./rules.js";
@@ -147,11 +148,20 @@ export async function replayCase(
   return out;
 }
 
-export async function executeBugs(input: BugsInput, ctx: EngineContext): Promise<EngineResult<BugsData>> {
+/** Extra per-run contributions: plugin assertions (docs/10 §2). */
+export interface BugsDeps {
+  invariants?: readonly LoadedInvariant[];
+}
+
+export async function executeBugs(
+  input: BugsInput,
+  ctx: EngineContext,
+  deps: BugsDeps = {},
+): Promise<EngineResult<BugsData>> {
   const startedAt = ctx.clock.isoNow();
   const t0 = ctx.clock.now();
   const runId = ctx.newId();
-  const s = await openSession(input, ctx);
+  const s = await openSession(input, ctx, deps.invariants ? { extraInvariants: deps.invariants } : {});
   const limitations: Limitation[] = [...s.limitations];
   const matrix = new Map<string, OperationRow>();
   const entries = new Map<string, Entry>();

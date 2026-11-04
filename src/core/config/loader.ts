@@ -386,7 +386,7 @@ function secretWarnings(data: Obj, label: string): string[] {
       );
       if (r.redactString(v) !== v || (keyLooksSecret && v.length >= 8)) {
         out.push(
-          `${p}: value in ${label} looks like a secret; use { env: "NAME" } or { file: "path" } instead`,
+          `Literal string at ${p} in ${label} looks like a secret (log output would redact it); use { env: "NAME" } or { file: "path" } instead`,
         );
       }
     } else if (Array.isArray(v)) {

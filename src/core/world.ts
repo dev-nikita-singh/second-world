@@ -22,6 +22,7 @@ import { createEvidenceStore, type EvidenceStoreEx } from "./evidence/store.js";
 import { createLogger, silentLogger } from "./log/logger.js";
 import { createRedactor, type Redactor } from "./log/redact.js";
 import { runWorkflow, type WorkflowResult } from "./orchestrator.js";
+import type { HookFailure, PluginExport, PluginInfo, PluginSet } from "./plugins/index.js";
 import { probeEnvironment } from "./probe/probe.js";
 import { createRegistry, type EngineLoader, type EngineRegistry } from "./registry.js";
 import { createSafetyGuard, type SafetyGuardEx } from "./safety/guard.js";
@@ -53,6 +54,13 @@ export interface CreateWorldOptions {
   clock?: Clock;
   /** Extra / replacement engine loaders (tests, plugins). */
   engines?: Record<string, EngineLoader>;
+  /**
+   * Plugin objects (or factories) loaded after the config's `plugins` (docs/10 §3). Programmatic only;
+   * still subject to `noPlugins`.
+   */
+  plugins?: readonly PluginExport[];
+  /** `--no-plugins`: load no plugin at all (configured ones are listed as disabled). */
+  noPlugins?: boolean;
 }
 
 export interface RunOptions {
@@ -93,6 +101,8 @@ export interface World {
   readonly history: WorldHistory;
   /** Reports: combine / write / render (docs/09 §2). */
   readonly report: WorldReport;
+  /** Loaded plugins and their contributions (docs/10). */
+  readonly plugins: WorldPlugins;
   /** Generic engine access (lazy). */
   engine(id: string): EngineHandle;
   /** Builds the engine input exactly as `engine(id).run(input)` would (config section + input), without running. */
@@ -134,6 +144,32 @@ export interface WorldHistory {
 }
 
 export type ReportFormatName = "tty" | "json" | "md" | "junit" | "sarif" | "html";
+/** A built-in format or a plugin reporter id `namespace/name`. */
+export type ReportFormatId = ReportFormatName | (string & {});
+
+/** docs/10: what plugins contributed to this world. */
+export interface WorldPlugins {
+  /** False under `noPlugins` / `noConfigCode` (no plugin code was imported). */
+  readonly enabled: boolean;
+  /** Every configured plugin with its status and contributions (`sw plugins list`). */
+  list(): readonly PluginInfo[];
+  /** Plugin report formats (`-f <id>`). */
+  formats(): string[];
+  hasFormat(format: string): boolean;
+  /** Renders a plugin format (async: reporters may be async). */
+  render(report: unknown, format: string): Promise<string>;
+  /** Writes plugin formats to `<outDir>/<baseName><extension>` atomically. Built-in formats are ignored. */
+  writeReports(
+    input: unknown,
+    opts?: {
+      formats?: readonly string[];
+      outDir?: string;
+      baseName?: string;
+      failOn?: string;
+      meta?: Record<string, unknown>;
+    },
+  ): Promise<Array<{ format: string; path: string }>>;
+}
 
 /** docs/09 §2 `world.report` — thin wrappers over src/engines/reporting. Defaults come from config.report. */
 export interface WorldReport {
@@ -142,7 +178,7 @@ export interface WorldReport {
   /** Writes report files (tty is never written). `outDir` resolves against the config dir. */
   write(
     report: unknown,
-    opts?: { formats?: readonly ReportFormatName[]; outDir?: string; baseName?: string; failOn?: string },
+    opts?: { formats?: readonly ReportFormatId[]; outDir?: string; baseName?: string; failOn?: string },
   ): Promise<{ report: unknown; files: Array<{ format: string; path: string }> }>;
   /** Renders one format to a string (pure). */
   render(report: unknown, format: ReportFormatName, opts?: { color?: boolean; ascii?: boolean }): string;
@@ -597,6 +633,135 @@ function resolveAuth(ref: Obj, o: { env?: NodeJS.ProcessEnv; cwd?: string }): Ob
   return out;
 }
 
+/** An empty, enabled plugin set without importing src/core/plugins (no plugins configured). */
+function noPluginSet(): PluginSet {
+  return {
+    enabled: true,
+    plugins: [],
+    reporters: new Map(),
+    rules: [],
+    extractors: [],
+    assertions: new Map(),
+    historyStores: new Map(),
+    hooks: { on: () => undefined, has: () => false, eventsOf: () => [], run: async () => [] },
+    warnings: [],
+    limitations: [],
+  };
+}
+
+/**
+ * docs/10 §3: loads `config.plugins` (+ inline plugins) unless disabled. Plugin code never runs under
+ * `noConfigCode` (config ones) or `noPlugins` (all). A failed required plugin throws its ConfigError
+ * (exit 2) / CapabilityError (exit 4); optional ones degrade to a warning + limitation. Also checks that
+ * plugin report formats and history backends named in the config exist.
+ */
+async function setUpPlugins(
+  cfg: ResolvedConfig,
+  opts: CreateWorldOptions,
+  log: Logger,
+  envReport: EnvironmentReport,
+): Promise<PluginSet> {
+  const configured = cfg.config.plugins;
+  const inline = opts.plugins ?? [];
+  const formats = cfg.config.report.formats.filter((f) => f.includes("/"));
+  const backend = cfg.config.history.backend;
+  if (configured.length === 0 && inline.length === 0 && formats.length === 0 && !backend.includes("/"))
+    return noPluginSet();
+  const p = await import("./plugins/index.js");
+  const specs = p.normalizePluginEntries(configured);
+  const inlineSpecs = inline.map((x, i) => ({
+    spec: typeof x === "object" && x && typeof x.name === "string" ? x.name : `inline#${i}`,
+    optional: false,
+    options: {},
+    inline: x,
+  }));
+  let set: PluginSet;
+  if (opts.noPlugins) set = p.disabledPluginSet([...specs, ...inlineSpecs], "--no-plugins");
+  else if (opts.noConfigCode && specs.length > 0) {
+    // Untrusted repo: never import plugin code named by the config; programmatic plugins still load.
+    const loaded = await p.loadPlugins(inlineSpecs, {
+      projectDir: cfg.cwd,
+      log,
+      capabilities: envReport.capabilities,
+    });
+    const off = p.disabledPluginSet(specs, "--no-config-code");
+    set = { ...loaded, enabled: inlineSpecs.length > 0, plugins: [...off.plugins, ...loaded.plugins] };
+    set.warnings.push(...off.warnings);
+    set.limitations.push(...off.limitations);
+  } else
+    set = await p.loadPlugins([...specs, ...inlineSpecs], {
+      projectDir: cfg.cwd,
+      log,
+      capabilities: envReport.capabilities,
+    });
+  const failed = p.firstFailure(set);
+  if (failed) throw p.pluginError(failed);
+  for (const w of set.warnings) log.warn(w);
+  const disabled = set.plugins.some((x) => x.status === "disabled");
+  for (const f of formats) {
+    if (set.reporters.has(f)) continue;
+    if (disabled) log.warn(`report format "${f}" comes from a plugin that is not loaded; skipped`);
+    else
+      throw new ConfigError(
+        "SW_CONFIG_REPORT_FORMAT",
+        `report.formats: unknown plugin report format "${f}"`,
+        {
+          hint: `Plugin formats: ${[...set.reporters.keys()].join(", ") || "(none; is the plugin listed in plugins: [...]?)"}`,
+        },
+      );
+  }
+  if (backend.includes("/") && !set.historyStores.has(backend) && !disabled) {
+    throw new ConfigError("SW_CONFIG_HISTORY", `history.backend: unknown plugin history store "${backend}"`, {
+      hint: `Plugin history stores: ${[...set.historyStores.keys()].join(", ") || "(none; is the plugin listed in plugins: [...]?)"}`,
+    });
+  }
+  if (set.hooks.has("config.resolved")) {
+    const fails = await set.hooks.run("config.resolved", {
+      config: cfg.config as unknown as Record<string, unknown>,
+      configFile: cfg.configFile,
+      cwd: cfg.cwd,
+    });
+    for (const f of fails) log.warn(f.message);
+  }
+  return set;
+}
+
+/** Splits bugs.assertions into built-in ones (kept in `raw`) and bound plugin assertions. */
+async function splitBugsAssertions(
+  plugins: PluginSet,
+  raw: Obj,
+): Promise<{ bound: unknown[]; warnings: string[] }> {
+  if (!Array.isArray(raw.assertions) || !raw.assertions.some((a) => isObj(a) && a.use !== undefined))
+    return { bound: [], warnings: [] };
+  if (plugins.plugins.some((x) => x.status === "disabled")) {
+    const n = raw.assertions.filter((a) => isObj(a) && a.use !== undefined).length;
+    raw.assertions = raw.assertions.filter((a) => !(isObj(a) && a.use !== undefined));
+    return { bound: [], warnings: [`${n} plugin assertion(s) skipped: plugins are not loaded`] };
+  }
+  const { bindPluginAssertions } = await import("./plugins/index.js");
+  const { builtin, bound } = bindPluginAssertions(plugins, raw.assertions);
+  raw.assertions = builtin;
+  return { bound, warnings: [] };
+}
+
+/** Adds degraded/disabled-plugin and hook-failure limitations to a result. */
+function withPluginLimitations(
+  result: EngineResult,
+  plugins: PluginSet,
+  hookFailures: readonly HookFailure[] | undefined,
+): EngineResult {
+  const extra = [
+    ...plugins.limitations,
+    ...(hookFailures ?? []).map((f) => ({
+      code: "PLUGIN_HOOK_FAILED",
+      message: f.message,
+      impact: "informational" as const,
+    })),
+  ];
+  if (extra.length === 0) return result;
+  return { ...result, limitations: [...result.limitations, ...extra] };
+}
+
 export async function createWorld(opts: CreateWorldOptions = {}): Promise<World> {
   const env = opts.env ?? process.env;
   const cwd = opts.cwd ?? process.cwd();
@@ -653,6 +818,37 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
     onFinding: (f, isNew) => events.emit(isNew ? "finding.created" : "finding.updated", f),
   });
   const envReport = opts.probe === false ? stubEnvironmentReport() : await probeEnvironment({ env });
+  const plugins = await setUpPlugins(cfg, opts, log, envReport);
+  const pluginHookFailures = new Map<string, HookFailure[]>();
+  const pendingFindingHooks = new Set<Promise<void>>();
+  if (plugins.hooks.has("finding.created")) {
+    events.on("finding.created", (f) => {
+      const finding = f as Obj;
+      const engineId = typeof finding.engine === "string" ? finding.engine : "unknown";
+      const p: Promise<void> = plugins.hooks
+        .run("finding.created", { engine: engineId, finding: Object.freeze({ ...finding }) })
+        .then((fails) => recordHookFailures(engineId, fails))
+        .finally(() => pendingFindingHooks.delete(p));
+      pendingFindingHooks.add(p);
+    });
+  }
+  function recordHookFailures(engineId: string, fails: readonly HookFailure[]): void {
+    if (fails.length === 0) return;
+    const list = pluginHookFailures.get(engineId) ?? [];
+    for (const f of fails) {
+      log.warn(f.message);
+      list.push(f);
+    }
+    pluginHookFailures.set(engineId, list);
+  }
+  async function fireHook(
+    event: "run.started" | "engine.started" | "run.completed" | "run.failed",
+    engineId: string,
+    payload: never,
+  ): Promise<void> {
+    if (!plugins.hooks.has(event)) return;
+    recordHookFailures(engineId, await plugins.hooks.run(event, payload));
+  }
   const registry = createRegistry();
   for (const [k, v] of Object.entries(opts.engines ?? {})) registry.register(k, v);
   const seed =
@@ -705,6 +901,14 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
                             isObj((cfg.config as Obj)[id]) ? ((cfg.config as Obj)[id] as Obj) : {},
                             input,
                           );
+    await fireHook("run.started", id, { engine: id } as never);
+    // Plugin assertions (bugs.assertions[].use) are bound here and handed to the engine (docs/10 §2).
+    let pluginAssertions: unknown[] = [];
+    if (id === "bugs") {
+      const split = await splitBugsAssertions(plugins, raw);
+      pluginAssertions = split.bound;
+      for (const w of split.warnings) log.warn(w);
+    }
     let parsed: unknown;
     // Engines export parse<Id>Input (ConfigError with readable paths); fall back to the Zod schema.
     const parseName = PARSE_ALIASES[id] ?? `parse${id.charAt(0).toUpperCase()}${id.slice(1)}Input`;
@@ -722,16 +926,48 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
     }
     const ctx = makeCtx(signal, id);
     events.emit("run.started", { engine: id });
+    await fireHook("engine.started", id, { engine: id, engineVersion: engine.version } as never);
     const t0 = clock.now();
     try {
-      const result = await engine.run(parsed, ctx);
+      const mod = module as Obj;
+      let result: EngineResult;
+      if (
+        id === "architecture" &&
+        plugins.rules.length > 0 &&
+        typeof mod.inspectArchitecture === "function"
+      ) {
+        result = await (
+          mod.inspectArchitecture as (i: unknown, c: unknown, d: unknown) => Promise<EngineResult>
+        )(parsed, ctx, {
+          rules: plugins.rules,
+          ...(plugins.extractors.length > 0 ? { extractors: plugins.extractors } : {}),
+        });
+      } else if (id === "bugs" && pluginAssertions.length > 0 && typeof mod.runBugsWith === "function") {
+        result = await (mod.runBugsWith as (i: unknown, c: unknown, d: unknown) => Promise<EngineResult>)(
+          parsed,
+          ctx,
+          { invariants: pluginAssertions },
+        );
+      } else result = await engine.run(parsed, ctx);
       // Some engines (architecture) already add their findings to ctx.evidence; don't double-count.
       for (const f of result.findings) if (!evidence.get(f.id)) evidence.addFinding(f);
+      if (pendingFindingHooks.size > 0) await Promise.allSettled([...pendingFindingHooks]);
+      await fireHook("run.completed", id, { engine: id, result: Object.freeze({ ...result }) } as never);
+      result = withPluginLimitations(result, plugins, pluginHookFailures.get(id));
+      pluginHookFailures.delete(id);
       evidence.addResult(result);
       events.emit("run.completed", { engine: id, status: result.status, durationMs: clock.now() - t0 });
       return result;
     } catch (e) {
       events.emit("run.failed", { engine: id, error: isSecondWorldError(e) ? e.code : String(e) });
+      await fireHook("run.failed", id, {
+        engine: id,
+        error: {
+          code: isSecondWorldError(e) ? e.code : e instanceof Error ? e.name : "Error",
+          message: e instanceof Error ? e.message : String(e),
+        },
+      } as never).catch(() => undefined);
+      pluginHookFailures.delete(id);
       // The safety kill switch also trips on world.cancel()/the caller's signal (Ctrl+C). An engine
       // that had not reserved its lease yet then throws SW_SAFETY_KILLED, which is a cancellation
       // (exit 130), not a safety block (exit 3). A real safety.kill() leaves `signal` un-aborted.
@@ -744,11 +980,49 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
   let storePromise: Promise<HistoryStoreLike> | undefined;
   const history: WorldHistory = {
     store() {
+      const dir = resolvePath(cfg.cwd, cfg.config.history.dir);
+      let backend = cfg.config.history.backend;
+      const reg = plugins.historyStores.get(backend);
+      if (reg) {
+        // Plugin store (docs/10 §2): world-scoped, validated against the HistoryStore interface.
+        storePromise ??= (async () => {
+          const { assertHistoryStore } = await import("./plugins/index.js");
+          let store: unknown;
+          try {
+            store = await reg.factory({
+              cwd: cfg.cwd,
+              dir,
+              options: reg.options,
+              isoNow: () => clock.isoNow(),
+              onWarning: (m) => log.warn(`plugin "${reg.plugin}": ${m}`),
+            });
+          } catch (e) {
+            throw new ConfigError(
+              "SW_CONFIG_PLUGIN_HISTORY",
+              `plugin "${reg.plugin}" history store ${reg.id} failed to open: ${(e as Error).message}`,
+              { cause: e },
+            );
+          }
+          assertHistoryStore(store, reg.plugin, reg.id);
+          return store as HistoryStoreLike;
+        })();
+        storePromise.catch(() => {
+          storePromise = undefined;
+        });
+        return storePromise;
+      }
+      if (backend.includes("/")) {
+        // Validated at creation; only reachable when plugins are disabled.
+        log.warn(
+          `history.backend "${backend}" is provided by a plugin, but plugins are disabled; using JSONL`,
+        );
+        backend = "jsonl";
+      }
       storePromise ??= import("../engines/history/index.js").then((m) =>
         m.createHistoryStore({
           cwd: cfg.cwd,
-          dir: resolvePath(cfg.cwd, cfg.config.history.dir),
-          backend: cfg.config.history.backend,
+          dir,
+          backend,
           isoNow: () => clock.isoNow(),
           onWarning: (m) => log.warn(m),
         }),
@@ -841,16 +1115,22 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
       ),
     async write(rep, o = {}) {
       const outDir = resolvePath(cfg.cwd, o.outDir ?? cfg.config.report.outDir);
-      const formats = (o.formats ?? cfg.config.report.formats) as Parameters<
+      const all = [...(o.formats ?? cfg.config.report.formats)];
+      const builtin = all.filter((f) => !f.includes("/")) as Parameters<
         Reporting["writeReports"]
       >[1]["formats"];
       const r = await reporting.writeReports(rep as never, {
-        formats,
+        formats: builtin,
         outDir,
         failOn: asFailOn(o.failOn),
         ...(o.baseName ? { baseName: o.baseName } : {}),
       });
-      return { report: r.report, files: r.files };
+      const extra = await worldPlugins.writeReports(r.report, {
+        formats: all,
+        outDir,
+        ...(o.baseName ? { baseName: o.baseName } : {}),
+      });
+      return { report: r.report, files: [...r.files, ...extra] };
     },
     render: (rep, format, o = {}) =>
       reporting.renderReport(rep as never, format, { failOn: asFailOn(), ...o }),
@@ -862,6 +1142,40 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
           ? (results as EngineResult[])
           : ((results as { results?: EngineResult[] }).results ?? []);
       return reporting.computeExitCode(list, asFailOn(failOn));
+    },
+  };
+
+  const worldPlugins: WorldPlugins = {
+    enabled: plugins.enabled,
+    list: () => plugins.plugins,
+    formats: () => [...plugins.reporters.keys()],
+    hasFormat: (f) => plugins.reporters.has(f),
+    async render(rep, format) {
+      const reg = plugins.reporters.get(format);
+      if (!reg)
+        throw new ConfigError("SW_CONFIG_REPORT_FORMAT", `Unknown plugin report format "${format}"`, {
+          hint: `Plugin formats: ${[...plugins.reporters.keys()].join(", ") || "(none)"}`,
+        });
+      const { renderPluginReport } = await import("./plugins/index.js");
+      return renderPluginReport(reg, reporting.toReport(rep as never, undefined, asFailOn()));
+    },
+    async writeReports(input, o = {}) {
+      const formats = [...new Set(o.formats ?? cfg.config.report.formats)].filter((f) =>
+        plugins.reporters.has(f),
+      );
+      if (formats.length === 0) return [];
+      const outDir = resolvePath(cfg.cwd, o.outDir ?? cfg.config.report.outDir);
+      const rep = reporting.toReport(input as never, o.meta as never, asFailOn(o.failOn));
+      const { renderPluginReport } = await import("./plugins/index.js");
+      const files: Array<{ format: string; path: string }> = [];
+      for (const f of formats) {
+        const reg = plugins.reporters.get(f);
+        if (!reg) continue;
+        const file = join(outDir, `${o.baseName ?? "report"}${reg.extension}`);
+        await reporting.writeFileAtomic(file, await renderPluginReport(reg, rep));
+        files.push({ format: f, path: file });
+      }
+      return files;
     },
   };
 
@@ -899,7 +1213,13 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
       if (id === "performance") return buildPerformanceInput(cfg, input, bo);
       if (id === "stress") return buildStressInput(cfg, input, bo);
       if (id === "architecture") return buildArchitectureInput(cfg, input);
-      if (id === "bugs") return buildBugsInput(cfg, input, bo);
+      if (id === "bugs") {
+        // Plugin assertions are not part of the engine schema; they are bound at run time.
+        const raw = buildBugsInput(cfg, input, bo);
+        if (Array.isArray(raw.assertions))
+          raw.assertions = raw.assertions.filter((a) => !(isObj(a) && a.use !== undefined));
+        return raw;
+      }
       if (id === "reliability") return buildReliabilityInput(cfg, input, bo);
       if (id === "whatif") return buildWhatIfInput(cfg, input);
       if (id === "evolution") return buildEvolutionInput(cfg, input);
@@ -913,6 +1233,7 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
     architecture: { inspect: (input = {}, ro) => runEngine("architecture", input, ro) },
     history,
     report,
+    plugins: worldPlugins,
     engine: handle,
     async run(name, ro = {}) {
       const wf = cfg.config.workflows[name];
@@ -938,6 +1259,11 @@ export async function createWorld(opts: CreateWorldOptions = {}): Promise<World>
     async close() {
       if (closed) return;
       closed = true;
+      // Release the history store's handle (the SQLite connection) instead of waiting for its idle timer.
+      if (storePromise) {
+        const s = (await storePromise.catch(() => undefined)) as { close?: () => unknown } | undefined;
+        if (typeof s?.close === "function") await Promise.resolve(s.close()).catch(() => {});
+      }
       events.emit("world.closed", {});
       events.clear();
     },

@@ -264,8 +264,61 @@ QA test-case generator ("Adversarial Test Agent", docs/03-engines/adversarial-te
 
 **Reporting notes (engine "agent", data = AgentData):** (1) headline: planner, stop reason, iterations used/max, requests used/max (of which replays), duration, coverage % (documented status pairs); (2) findings table like bugs (rule, operation, classification, replays `failures/replays`, flaky/minimized tags) plus per finding the hypothesis and curl; (3) "Hypotheses tried" table: technique, operation, title, outcome (show `not-reproduced` and `observation` explicitly; the spec wants unconfirmed hypotheses visible); (4) "Rejected proposals" (count + up to 20 reasons with source heuristic/llm/history/regression); (5) "Suggested tests" with filenames + config snippet; (6) LLM usage (calls, tokens, cost) when `budget.llm` is set. JUnit/SARIF: one case/result per finding, as for bugs. [REMOVED (Wave 4: no AI): item (6) LLM usage and the llm proposal source.]
 
+## sw-sqlite-w9 → (sw-plugins-w9 history-store extension point, main, sw-cli-w9) — `src/engines/history/**`
+
+| Export | Module | Signature | Status |
+|---|---|---|---|
+| `HistoryStore` | `src/engines/history/store.ts` (re-exported from `index.ts` and `jsonl-store.ts`) | `{ readonly backend: string; readonly dir: string; append(AppendRunInput) → Promise<IndexEntry>; get(idOrPrefix \| "baseline:<name>") → Promise<HistoryRun\|null> (throws HistoryError SW_HISTORY_AMBIGUOUS); list(ListOptions?) → IndexEntry[] newest first (createdAt desc, id desc); query(QueryFilter \| (e) => boolean) → IndexEntry[] newest first; setBaseline(name, runId) → BaselineRef; getBaseline(name) → HistoryRun\|null; listBaselines() → BaselineRef[] by name; diff(base, cur, CompareRunsOptions?) → RunComparison; trend(metric, filters?) → TrendResult; verify() → VerifyReport {ok, checked, errors, warnings, backend?}; prune({keepLast=50, compact=true, dryRun?}) → PruneReport }`. `backend` widened from `"jsonl"\|"sqlite"` to `string` (plugin stores use their registered name). Behaviour reference = tests/unit/history/contract.ts (`describeHistoryStoreContract(name, makeStore)`; plugin stores can run it) | READY |
+| `HistoryError` | `store.ts` | codes `SW_HISTORY_NOT_FOUND \| AMBIGUOUS \| COMPACTED \| CORRUPT \| BAD_ID \| BACKEND` (BACKEND new: unknown/clashing backend, newer DB schema) | READY |
+| `registerHistoryBackend` | `src/engines/history/registry.ts` (re-exported from `index.ts`) | `registerHistoryBackend(name: string, factory: HistoryStoreFactory) → () => void` (unregister). `HistoryStoreFactory = (o: HistoryStoreFactoryOptions) => HistoryStore \| Promise<HistoryStore>`; `HistoryStoreFactoryOptions = { cwd, dir, captureGit?, newId?, isoNow?, lock?, onWarning?, options?: Record<string, unknown> }`. Names `/^[a-z0-9@][a-z0-9._\-/@]{0,99}$/i`; "jsonl"/"sqlite" reserved; duplicate → HistoryError SW_HISTORY_BACKEND. Process-global registry: call the returned unregister on world close. Also `getHistoryBackend(name)`, `listHistoryBackends()`, `BUILTIN_HISTORY_BACKENDS` | READY |
+| `createHistoryStore` | `index.ts` | `createHistoryStore({ cwd?, dir?, backend?: string = "jsonl", options?, lock?, captureGit?, newId?, isoNow?, onWarning? }) → HistoryStoreWithInfo` (still synchronous). `jsonl` → the JSONL store. `sqlite` and registered names → a lazy wrapper opened on first call (node:sqlite only loads then). `HistoryStoreWithInfo = HistoryStore & { readonly fallbackReason?: string; ready(): Promise<void> }`. sqlite with node:sqlite unavailable → JSONL + `fallbackReason` + `onWarning(reason)`. Unknown backend → first call rejects with HistoryError SW_HISTORY_BACKEND. **CHANGED:** `fallbackReason` is no longer set for sqlite when node:sqlite works (it is real now) | CHANGED |
+| `openHistoryStore` | `index.ts` | `openHistoryStore(opts) → Promise<HistoryStoreWithInfo>` (opens eagerly; `backend`/`fallbackReason` final) | READY |
+| SQLite extras | `src/engines/history/sqlite-store.ts` (lazy: import only via dynamic import) | `createSqliteStore(SqliteStoreOptions) → Promise<HistoryStore>` (throws `SqliteUnavailableError`); `exportSqliteHistoryToJsonl({cwd?, dir?}) → {exported, baselines}` (go back to JSONL); `SQLITE_FILE = "history.db"`, `SQLITE_SCHEMA_VERSION = 1` | READY |
+
+**Config note for sw-plugins-w9 / main:** `history.backend` in src/core/config/schema.ts is `z.enum(["jsonl","sqlite"])`; a plugin store needs it widened (e.g. `z.string().min(1)` with default "jsonl") — schema owner's call. The engine already accepts any registered name.
+
+## sw-plugins-w9 → (sw-cli-w9, main) — `src/core/plugins/**`, `src/plugin.ts`, `src/cli/commands/plugins.ts`
+
+| Export | Module | Signature | Status |
+|---|---|---|---|
+| `definePlugin`, `PLUGIN_API_VERSION` (=1), `apiVersionProblem`, `namespaceOf` | `src/plugin.ts` (= package entry `second-world/plugin`, needs package.json exports + tsdown entry by main) | `definePlugin({ name, version?, apiVersion: 1 \| "^1", namespace?, requires?, setup(api) })` → same object (throws ConfigError SW_CONFIG_PLUGIN_INVALID / _API_VERSION) | READY |
+| `CreateWorldOptions.noPlugins` / `.plugins` | `src/core/world.ts` | `noPlugins: true` = `--no-plugins` (nothing imported; configured plugins listed as disabled). `plugins: PluginExport[]` = programmatic plugins. Config plugins are never imported under `noConfigCode` | READY |
+| `world.plugins` | `src/core/world.ts` | `{ enabled, list() → PluginInfo[], formats() → string[], hasFormat(f), render(report, format) → Promise<string>, writeReports(resultOrReport, { formats?, outDir?, baseName?, failOn?, meta? }) → Promise<{format, path}[]> }` (built-in formats ignored). `world.report.write` already writes plugin formats too | READY |
+| `pluginsList(o: {json?}, g)`, `pluginsCheck(o: {json?}, g)` | `src/cli/commands/plugins.ts` | `sw plugins list|check [--json]`; reads `g.plugins === false` (`--no-plugins`) and `g.configCode === false`. check → exit 2 on a broken required plugin / unknown reference | READY (needs registration in main.ts) |
+
 ## Requests (anyone may append)
 
 - _none yet_
 **REMOVED (Wave 4: no AI)** - sw-ai -> main: please extend the core `AiSchema` (src/core/config/schema.ts, strict) with the engine options listed in the sw-ai section (localOnly, allowedProviders, allowedModels, prices, apiKeyEnv, apiKeyHeader, query, headers, maxOutputTokens, redactPii, redact, timeoutMs, maxRetries, maxContext, anthropicVersion, structuredMode, jsonMode, useProviderTokenCounter, maxFiles, contextLines, maxFullFileBytes, graphHops, cache, uncitedClaims), and allow the `sendSourceCode: false | "full-files"` aliases. Until then those options are only accepted through `analyze({ ai: {...} })`. Reporting: render `aiBlocks(data)` when `isAIData(result.data)` (src/engines/ai/render.ts).
 - sw-agent -> main / sw-examples: examples/shop-fastify POST /orders honours Idempotency-Key for sequential repeats but not for CONCURRENT duplicates with one key (lookup, await, then insert: several orders, several stock decrements). The agent reports it as agent/idempotency-key-race (shop-express too). Consider adding it to shop-fastify expected-findings.json (engine agent), or reserving the key atomically if the app is meant to be correct there.
+- sw-plugins-w9 -> sw-cli-w9 (2026-11-04): please wire the plugin system into src/cli (exact snippets):
+  1. `src/cli/main.ts` GlobalOptions: add `plugins?: boolean;` and the global flag after `--no-config-code`:
+     `.option("--no-plugins", "do not load plugins (config plugins are listed as disabled)")`; extend the `-f` help to `"report formats: tty,json,md,junit,sarif,html or a plugin format ns/name"`.
+  2. `src/cli/main.ts` command (anywhere after `history`):
+     ```ts
+     const plugins = program.command("plugins").description("plugins from the config: list, check (docs/10)");
+     plugins
+       .command("list")
+       .description("configured plugins: name, version, apiVersion, contributions, status")
+       .option("--json", "machine-readable output")
+       .action(async (o: { json?: boolean }, cmd: Command) => {
+         const { pluginsList } = await import("./commands/plugins.js");
+         return pluginsList(o, cmd.optsWithGlobals<GlobalOptions>());
+       });
+     plugins
+       .command("check")
+       .description("load + validate plugins and the config's references to them (exit 2 if a required plugin is broken)")
+       .option("--json", "machine-readable output")
+       .action(async (o: { json?: boolean }, cmd: Command) => {
+         const { pluginsCheck } = await import("./commands/plugins.js");
+         return pluginsCheck(o, cmd.optsWithGlobals<GlobalOptions>());
+       });
+     ```
+  3. `src/cli/run-common.ts` `worldFromGlobals`: add `noPlugins: g.plugins === false,` to the createWorld options.
+  4. `src/cli/run-common.ts` `finishRun`: plugin formats (`-f acme/summary`) are files, not "not supported yet":
+     `const dropped = cfg.report.formats.filter((f) => !supported.includes(f) && !world.plugins.hasFormat(f));`,
+     `const pluginFormats = cfg.report.formats.filter((f) => world.plugins.hasFormat(f));`, make the write block run when
+     `fileFormats.length > 0 || pluginFormats.length > 0`, and inside the locked `write` closure:
+     `const r = await reporting.writeReports(result, {...}); const extra = await world.plugins.writeReports(r.report, { formats: pluginFormats, outDir }); return { ...r, files: [...r.files, ...extra] };`
+     (`sw report` should do the same, or use `world.report.write`, which already handles plugin formats).
+  5. docs/09: `sw plugins list|check [--json]` and `--no-plugins` (help-docs parity).

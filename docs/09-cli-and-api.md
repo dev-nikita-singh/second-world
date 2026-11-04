@@ -19,7 +19,7 @@ Global flags go before or after the command (`sw --dry-run bugs …` or `sw bugs
 | `-c, --config <file>` | Config path (default: auto-discover `sw.config.*`) |
 | `-p, --profile <name>` | Apply a config profile |
 | `--set <key=value>` | Override any config key (repeatable) |
-| `-f, --format <list>` | Report formats: `tty,json,md,junit,sarif,html` (default from `report.formats`: `tty,json`) |
+| `-f, --format <list>` | Report formats: `tty,json,md,junit,sarif,html`, or a plugin format `ns/name` (default from `report.formats`: `tty,json`) |
 | `-o, --out <dir>` | Report output dir (default `report.outDir`: `.second-world/reports`) |
 | `--fail-on <sev>` | Exit 1 threshold: `critical\|high\|medium\|low\|never` (default `report.failOn`: `high`) |
 | `--seed <n>` | Global seed |
@@ -31,7 +31,8 @@ Global flags go before or after the command (`sw --dry-run bugs …` or `sw bugs
 | `--quiet` | Only errors |
 | `--verbose` | Debug logging |
 | `--json-logs` | JSON log lines on stderr |
-| `--no-config-code` | Only load JSON/YAML configs (never execute config code) |
+| `--no-config-code` | Only load JSON/YAML configs (never execute config code; config plugins are not loaded either) |
+| `--no-plugins` | Do not load plugins (config plugins are listed as disabled) |
 | `-V, --version` | Print the version |
 | `-h, --help` | Help for `sw` or for one command |
 
@@ -66,13 +67,13 @@ Global flags go before or after the command (`sw --dry-run bugs …` or `sw bugs
 | `sw evolve` | Evolution Engine |
 | `sw model build\|show\|diff` | System Model |
 | `sw analyze [reports...]` | Deterministic summary across earlier reports |
+| `sw report [reports...]` | Combine and/or re-render earlier reports (files, history runs) in any format |
+| `sw run <workflow>` | Run a workflow from the config (a DAG of engine steps); `sw run --list` lists them |
 | `sw history list\|show\|diff\|baseline\|trend\|verify\|prune` | Experiment History |
-
-Not CLI commands in 0.1.0: combining or re-rendering reports (`world.report` in the API),
-workflows (`world.run(name)` in the API) and plugin listing.
+| `sw plugins list\|check` | Plugins from the config (docs/10) |
 
 Engine commands that produce a report (perf, stress, inspect, bugs, agent, reliability run,
-whatif, evolve) share `--json` (print the combined report JSON on stdout) and `--no-history`
+whatif, evolve, run) share `--json` (print the combined report JSON on stdout) and `--no-history`
 (do not save this run to history).
 
 ### `sw init`
@@ -363,6 +364,92 @@ $ sw analyze .second-world/reports/report.json --top 2
 - Run status: 1 failed.
 ```
 
+### `sw report`
+
+```text
+sw report [reports...] [--last] [--run <id>] [--json]
+```
+
+Combines earlier results into one report and renders it in any format, the same combined report
+every engine command writes. It reads files and history only: no engine runs and nothing is sent.
+
+- **Input**: `report.json` files (one engine result, an array of results, or a combined report), plus
+  `--last` (the newest history run) and `--run <id>` (a history run: id, unique prefix or
+  `baseline:<name>`; repeatable). At least one is required. A result given twice (same engine and run id) counts once.
+- **Output**: the terminal report on stdout (when `tty` is among the formats). Report files are written
+  **only when `-f` or `-o` is given** (into `-o`, default `report.outDir`), so re-rendering
+  `.second-world/reports/report.json` never overwrites it by accident. `--json` prints the combined report JSON.
+  Re-rendering a single combined report keeps its run id; combining several gives the new report a new run id.
+- **Verdict and exit code**: recomputed over all results at `--fail-on`, so it is the exit code the runs
+  would have had together (0, 1, or the stored runs' 3/5/70/130). Exit 2 when no input was given, a file
+  cannot be read or is not a SECOND WORLD report, or a history run is unknown or compacted.
+  Nothing is saved to history.
+
+```text
+$ sw report ci/perf/report.json ci/bugs/report.json -f md,junit,sarif -o combined
+combined 2 result(s) from 2 source(s)
+report: …/combined/report.md
+report: …/combined/report.junit.xml
+report: …/combined/report.sarif
+$ sw --fail-on never report --last -f html -o .
+```
+
+### `sw run`
+
+```text
+sw run [workflow] [--json] [--no-history]
+sw run --list [--json]
+```
+
+Runs `workflows.<name>` from the config: a DAG of engine steps (docs/02 §4.2). Steps run as soon
+as the steps in their `after` list finish (up to `concurrency` at once, default 4); a failed step skips
+its dependants unless it is `optional` or `continueOnError`. Each step's `input` is merged with the
+engine's config section, exactly as `world.run(name)` does in the API.
+
+```ts
+workflows: {
+  nightly: {
+    steps: {
+      inspect: { engine: "architecture" },
+      perf:    { engine: "performance", input: { duration: "30s" } },
+      bugs:    { engine: "bugs", after: ["perf"], continueOnError: true },
+    },
+  },
+},
+```
+
+| Option | Meaning |
+|---|---|
+| `--list` | List the workflows and their steps (`--json`: as objects) |
+| `--json`, `--no-history` | See above |
+
+- Global flags apply to every step (`--profile`, `--set`, `--yes`, `--approve-disruptive`, `--seed`, `-f`, `-o`,
+  `--fail-on`, `--label`). Engine ids: `performance`, `stress`, `architecture`, `bugs`, `agent`,
+  `reliability`, `whatif`, `evolution`, `model`.
+- **Output**: one line per step on stderr while it runs, a summary per step at the end
+  (status, skipped and why, or the error), then **one combined report** of every step that produced a result,
+  and one history run labelled with the workflow name (`--label` overrides it).
+- **`--dry-run`**: plans the DAG and validates every step as the step's own command does under `--dry-run`
+  (input, thresholds, contract, invariant modules, hook targets, Safety Guard on the target). Sends nothing.
+- **Exit codes**: 2 for an unknown workflow, a missing name, an unknown engine in a required step or a cycle (before
+  anything runs). Otherwise 130 if cancelled; else the exit code of the first required step, in topological
+  order, that threw instead of returning a result (2 config, 3 safety, 4 capability, 5 target unreachable,
+  70 only for an unexpected error); else the combined report's verdict (0, 1, 3, 5, 70). Optional steps never
+  change the exit code.
+- **Ctrl+C**: as for every engine command: the first stops the running steps gracefully (status `cancelled`)
+  and skips the rest; the report is still written; nothing is saved to history; exit 130. A second Ctrl+C aborts.
+- Limitation: Bug Hunter steps keep their reproductions in history only (not under `.second-world/artifacts/`);
+  `sw replay` finds them there.
+
+```text
+$ sw run --list
+nightly  (3 step(s))
+  inspect: architecture
+  perf: performance
+  bugs: bugs after perf [continueOnError]
+$ sw run nightly -f json,junit
+```
+
 ### `sw history`
 
 | Command / option | Meaning |
@@ -375,6 +462,18 @@ $ sw analyze .second-world/reports/report.json --top 2
 | `sw history trend` | Metric trend with anomaly / change-point detection; `--metric <name>` (default `p95`, or e.g. `performance.http.p95`), `--endpoint <ep>` (e.g. `'GET /api/products'`), `--limit <n>`, `--json` |
 | `sw history verify` | Verify report hashes and index integrity (exit 1 if corrupted); `--json` |
 | `sw history prune` | Retention: keep the newest N runs; `--keep <n>` (default 50), `--no-compact` (remove pruned runs entirely instead of keeping their summary), `--json` |
+
+### `sw plugins`
+
+Plugins come only from the config's `plugins: [...]` (docs/10-plugins-and-extensibility.md); there is no
+auto-discovery. Neither command runs an engine or sends anything.
+
+| Command / option | Meaning |
+|---|---|
+| `sw plugins list` | Configured plugins: name, version, apiVersion, contributions, status; `--json` |
+| `sw plugins check` | Load and validate the plugins and the config's references to them (exit 2 if a required plugin is broken); `--json` |
+
+With `--no-plugins` (or `--no-config-code` for config plugins) nothing is imported and the plugins are listed as disabled.
 
 ### Interaction
 

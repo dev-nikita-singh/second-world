@@ -12,6 +12,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadConfig } from "../../../src/core/config/loader.js";
+import { planWorkflow, type WorkflowStep } from "../../../src/core/orchestrator.js";
+import { BUILTIN_ENGINES } from "../../../src/core/registry.js";
 import {
   buildAgentInput,
   buildArchitectureInput,
@@ -47,7 +49,7 @@ const SKIP: Record<string, string> = {
   "docs/03-engines/evidence-and-history.md:9": "type definitions, not a config",
   "docs/03-engines/experiments.md:21": "illustrative experiment() sketch with `scenarios: [...]` elided",
   "docs/03-engines/system-model.md:19": "type definitions, not a config",
-  "docs/09-cli-and-api.md:387": "API tour with elided inputs (`{ /* ... */ }`)",
+  "docs/09-cli-and-api.md:486": "API tour with elided inputs (`{ /* ... */ }`)",
 };
 
 interface DocBlock {
@@ -170,6 +172,18 @@ async function validateConfig(config: Obj): Promise<string[]> {
   if (c.architecture !== undefined) {
     parseArchitectureInput(buildArchitectureInput(cfg));
     checked.push("architecture");
+  }
+  if (c.workflows !== undefined && Object.keys(c.workflows as Obj).length > 0) {
+    // `sw run` checks: a valid DAG, and every step names a built-in engine.
+    for (const [name, wf] of Object.entries(
+      c.workflows as Record<string, { steps: Record<string, WorkflowStep> }>,
+    )) {
+      planWorkflow(wf.steps);
+      for (const [id, st] of Object.entries(wf.steps))
+        if (!(st.engine in BUILTIN_ENGINES))
+          throw new Error(`workflow ${name} step ${id}: unknown engine ${st.engine}`);
+    }
+    checked.push("workflows");
   }
   return checked;
 }

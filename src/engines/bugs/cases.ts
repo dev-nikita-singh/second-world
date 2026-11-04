@@ -445,10 +445,10 @@ async function checkInvariants(env: EvalEnv, ex: Exchange, op: Operation, step: 
     if (msg)
       out.push(
         mkFailure(
-          "bugs/invariant-violated",
+          inv.kind === "assertion" ? "bugs/assertion-failed" : "bugs/invariant-violated",
           op.key,
-          `invariant:${inv.name}`,
-          "invariant",
+          `${inv.kind === "assertion" ? "assert" : "invariant"}:${inv.name}`,
+          inv.kind === "assertion" ? "assertion" : "invariant",
           `${inv.name}: ${msg}`,
           step,
           ex.status,

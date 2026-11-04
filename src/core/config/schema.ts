@@ -72,9 +72,20 @@ export const SafetySchema = z
 export const ReportFormatSchema = z.enum(["tty", "json", "md", "junit", "sarif", "html"]);
 export const FailOnSchema = z.enum(["critical", "high", "medium", "low", "never"]);
 
+/** A plugin contribution id `namespace/name` (docs/10-plugins-and-extensibility.md §3). */
+export const PLUGIN_ID_RE = /^[a-z0-9][a-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** Built-in report format, or a plugin reporter `namespace/name` (checked against loaded plugins by the world). */
+const ReportFormatOrPlugin = z
+  .string()
+  .refine((v) => ReportFormatSchema.safeParse(v).success || PLUGIN_ID_RE.test(v), {
+    message:
+      'Invalid report format (expected tty, json, md, junit, sarif, html, or a plugin format "namespace/name")',
+  });
+
 export const ReportSchema = z
   .object({
-    formats: z.array(ReportFormatSchema).default(["tty", "json"]),
+    formats: z.array(ReportFormatOrPlugin).default(["tty", "json"]),
     outDir: z.string().default(".second-world/reports"),
     failOn: FailOnSchema.default("high"),
   })
@@ -84,7 +95,13 @@ export const HistorySchema = z
   .object({
     /** Auto-save CLI runs (perf/stress/inspect) to history. */
     enabled: z.boolean().default(true),
-    backend: z.enum(["jsonl", "sqlite"]).default("jsonl"),
+    /** "jsonl" | "sqlite", or a plugin history store "namespace/name" (docs/10 §2). */
+    backend: z
+      .string()
+      .refine((v) => v === "jsonl" || v === "sqlite" || PLUGIN_ID_RE.test(v), {
+        message: 'Invalid history backend (expected "jsonl", "sqlite", or a plugin store "namespace/name")',
+      })
+      .default("jsonl"),
     dir: z.string().default(".second-world/history"),
     baseline: z.string().optional(),
     retain: z
@@ -112,6 +129,21 @@ export const WorkflowSchema = z
   .strict();
 
 const Section = z.record(z.string(), z.unknown());
+
+/** One `plugins: [...]` entry (docs/10 §3). */
+export const PluginEntrySchema = z.union([
+  z.string().min(1),
+  z
+    .object({
+      name: z.string().min(1),
+      /** A failing optional plugin degrades to a warning + limitation instead of an error. */
+      optional: z.boolean().default(false),
+      /** Passed to the plugin as `api.options` (and to a factory export). */
+      options: z.record(z.string(), z.unknown()).default({}),
+    })
+    .strict(),
+]);
+export type PluginEntry = z.output<typeof PluginEntrySchema>;
 
 export const ConfigSchema = z
   .object({
@@ -143,7 +175,8 @@ export const ConfigSchema = z
     history: HistorySchema.default(() => HistorySchema.parse({})),
     workflows: z.record(z.string(), WorkflowSchema).default({}),
     profiles: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
-    plugins: z.array(z.string()).default([]),
+    /** docs/10 §3: package names (project node_modules) or relative paths; `{ name, optional, options }`. */
+    plugins: z.array(PluginEntrySchema).default([]),
     ui: z.object({ color: z.boolean().optional(), unicode: z.boolean().optional() }).strict().optional(),
   })
   .strict();

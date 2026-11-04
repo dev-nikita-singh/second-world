@@ -161,7 +161,7 @@ ID                          CREATED                   LABEL     STATUS    FINDIN
 ```
 
 [`docs/quickstart.md`](docs/quickstart.md) is the full walkthrough, covering `sw init`, stress,
-fault injection, cross-run summaries and statistical history diffs, with captured output.
+fault injection, cross-run summaries, statistical history diffs, combined reports and workflows, with captured output.
 
 ## Commands
 
@@ -183,15 +183,15 @@ Global flags go **before** the command (`sw --yes bugs …`, `sw --dry-run perf`
 | `sw whatif <experiment>` | What-If: baseline vs variants with interleaved, repeated runs and statistics (`--aa` for an A/A noise floor) |
 | `sw evolve` | Evolution: build, test and benchmark candidate changes in sandboxes; rank them (Pareto) |
 | `sw analyze [reports...] [--last] [--top N] [--json]` | Deterministic summary across `report.json` files and/or the latest history run: counts by severity and classification, top findings, run statuses, invalidating limitations. No network; exit 0 (2 if no readable report) |
+| `sw report [reports...] [--last] [--run <id>]` | Combine and/or re-render earlier `report.json` files and history runs into any format (`-f`, `-o`); verdict recomputed at `--fail-on`. No network |
+| `sw run <workflow>` / `sw run --list` | Run a config workflow (`workflows.<name>`: a DAG of engine steps) as one run: one combined report, one history entry; `--dry-run` validates every step |
+| `sw plugins list\|check [--json]` | Plugins from the config (`plugins: [...]`): what they contribute, and whether they load (exit 2 if a required one is broken) |
 | `sw history list\|show\|diff\|baseline\|trend\|verify\|prune` | Run history: list, show, compare (`id[,id…]`, `last:N`, `label:<name>[:N]`, `baseline:<name>`; statistics with ≥ 5 runs per side), named baselines, trends, integrity check, retention |
 
 Global flags: `-c/--config`, `-p/--profile`, `--set key=value`, `-f/--format`, `-o/--out`, `--fail-on`,
 `--seed`, `--label`, `--yes`, `--approve-disruptive`, `--dry-run`, `--no-color`, `--quiet`, `--verbose`,
-`--json-logs`, `--no-config-code`. Most engine commands also take `--json` (the combined report on stdout)
+`--json-logs`, `--no-config-code`, `--no-plugins`. Most engine commands also take `--json` (the combined report on stdout)
 and `--no-history`.
-
-Not implemented yet (described in [docs/09](docs/09-cli-and-api.md)): `sw report`, `sw run <workflow>`, `sw plugins`.
-Workflows are available via the API (`world.run(name)`).
 
 ## Exit codes
 

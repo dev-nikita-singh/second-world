@@ -23,6 +23,7 @@ export async function worldFromGlobals(g: GlobalOptions): Promise<World> {
     ...(lo.set ? { set: lo.set } : {}),
     ...(lo.overrides ? { overrides: lo.overrides } : {}),
     noConfigCode: lo.noConfigCode ?? false,
+    noPlugins: g.plugins === false,
     interactive,
     approve: g.yes === true || g.approveDisruptive === true,
     ...(seed !== undefined ? { seed } : {}),
@@ -215,24 +216,48 @@ export interface FinishOptions {
 /** Renders/writes reports, auto-saves history, sets process.exitCode. */
 export async function finishRun(
   world: World,
-  result: EngineResult,
+  resultOrResults: EngineResult | readonly EngineResult[],
   g: GlobalOptions,
   o: FinishOptions,
 ): Promise<void> {
+  // One engine result, or several (`sw run <workflow>`: one combined report, one history run).
+  const results: EngineResult[] = Array.isArray(resultOrResults)
+    ? [...(resultOrResults as readonly EngineResult[])]
+    : [resultOrResults as EngineResult];
+  const result: EngineResult | EngineResult[] = results.length === 1 ? (results[0] as EngineResult) : results;
+  const first = results[0] as EngineResult;
   const s = style(colorEnabled(g));
   const reporting = await import("../engines/reporting/index.js");
   const cfg = world.config.config;
   const failOn = cfg.report.failOn;
   const meta = {
-    runId: result.runId,
+    runId: first.runId,
     toolVersion: VERSION,
     command: ["sw", ...process.argv.slice(2)].join(" "),
   };
+  const saveHistory = async (): Promise<void> => {
+    if (o.history === false || results.some((r) => r.status === "cancelled")) return;
+    try {
+      const saved = await world.history.save(results, { label: g.label ?? o.label });
+      if (saved && !g.quiet) err(s.dim(`history: saved run ${saved.id}`));
+      // Several results: the history run gets a new id; the combined report carries the same one.
+      if (saved && results.length > 1) meta.runId = saved.id;
+    } catch (e) {
+      err(`${s.warn} history not saved: ${(e as Error).message}`);
+    }
+  };
+  if (results.length > 1) {
+    await saveHistory();
+    if (meta.runId === first.runId) meta.runId = (await import("ulid")).ulid();
+  }
   const supported = reporting.REPORT_FORMATS as readonly string[];
   const formats = cfg.report.formats.filter((f) => supported.includes(f)) as Array<
     (typeof reporting.REPORT_FORMATS)[number]
   >;
-  const dropped = cfg.report.formats.filter((f) => !supported.includes(f));
+  // `world.plugins` is absent on hand-built worlds (tests, embedders on an older World shape).
+  const isPluginFormat = (f: string): boolean => world.plugins?.hasFormat(f) === true;
+  const dropped = cfg.report.formats.filter((f) => !supported.includes(f) && !isPluginFormat(f));
+  const pluginFormats = cfg.report.formats.filter(isPluginFormat);
   if (dropped.length && !g.quiet) err(`${s.warn} report format(s) not supported yet: ${dropped.join(", ")}`);
   if (!o.suppressStdout) {
     if (o.json) out(reporting.renderReport(result, "json", { failOn, meta }));
@@ -249,10 +274,17 @@ export async function finishRun(
   }
   const fileFormats = formats.filter((f) => f !== "tty");
   let reportError: string | undefined;
-  if (fileFormats.length > 0) {
+  if (fileFormats.length > 0 || pluginFormats.length > 0) {
     const outDir = resolve(world.config.cwd, cfg.report.outDir);
     try {
-      const write = () => reporting.writeReports(result, { formats: fileFormats, outDir, failOn, meta });
+      const write = async () => {
+        const r = await reporting.writeReports(result, { formats: fileFormats, outDir, failOn, meta });
+        const extra =
+          pluginFormats.length > 0
+            ? await world.plugins.writeReports(r.report, { formats: pluginFormats, outDir })
+            : [];
+        return { ...r, files: [...r.files, ...extra] };
+      };
       // One run's reports per directory: parallel runs sharing `-o` take turns writing the whole set
       // (the last to finish owns every file). tests/unit/robust/shared-outdir.test.ts.
       const { LockTimeoutError, withLock } = await import("../engines/history/index.js");
@@ -268,13 +300,6 @@ export async function finishRun(
       err(`${s.fail} ${reportError}`);
     }
   }
-  if (o.history !== false && result.status !== "cancelled") {
-    try {
-      const saved = await world.history.save([result], { label: g.label ?? o.label });
-      if (saved && !g.quiet) err(s.dim(`history: saved run ${saved.id}`));
-    } catch (e) {
-      err(`${s.warn} history not saved: ${(e as Error).message}`);
-    }
-  }
-  process.exitCode = reportError !== undefined ? 2 : reporting.computeExitCode([result], failOn);
+  if (results.length === 1) await saveHistory();
+  process.exitCode = reportError !== undefined ? 2 : reporting.computeExitCode(results, failOn);
 }

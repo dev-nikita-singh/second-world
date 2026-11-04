@@ -21,6 +21,7 @@ import {
   setPath,
 } from "../../../src/core/config/loader.js";
 import { ConfigError } from "../../../src/core/errors.js";
+import { createRedactor } from "../../../src/core/log/redact.js";
 
 const dirs: string[] = [];
 function tmp(): string {
@@ -248,9 +249,13 @@ describe("files", () => {
     // the schema may or may not accept this auth shape; when it loads, the warning must be present
     if (!(r instanceof Error)) {
       expect(r.warnings.join("\n")).toMatch(
-        /auth\.admin\.password: value in sw\.config\.yaml looks like a secret/,
+        /Literal string at auth\.admin\.password in sw\.config\.yaml looks like a secret/,
       );
       expect(r.warnings.join("\n")).not.toContain("supersecretvalue");
+      // The logger redacts every line it prints: the warning must survive that unchanged
+      // (the old "auth.x.token: value in …" wording was itself redacted to "token: «redacted»").
+      const red = createRedactor();
+      for (const w of r.warnings) expect(red.redactString(w)).toBe(w);
     }
   });
 

@@ -116,3 +116,12 @@
 2026-11-01T07:00Z sw-cli-w8 -> main: final report (T1-T4 done; out-of-lane: R5 run-common.ts import, tsc errors in robust/security tests)
 2026-11-01T07:20Z sw-robust-w8 -> main: DONE, final report via handback
 2026-11-01T07:00Z sw-real2-w8 -> main: 4 SW gaps on orders-jobs-api (stress ignores perf model/rate; misleading RATE-CAP at 98 rps; agent lifecycle lacks update→read; bugs model-based misses stale read) + main's 2 inspect bugs fixed
+2026-11-04T10:00Z sw-plugins-w9 -> sw-sqlite-w9: plugin history backends resolve in src/core/world.ts (history.backend "ns/name" -> plugin factory); no plugin registry needed in engines/history; keep createHistoryStore({cwd,dir,backend,isoNow,onWarning}) for jsonl|sqlite and tell me if it changes
+2026-11-04T12:40Z sw-sqlite-w9 -> sw-plugins-w9, main: HistoryStore contract READY in CONTRACTS.md (src/engines/history/store.ts + registerHistoryBackend in registry.ts; backend widened to string; config history.backend enum needs widening for plugin stores)
+2026-11-04T13:00Z sw-plugins-w9 -> sw-cli-w9: please register `sw plugins list|check` + global `--no-plugins` in main.ts, pass noPlugins in worldFromGlobals, write plugin formats in finishRun — exact snippets in CONTRACTS.md Requests
+2026-11-04T13:30Z sw-plugins-w9 -> main: DONE plugin system (docs/10): 52 plugin tests (3x), design 47/47, tsc+biome clean; needs package.json exports ./plugin + tsdown entry plugin; main.ts/run-common wiring pending at sw-cli-w9 (CONTRACTS Requests)
+2026-11-04T13:45Z main: package.json exports ./plugin + tsdown entry plugin added; build ok (ESM+CJS). Asked sw-cli-w9 to wire plugins CLI.
+2026-11-04T13:10Z sw-cli-w9 -> main: plugins CLI wired (sw plugins list|check, --no-plugins, plugin formats in finishRun + sw report); docs/09 + parity green; tests/integration/plugins pass
+2026-11-04T13:40Z sw-cli-w9 -> main: DONE: sw report, sw run, plugins CLI wired, quickstart re-run + rewritten; bug for core/log owner: WARN secret warnings print «redacted:…» instead of 'value'
+2026-11-04T15:30Z sw-sqlite-w9 -> main: DONE real node:sqlite history backend (contract suite on both backends, parity, multi-process + SIGKILL tests, JSONL import, fallback); 74 pass/1 skip; final report via handback
+2026-11-04T15:30Z main: fixed secret warning redacting itself (config loader wording) + EPIPE on closed stdout pipe (main.ts ignoreClosedPipes; reproduced in WSL); tests added

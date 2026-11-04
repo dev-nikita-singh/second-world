@@ -102,7 +102,7 @@ function roleSetup(input: BugsInput): GenContext["roles"] {
 export async function openSession(
   input: BugsInput,
   ctx: EngineContext,
-  opts: { forReplay?: boolean } = {},
+  opts: { forReplay?: boolean; extraInvariants?: readonly LoadedInvariant[] } = {},
 ): Promise<Session> {
   const cwd = input.cwd ?? process.cwd();
   const target = new URL(input.target);
@@ -150,6 +150,8 @@ export async function openSession(
   });
   const invariants: LoadedInvariant[] = [];
   for (const ref of input.invariants) invariants.push(await loadInvariant(ref, cwd));
+  // Plugin assertions (docs/10 §2), already bound to their plugin by the world.
+  invariants.push(...(opts.extraInvariants ?? []));
   const concurrencyFns = new Map<number, LoadedInvariant>();
   for (const [i, t] of input.concurrency.entries()) {
     const inv = t.invariant;
