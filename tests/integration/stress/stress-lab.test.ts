@@ -96,11 +96,14 @@ describe("stress lab (integration)", () => {
   }, async () => {
     const ac = new AbortController();
     const safety = createSafetyGuard({ maxRps: 200 }, { interactive: false, signal: ac.signal });
-    // /fixed/5 with 4-8 VUs would reach ~600-1500 rps uncapped.
+    // /fixed/5 with 8-16 VUs would reach ~1000-2000 rps uncapped. A closed-loop stage can only hold the
+    // 200 req/s cap while VUs × 5 ms > its response time: 4 VUs need answers within 20 ms, which a starved
+    // shared macOS runner missed part of the time (188.5 req/s: throttled, honestly marked capped, but
+    // response-bound in between). 8 VUs give 40 ms of headroom, so the stage is cap-bound throughout.
     const r = await runStress(
       {
         target: `${srv.url}/fixed/5`,
-        stages: [4, 8],
+        stages: [8, 16],
         hold: "2s",
         settle: "300ms", // absorbs the GCRA burst (ceil(maxRps/10) cells per fresh lease) before measuring
         thresholds: { "http.p95": "< 1000ms" },
@@ -112,7 +115,9 @@ describe("stress lab (integration)", () => {
     for (const s of d.stages) {
       expect(s.throttled).toBeGreaterThan(0);
       expect(s.capRps).toBe(200);
-      expect(s.throughput).toBeGreaterThan(190);
+      // Upper bound: the cap is enforced. Lower bound: the GCRA's burst tolerance (20 cells) absorbs late
+      // timer wake-ups, so a cap-bound stage stays within a few % of the cap; 0.9 leaves room for a busy runner.
+      expect(s.throughput).toBeGreaterThan(0.9 * 200);
       expect(s.throughput).toBeLessThanOrEqual(202);
     }
     const lim = r.limitations.find((l) => l.code === "STRESS-SAFETY-RATE-CAP");
