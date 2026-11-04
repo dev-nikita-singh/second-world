@@ -80,7 +80,7 @@ Detection is **non-invasive**: read files and env vars, run `--version` with a 2
 | `worker_threads` (some runtimes) | Single-thread generator | Lower max rate. Warning |
 | Docker | No container sandbox/fault injector | Built-in proxy. Evolution `process` sandbox needs opt-in |
 | `git` | Evolution unavailable. No commit metadata | History without git info |
-| `node:sqlite` | — | JSONL history |
+| `node:sqlite` | `history.backend: "sqlite"` unavailable | Falls back to JSONL history with a warning |
 | TTY | No live dashboard | Line-based progress every 5 s |
 | Telemetry | No server-side metrics | Client-side only + limitation note |
 | TypeScript in project | — | Use bundled `typescript` |

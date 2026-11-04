@@ -12,55 +12,33 @@
 import { readdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { gunzip as gunzipCb, gzip as gzipCb } from "node:zlib";
+import { gunzip as gunzipCb } from "node:zlib";
 import { sha256 } from "../../shared/util/hash.js";
 import { ulid } from "../../shared/util/ulid.js";
-import { type CompareRunsOptions, compareRuns, type TrendOptions, trendAnalysis } from "./compare.js";
 import { appendLine, atomicWrite, type LockOptions, TMP_MARKER, withLock } from "./fsutil.js";
 import { captureGitMetadata } from "./git.js";
-import { extractMetrics, maxSeverity, overallStatus } from "./metrics.js";
 import { migrateRun, UnsupportedSchemaError } from "./migrations.js";
 import {
-  type AppendRunInput,
-  type BaselineRef,
-  HISTORY_SCHEMA_VERSION,
-  type HistoryRun,
-  type IndexEntry,
-  type ListOptions,
-  type PruneOptions,
-  type PruneReport,
-  type QueryFilter,
-  type RunComparison,
-  type TrendResult,
-  type VerifyIssue,
-  type VerifyReport,
-} from "./types.js";
+  checkBaselineName,
+  compactedError,
+  compareEntries,
+  diffRuns,
+  HistoryError,
+  type HistoryStore,
+  isIndexEntry,
+  isObj,
+  planPrune,
+  prepareRun,
+  priorFingerprints,
+  resolveIn,
+  selectEntries,
+  trendOver,
+} from "./store.js";
+import type { BaselineRef, HistoryRun, IndexEntry, VerifyIssue } from "./types.js";
 
-const gzip = promisify(gzipCb);
+export { HistoryError, type HistoryStore, isIndexEntry } from "./store.js";
+
 const gunzip = promisify(gunzipCb);
-
-export interface HistoryStore {
-  readonly backend: "jsonl" | "sqlite";
-  readonly dir: string;
-  append(input: AppendRunInput): Promise<IndexEntry>;
-  /** Full run by id (or unique id prefix ≥ 6 chars); null when unknown or compacted. */
-  get(id: string): Promise<HistoryRun | null>;
-  /** Index entries, newest first. */
-  list(opts?: ListOptions): Promise<IndexEntry[]>;
-  query(filter: QueryFilter | ((e: IndexEntry) => boolean)): Promise<IndexEntry[]>;
-  setBaseline(name: string, runId: string): Promise<BaselineRef>;
-  getBaseline(name: string): Promise<HistoryRun | null>;
-  listBaselines(): Promise<BaselineRef[]>;
-  /** Compare runs (ids, id prefixes or baseline names via "baseline:<name>"). */
-  diff(
-    baseline: string | string[],
-    current: string | string[],
-    opts?: CompareRunsOptions,
-  ): Promise<RunComparison>;
-  trend(metric: string, filters?: QueryFilter & { endpoint?: string } & TrendOptions): Promise<TrendResult>;
-  verify(): Promise<VerifyReport>;
-  prune(opts?: PruneOptions): Promise<PruneReport>;
-}
 
 export interface JsonlStoreOptions {
   /** Project root; used for the default dir and git capture. Default process.cwd(). */
@@ -77,62 +55,6 @@ export interface JsonlStoreOptions {
    * e.g. a record cut short by a crash mid-append. Reads never fail because of such lines.
    */
   onWarning?: (message: string) => void;
-}
-
-export class HistoryError extends Error {
-  constructor(
-    readonly code:
-      | "SW_HISTORY_NOT_FOUND"
-      | "SW_HISTORY_AMBIGUOUS"
-      | "SW_HISTORY_COMPACTED"
-      | "SW_HISTORY_CORRUPT"
-      | "SW_HISTORY_BAD_ID",
-    message: string,
-  ) {
-    super(message);
-    this.name = "HistoryError";
-  }
-}
-
-const SEVERITIES = new Set(["critical", "high", "medium", "low", "info"]);
-
-const isObj = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-const isStrArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
-
-/**
- * Structural check of an index line. A line that parses as JSON but lacks a field the readers use
- * (hand-edited, foreign or damaged index) is treated like a torn line: skipped with a warning and
- * listed by verify, instead of crashing `sw history list` with exit 70
- * (tests/unit/robust/malformed-inputs.test.ts).
- */
-const RUN_FILE = /^runs\/[A-Za-z0-9._-]+\.json\.gz$/;
-
-export function isIndexEntry(e: unknown): e is IndexEntry {
-  if (!isObj(e)) return false;
-  const f = e.findings;
-  return (
-    typeof e.id === "string" &&
-    e.id !== "" &&
-    typeof e.file === "string" &&
-    // Only the shape we write (runs/<id>.json.gz): a tampered index must not point reads outside
-    // the history directory (docs/11 threat model).
-    RUN_FILE.test(e.file) &&
-    typeof e.createdAt === "string" &&
-    (e.label === undefined || typeof e.label === "string") &&
-    isStrArray(e.tags) &&
-    isStrArray(e.engines) &&
-    typeof e.status === "string" &&
-    isObj(e.metrics) &&
-    Object.values(e.metrics).every((m) => typeof m === "number" || m === null) &&
-    isObj(f) &&
-    typeof f.count === "number" &&
-    isStrArray(f.fingerprints) &&
-    (f.maxSeverity === null || typeof f.maxSeverity === "string") &&
-    (e.git === undefined || isObj(e.git)) &&
-    (e.sha256 === undefined || typeof e.sha256 === "string") &&
-    (e.bytes === undefined || typeof e.bytes === "number")
-  );
 }
 
 export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
@@ -175,9 +97,7 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
       }
     }
     if (corrupt.length > 0 && opts.onWarning) warnCorrupt(corrupt, text.endsWith("\n"));
-    const entries = [...byId.values()].sort((a, b) =>
-      a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1,
-    );
+    const entries = [...byId.values()].sort(compareEntries);
     return { entries, corrupt };
   }
 
@@ -211,25 +131,11 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
       if (!b) throw new HistoryError("SW_HISTORY_NOT_FOUND", `No baseline named "${name}"`);
       idOrPrefix = b.runId;
     }
-    const exact = entries.find((e) => e.id === idOrPrefix);
-    if (exact) return exact;
-    const up = idOrPrefix.toUpperCase();
-    const matches = up.length >= 6 ? entries.filter((e) => e.id.startsWith(up)) : [];
-    if (matches.length === 1) return matches[0] as IndexEntry;
-    if (matches.length > 1)
-      throw new HistoryError(
-        "SW_HISTORY_AMBIGUOUS",
-        `Run id prefix "${idOrPrefix}" matches ${matches.length} runs`,
-      );
-    throw new HistoryError("SW_HISTORY_NOT_FOUND", `No run "${idOrPrefix}" in ${dir}`);
+    return resolveIn(entries, idOrPrefix, dir);
   }
 
   async function loadRun(e: IndexEntry): Promise<HistoryRun> {
-    if (e.compacted)
-      throw new HistoryError(
-        "SW_HISTORY_COMPACTED",
-        `Run ${e.id} was compacted by retention; only its summary remains`,
-      );
+    if (e.compacted) throw compactedError(e.id);
     const file = path.join(dir, e.file);
     let run: HistoryRun;
     try {
@@ -251,72 +157,18 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
     return run;
   }
 
-  function matches(e: IndexEntry, f: QueryFilter): boolean {
-    if (f.includeCompacted === false && e.compacted) return false;
-    if (f.engine && !e.engines.includes(f.engine)) return false;
-    if (f.branch && e.git?.branch !== f.branch) return false;
-    if (f.label && e.label !== f.label) return false;
-    if (f.since && e.createdAt < f.since) return false;
-    if (f.until && e.createdAt > f.until) return false;
-    if (f.status && e.status !== f.status) return false;
-    if (f.tag && !e.tags.includes(f.tag)) return false;
-    if (f.hasFindings !== undefined && f.hasFindings !== e.findings.count > 0) return false;
-    if (f.fingerprint && !e.findings.fingerprints.includes(f.fingerprint)) return false;
-    return true;
-  }
-
   const store: HistoryStore = {
     backend: "jsonl",
     dir,
 
     async append(input) {
       const id = input.id ?? newId();
-      if (!RUN_FILE.test(`runs/${id}.json.gz`) || id.startsWith("."))
-        throw new HistoryError(
-          "SW_HISTORY_BAD_ID",
-          `Invalid run id "${id}": use letters, digits, ".", "_" or "-"`,
-        );
       const createdAt = input.createdAt ?? isoNow();
       const git =
         input.git === false
           ? undefined
           : (input.git ?? (opts.captureGit === false ? undefined : await captureGitMetadata(cwd)));
-      const metrics = { ...extractMetrics(input.results), ...(input.metrics ?? {}) };
-      const run: HistoryRun = {
-        schemaVersion: HISTORY_SCHEMA_VERSION,
-        id,
-        createdAt,
-        ...(input.label !== undefined ? { label: input.label } : {}),
-        tags: input.tags ?? [],
-        engines: [...new Set(input.results.map((r) => r.engine))],
-        status: overallStatus(input.results),
-        ...(git ? { git } : {}),
-        metrics,
-        ...(input.repetitions ? { repetitions: input.repetitions } : {}),
-        results: input.results,
-        ...(input.meta ? { meta: input.meta } : {}),
-      };
-      const gz = await gzip(Buffer.from(JSON.stringify(run), "utf8"));
-      const findings = input.results.flatMap((r) => r.findings);
-      const entry: IndexEntry = {
-        v: HISTORY_SCHEMA_VERSION,
-        id,
-        createdAt,
-        ...(run.label !== undefined ? { label: run.label } : {}),
-        tags: run.tags,
-        engines: run.engines,
-        status: run.status,
-        ...(git ? { git } : {}),
-        metrics,
-        findings: {
-          count: findings.length,
-          maxSeverity: maxSeverity(findings.map((f) => f.severity).filter((s) => SEVERITIES.has(s))),
-          fingerprints: [...new Set(findings.map((f) => f.fingerprint))],
-        },
-        file: `runs/${id}.json.gz`,
-        sha256: sha256(gz),
-        bytes: gz.length,
-      };
+      const { entry, gz } = await prepareRun(input, id, createdAt, git);
       await locked(async () => {
         await atomicWrite(path.join(runsDir, `${id}.json.gz`), gz);
         await appendLine(indexFile, JSON.stringify(entry));
@@ -334,25 +186,15 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
     },
 
     async list(o = {}) {
-      const { entries } = await readIndex();
-      const f: QueryFilter = { includeCompacted: true, ...o };
-      const out = entries.filter((e) => matches(e, f)).reverse();
-      return o.limit !== undefined ? out.slice(0, o.limit) : out;
+      return selectEntries((await readIndex()).entries, o);
     },
 
     async query(filter) {
-      const { entries } = await readIndex();
-      const out =
-        typeof filter === "function"
-          ? entries.filter(filter)
-          : entries.filter((e) => matches(e, { includeCompacted: true, ...filter }));
-      const lim = typeof filter === "function" ? undefined : filter.limit;
-      const newest = out.reverse();
-      return lim !== undefined ? newest.slice(0, lim) : newest;
+      return selectEntries((await readIndex()).entries, filter);
     },
 
     async setBaseline(name, runId) {
-      if (!/^[A-Za-z0-9._\-/]{1,100}$/.test(name)) throw new Error(`Invalid baseline name "${name}"`);
+      checkBaselineName(name);
       const e = await resolveEntry(runId);
       if (e.compacted)
         throw new HistoryError("SW_HISTORY_COMPACTED", `Run ${e.id} was compacted; cannot be a baseline`);
@@ -380,35 +222,12 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
       const curEntries = await Promise.all(ids(current).map(resolveEntry));
       const A = await Promise.all(baseEntries.map(loadRun));
       const B = await Promise.all(curEntries.map(loadRun));
-      // Fingerprints seen in runs older than the oldest baseline run → "regressed" classification.
-      const oldest = baseEntries.map((e) => e.createdAt).sort()[0] ?? "";
       const { entries } = await readIndex();
-      const prior = new Set<string>();
-      for (const e of entries)
-        if (e.createdAt < oldest) for (const fp of e.findings.fingerprints) prior.add(fp);
-      return compareRuns(A, B, { ...o, priorFingerprints: o.priorFingerprints ?? prior });
+      return diffRuns(A, B, priorFingerprints(entries, baseEntries), o);
     },
 
     async trend(metric, filters = {}) {
-      const { entries } = await readIndex();
-      const f: QueryFilter = { includeCompacted: true, ...filters };
-      let name = metric;
-      if (filters.endpoint && !metric.includes(".")) {
-        const ep = filters.endpoint;
-        const keys = new Set<string>();
-        for (const e of entries)
-          for (const k of Object.keys(e.metrics))
-            if (k.startsWith("performance.endpoint.") && k.endsWith(`.${metric}`)) {
-              const key = k.slice("performance.endpoint.".length, -(metric.length + 1));
-              if (key === ep || key.endsWith(` ${ep}`)) keys.add(k);
-            }
-        name = [...keys][0] ?? `performance.endpoint.${ep}.${metric}`;
-      } else if (!metric.includes(".")) name = `performance.http.${metric}`;
-      let series = entries
-        .filter((e) => matches(e, f) && typeof e.metrics[name] === "number")
-        .map((e) => ({ runId: e.id, createdAt: e.createdAt, value: e.metrics[name] as number }));
-      if (filters.limit !== undefined) series = series.slice(-filters.limit);
-      return trendAnalysis(name, series, filters);
+      return trendOver((await readIndex()).entries, metric, filters);
     },
 
     async verify() {
@@ -466,29 +285,20 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
       const ids = new Set(entries.map((e) => e.id));
       for (const b of Object.values(await readBaselines()))
         if (!ids.has(b.runId)) errors.push({ id: b.runId, problem: "baseline-missing-run", detail: b.name });
-      return { ok: errors.length === 0, checked: entries.length, errors, warnings };
+      return { ok: errors.length === 0, checked: entries.length, errors, warnings, backend: "jsonl" };
     },
 
     async prune(o = {}) {
-      const keepLast = o.keepLast ?? 50;
-      const compact = o.compact ?? true;
       const dryRun = o.dryRun ?? false;
       return locked(async () => {
         const { entries } = await readIndex();
         const baselineIds = new Set(Object.values(await readBaselines()).map((b) => b.runId));
-        const newestFirst = [...entries].reverse();
-        const keep = new Set<string>();
-        for (const e of newestFirst.slice(0, keepLast)) keep.add(e.id);
-        for (const e of entries) if (baselineIds.has(e.id) || e.findings.count > 0) keep.add(e.id);
-        const compacted: string[] = [];
-        const removed: string[] = [];
+        const { keep, compacted, removed } = planPrune(entries, baselineIds, o);
+        const gone = new Set(removed);
         const next: IndexEntry[] = [];
         for (const e of entries) {
-          if (keep.has(e.id)) next.push(e);
-          else if (compact) {
-            if (!e.compacted) compacted.push(e.id);
-            next.push({ ...e, compacted: true });
-          } else removed.push(e.id);
+          if (gone.has(e.id)) continue;
+          next.push(keep.has(e.id) || e.compacted ? e : { ...e, compacted: true });
         }
         if (!dryRun && (compacted.length > 0 || removed.length > 0)) {
           await atomicWrite(

@@ -93,7 +93,9 @@ export interface VerifyIssue {
     | "id-mismatch"
     | "orphan-report"
     | "leftover-temp"
-    | "baseline-missing-run";
+    | "baseline-missing-run"
+    /** SQLite backend: `PRAGMA quick_check` failed or the database cannot be opened. */
+    | "db-integrity";
   detail?: string;
 }
 
@@ -104,6 +106,8 @@ export interface VerifyReport {
   errors: VerifyIssue[];
   /** Harmless leftovers (orphans from a crash between write and index append, temp files). */
   warnings: VerifyIssue[];
+  /** Which backend was checked ("jsonl" | "sqlite" | plugin store name). */
+  backend?: string;
 }
 
 export interface PruneOptions {

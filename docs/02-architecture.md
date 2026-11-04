@@ -243,7 +243,7 @@ config file/CLI flags ─► loader (c12) ─► Zod validate ─► unit normal
 | 005 | Open-loop scheduling as default for rate tests, closed-loop for VU tests, CO correction always on | Avoid *coordinated omission* | — |
 | 006 | No native addons in core | Works on every OS/arch/libc without compilers | — |
 | 007 | Zod v4 as single source of truth for config & report schemas, JSON Schema generated | Types + validation + editor autocomplete from one place | — |
-| 008 | JSONL history first, `node:sqlite` later (not implemented; deferred until it is no longer experimental) | Zero-dependency storage; SQL when querying matters | History > ~10k runs |
+| 008 | JSONL history is the default; `node:sqlite` is an opt-in backend (`history.backend: "sqlite"`, same contract, lazy-loaded, JSONL fallback when unavailable; docs/03-engines/evidence-and-history.md §B.1.1) | Zero-dependency storage; SQL (indexed filters, one file, WAL) when history grows | `node:sqlite` leaves experimental status → consider making it the default |
 | 009 | No AI or LLM anywhere; every result is deterministic (measurement, analysis or code) | Reproducible, explainable results; no code or data sent to third parties | — |
 | 010 | Static analysis never executes user code | Safety. Config loading of *our own* config file is the only execution | — |
 | 011 | Embed k6/Artillery only as optional adapters | Native engine covers 90 %; bridges for users who already have scripts | — |

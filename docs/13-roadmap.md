@@ -26,7 +26,7 @@ Incremental delivery. Each phase ships a **usable** release, and no phase uses A
 - Benchmark undici pool vs `fetch` vs k6 on the same box: confirm the native engine is within 2× of k6 for HTTP/1.1.
 - Prototype open-loop scheduler + CO correction; validate against the stall fixture.
 - Verify the `typescript@6` Compiler API on the fixture apps. Assess the maturity of the TS 7 `unstable` API.
-- Confirm `node:sqlite` stability on Node 22.19+/24/26.
+- Confirm `node:sqlite` stability on Node 22.19+/24/26. (Wave 9: the SQLite backend works on Node 24 and is tested with a JSONL fallback; it still prints an ExperimentalWarning on 22/24, which SECOND WORLD hides.)
 - **Output**: ADRs 001–011 confirmed or amended.
 
 ## Phase 1 — Foundation (0.1)

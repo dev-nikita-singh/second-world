@@ -241,9 +241,12 @@ describe("history store (JSONL)", () => {
     expect((await store.verify()).ok).toBe(true);
   });
 
-  it("sqlite backend request falls back to JSONL with a reason", () => {
+  it("sqlite backend is real now: lazy, no fallbackReason, data in history.db", async () => {
     const s = createHistoryStore({ cwd: tmp.path, backend: "sqlite", captureGit: false });
-    expect(s.backend).toBe("jsonl");
-    expect(s.fallbackReason).toMatch(/sqlite/);
+    expect(s.backend).toBe("sqlite");
+    await s.append({ results: [perfResult(100)] });
+    expect(s.backend).toBe("sqlite");
+    expect(s.fallbackReason).toBeUndefined();
+    expect(await readdir(s.dir)).toContain("history.db");
   });
 });

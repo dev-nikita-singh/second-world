@@ -33,8 +33,9 @@ its replacement, and is listed under **Deprecated** in the changelog before it i
 - Report and history files carry a `schemaVersion`. A newer SECOND WORLD reads older files (migrated
   on read, never rewritten). An older SECOND WORLD refuses files with a newer version instead of
   misreading them.
-- `history.backend: "sqlite"` is accepted but not implemented: it falls back to JSONL with a warning
-  (docs/03-engines/evidence-and-history.md).
+- `history.backend: "sqlite"` stores history in `history.db` (DB schema versioned with `PRAGMA user_version`
+  + `schema_migrations`; a newer database is refused, not modified). Switching from JSONL imports the JSONL
+  history once; the JSONL files are never modified (docs/03-engines/evidence-and-history.md §B.1.1).
 
 ## Release checklist (maintainers)
 
