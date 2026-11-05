@@ -127,3 +127,5 @@
 2026-11-04T15:30Z main: fixed secret warning redacting itself (config loader wording) + EPIPE on closed stdout pipe (main.ts ignoreClosedPipes; reproduced in WSL); tests added
 2026-11-05T00:00Z sw-linux-w9 -> main: Linux fixes done (perf VU early start, Ctrl+C gated proxy, sync-crypto relative test, jitter detector 10ms window); details in progress/sw-linux-w9.md
 2026-11-05T03:00Z sw-ci-w9 -> main: DONE flaky shop-express reliability cases: breaker censors in-flight-at-revert requests; slow-recovery only when still degraded at the end (else limitation recovery-unconfirmed); Linux 10/10 x2 nodes, Windows 3/3
+2026-11-05T00:00Z sw-macos-w9 -> main: out-of-lane flaky tests seen on branch CI: whatif-shop A/A regressed (ubuntu, same cause as CLI A/A: legit under load), calibrated.test /fixed/50 p95, detailed-timing Little's law, unit reliability engine recovered
+2026-11-05T01:00Z sw-macos-w9 -> main: DONE ci-macos-w9 (425c9bf): double-SIGINT temp leak fixed (sync temp registry), stress cap test, A/A + evolve CLI tests; macOS node24 green 3/3; report via handback

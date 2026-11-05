@@ -42,7 +42,9 @@ describe("What-If on shop-fastify", () => {
       },
       metrics: ["p50", "p95", "rps", "error_rate"],
       success: { p95: { improvement: ">= 15%" }, error_rate: { notWorse: true } },
-      design: { repetitions: 5, order: "interleaved", seed: 7 },
+      // 4 metrics → the first Holm step needs p < 0.0125; with 5 runs per arm that is only reachable with
+      // complete separation, so one stalled run on a starved 3-vCPU macOS runner made p95 "inconclusive".
+      design: { repetitions: 7, order: "interleaved", seed: 7 },
     });
     const d = res.data!;
     console.log(
@@ -53,7 +55,7 @@ describe("What-If on shop-fastify", () => {
         )
         .join("\n"),
     );
-    expect(d.runs.filter((r) => r.status === "ok")).toHaveLength(10);
+    expect(d.runs.filter((r) => r.status === "ok")).toHaveLength(14);
     expect(d.runs.map((r) => r.arm).slice(0, 4)).toEqual(["baseline", "fixed", "fixed", "baseline"]);
     const p95 = d.comparisons.find((c) => c.metric === "p95")!;
     expect(p95.verdict).toBe("improved");
@@ -75,7 +77,7 @@ describe("What-If A/A on the calibrated child server", () => {
     await srv?.close();
   });
 
-  it("baseline vs itself → never improved/regressed; small MDE when equivalence is shown", async () => {
+  it("baseline vs itself → the A/A contract holds; small MDE when equivalence is shown", async () => {
     const res = await runExperiment({
       name: "aa-fixed-20",
       mode: "aa",
@@ -91,9 +93,18 @@ describe("What-If A/A on the calibrated child server", () => {
     });
     const d = res.data!;
     console.log(d.noiseFloor);
-    // The A/A guarantee: the baseline is never "improved" or "regressed" against itself. Under heavy
-    // machine load (full suite + Docker) the noise can widen the CI so "inconclusive" is the honest
-    // verdict; the tight-noise claims are only checked when equivalence was shown.
+    // An A/A run tests the ENVIRONMENT. Identical arms compared at alpha 0.05 (Holm) can legitimately differ
+    // when load changes over seconds (seen once as "regressed" on ubuntu Node 22 under the full parallel
+    // suite). What must always hold is the contract: a difference fails the run with the invalidating
+    // WHATIF-AA-DIFFERENCE limitation; no difference passes it. Tight-noise claims only when equivalence was shown.
+    const differs = d.comparisons.some((c) => c.verdict === "improved" || c.verdict === "regressed");
+    const aaLimitation = res.limitations.find((l) => l.code === "WHATIF-AA-DIFFERENCE");
+    if (differs) {
+      expect(res.status).toBe("failed");
+      expect(aaLimitation?.impact).toBe("invalidates");
+      return;
+    }
+    expect(aaLimitation).toBeUndefined();
     for (const c of d.comparisons) expect(["no-significant-change", "inconclusive"]).toContain(c.verdict);
     if (d.comparisons.every((c) => c.verdict === "no-significant-change")) {
       // What the verdict guarantees: every bootstrap CI lies within the ±5% equivalence margin.

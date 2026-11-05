@@ -57,6 +57,12 @@ All notable changes to SECOND WORLD are documented here. The format follows
   only requests answered before the revert (in-flight ones were answered by the restored dependency).
 - Reliability: a recovery phase too short to confirm recovery no longer reports a false "No recovery within N s";
   `slow-recovery` needs the app to still be out of bounds at the end, otherwise limitation `recovery-unconfirmed`.
+- A second Ctrl+C during report or history writes no longer leaves `*.tmp`, `.lock.tmp-*` or `.lock.break` files
+  behind. Temp files are created on the main thread and tracked, so the hard-exit cleanup always sees them; an
+  async create queued on the libuv thread pool could finish after the cleanup (most visible on macOS).
+- Tests: A/A checks assert the exit-code contract both ways (no difference → exit 0; a difference → exit 1 with
+  `WHATIF-AA-DIFFERENCE`); evolve and what-if improvement tests use 7 repetitions so Holm correction is reachable;
+  the `safety.maxRps` stress test uses stages where the cap is the only limit.
 - JSONL history: a reader no longer warns of an "interrupted write" when another process is appending right now
   (the trailing partial line is re-read once).
 - Worker threads from TypeScript sources (tests, development) work on Node 22, which ignores `--import` loader
