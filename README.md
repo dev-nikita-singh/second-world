@@ -1,5 +1,12 @@
 # SECOND WORLD
 
+[![CI](https://github.com/dev-nikita-singh/second-world/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dev-nikita-singh/second-world/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Node.js ≥ 22.19](https://img.shields.io/badge/node-%E2%89%A5%2022.19-339933?logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macOS%20%7C%20windows-lightgrey)
+![No AI](https://img.shields.io/badge/AI%2FLLM-none%20(deterministic)-success)
+
 SECOND WORLD is a TypeScript/Node toolkit for testing and improving HTTP services before changes reach
 production. It loads a service, inspects its code, hunts API bugs, injects faults and records every run.
 Each capability is an independent **engine**. All engines share one config, one safety layer, one
@@ -19,9 +26,11 @@ analysis or code, and the same inputs and seed give the same results.
 | System Model | `sw model` | One graph from code, contracts, config and telemetry (OTLP JSON, Prometheus) |
 | What-If / Evolution | `sw whatif`, `sw evolve` | Statistical A/B of variants; sandboxed candidate changes ranked by Pareto |
 | Summary | `sw analyze` | Deterministic summary across earlier reports: counts by severity and classification, top findings, invalidating limitations |
-| Experiment History | `sw history` | JSONL run store, baselines, diffs with statistics, trends |
+| Experiment History | `sw history` | Run store (JSONL or SQLite), baselines, diffs with statistics, trends, tamper-evident audit log |
 
 Status: `0.1.0` release candidate, not yet published to npm (see [Install](#install)). The full specification is in [`docs/`](docs/README.md).
+
+Real-world check: run against an open-source Express + SQLite API ([gunjit-web/expense-tracker-api](https://github.com/gunjit-web/expense-tracker-api)) on localhost: 22 routes inspected, ~1,180 Bug Hunter requests and 64 adversarial scenarios, including cross-user access checks. The app had no findings; the run exposed two bugs in SECOND WORLD itself (OpenAPI `servers` base path, enveloped responses), both fixed with regression tests.
 
 ## Install
 
