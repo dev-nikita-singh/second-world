@@ -11,26 +11,26 @@ All notable changes to SECOND WORLD are documented here. The format follows
 - Real SQLite history backend: `history.backend: "sqlite"` uses Node's built-in `node:sqlite`
   (`.second-world/history/history.db`, WAL, transactions, schema migrations). It behaves the same as the
   JSONL store (one contract suite runs against both). Existing JSONL history is imported once and left
-  unchanged. At 10,000 runs `list`/`show` go from ~150 ms to ~1 ms and `verify` from 29 s to 5 s (0bc0435).
-- `sw history export --to jsonl`: copy SQLite history back into the JSONL files (f41c915).
+  unchanged. At 10,000 runs `list`/`show` go from ~150 ms to ~1 ms and `verify` from 29 s to 5 s (6c86516).
+- `sw history export --to jsonl`: copy SQLite history back into the JSONL files (9ab6279).
 - Plugin system (docs/10): `plugins: [...]` in the config (package names from the project's `node_modules`,
   or relative paths; `{ name, optional, options }`), `definePlugin` with an `apiVersion` check from the new
   `second-world/plugin` entry. Plugins can add report formats (`-f ns/name`), architecture rules, Bug Hunter
   assertions, history stores and lifecycle hooks; unsupported extension points fail with a clear error.
-  `sw plugins list|check [--json]`, global `--no-plugins`; plugins never load under `--no-config-code` (28c6501).
+  `sw plugins list|check [--json]`, global `--no-plugins`; plugins never load under `--no-config-code` (bec7735).
 - `sw report [reports...] [--last] [--run <id>]`: combine and re-render earlier reports and history runs in any
-  format; no network (28c6501).
+  format; no network (bec7735).
 - `sw run <workflow>` and `sw run --list`: run a config workflow (a DAG of engine steps) as one run with one
-  combined report and one history entry; `--dry-run` validates every step (28c6501).
+  combined report and one history entry; `--dry-run` validates every step (bec7735).
 - CI: a job that runs the repository's own GitHub Action; the release workflow has a manual rehearsal mode
-  (every check, then `npm publish --dry-run`) (0d02d76).
+  (every check, then `npm publish --dry-run`) (3ae5722).
 
 ### Changed
 
 - `history.backend: "sqlite"` no longer silently uses JSONL; it falls back to JSONL with a warning only when
-  `node:sqlite` is unavailable. Only node:sqlite's own ExperimentalWarning is hidden (0bc0435).
-- `report.formats` and `history.backend` accept plugin ids (`namespace/name`) (28c6501).
-- GitHub Actions in the workflows and `action.yml` are pinned to commit SHAs (0d02d76).
+  `node:sqlite` is unavailable. Only node:sqlite's own ExperimentalWarning is hidden (6c86516).
+- `report.formats` and `history.backend` accept plugin ids (`namespace/name`) (bec7735).
+- GitHub Actions in the workflows and `action.yml` are pinned to commit SHAs (3ae5722).
 
 ### Security
 
@@ -69,10 +69,10 @@ All notable changes to SECOND WORLD are documented here. The format follows
   hooks in workers. Built packages were not affected.
 - GitHub Action: a non-zero `sw` exit ended the step before `exit-code`/`report-dir`/`sarif-file` were set and
   before the SARIF upload (GitHub runs `bash -e`).
-- `sw … | head` no longer crashes with an unhandled `EPIPE` on Linux/macOS (28c6501).
-- The config warning about a raw secret (`auth.x.token`) was itself mangled by log redaction; reworded (28c6501).
+- `sw … | head` no longer crashes with an unhandled `EPIPE` on Linux/macOS (bec7735).
+- The config warning about a raw secret (`auth.x.token`) was itself mangled by log redaction; reworded (bec7735).
 - docs/quickstart.md re-run end to end and rewritten from real output; its two "known issue" notes were stale
-  (the stress rate-cap message and copy-paste-ready curl were already fixed) and are now regression-tested (28c6501).
+  (the stress rate-cap message and copy-paste-ready curl were already fixed) and are now regression-tested (bec7735).
 
 ## [0.1.0] - 2026-11-01
 
@@ -81,16 +81,16 @@ First release candidate. Not yet published to npm: publishing needs a GitHub rep
 
 ### Added
 
-- `sw bugs --path-param/--query/--header` for the main request of `--concurrency-test` (ac93109).
-- `sw history verify` checks the audit-log hash chain (0029b25).
+- `sw bugs --path-param/--query/--header` for the main request of `--concurrency-test` (32bf0bd).
+- `sw history verify` checks the audit-log hash chain (8290c39).
 - `sw inspect` recognises hand-written `node:http` routing and `node:sqlite`/`better-sqlite3` database
-  access; says when no routes or DB access were found (`ARCH_NO_ROUTES`, `ARCH_NO_DB_ACCESS`) (0029b25, fce2e0a).
-- `sw agent` uses `bugs.stateful.resources` (new `agent.resources`) for ownership and lifecycle probes (c00db55).
-- `sw init` takes the target from the OpenAPI `servers` URL and writes a working perf scenario (48e4757).
+  access; says when no routes or DB access were found (`ARCH_NO_ROUTES`, `ARCH_NO_DB_ACCESS`) (8290c39, ac40b15).
+- `sw agent` uses `bugs.stateful.resources` (new `agent.resources`) for ownership and lifecycle probes (40206ba).
+- `sw init` takes the target from the OpenAPI `servers` URL and writes a working perf scenario (b8e577c).
 - Example apps `examples/conduit-api` (RealWorld API) and `examples/orders-jobs-api` (jobs, payments,
-  webhooks, cache) with ground truth and system tests (415599d, fce2e0a).
+  webhooks, cache) with ground truth and system tests (c1c5b2e, ac40b15).
 - Docs: system design (docs/16), versioning & releases (docs/17), troubleshooting, threat model (docs/11)
-  (5606156, 376f3ba, 9af9d93). Release workflow with npm provenance (9af9d93).
+  (ddda0af, 9f56553, 2e82ba2). Release workflow with npm provenance (2e82ba2).
 
 - Release engineering: CI workflow (`.github/workflows/ci.yml`: Ubuntu, macOS and Windows × Node 22.19 and 24;
   lint, typecheck, unit, integration, e2e, build, packed-tarball smoke; Linux jobs for the Docker-backed tests
@@ -99,71 +99,71 @@ First release candidate. Not yet published to npm: publishing needs a GitHub rep
 - `sw doctor` reports whether a config was found (or that `-c` points at a missing file) and whether the optional
   `typescript` peer that `sw inspect` needs is installed.
 - `sw init` says what it did not detect (start script, OpenAPI file) and whether the target URL is a default.
-- `npm pack` builds `dist/` first (`prepack` script) (ec5d5b1).
-- `sw bugs --mix` CLI flag for mixed-operation concurrency tests; HAR export with full HAR 1.2 phase timings (fedb0a1).
-- MIT `LICENSE` file (fec02cc).
+- `npm pack` builds `dist/` first (`prepack` script) (8d8b386).
+- `sw bugs --mix` CLI flag for mixed-operation concurrency tests; HAR export with full HAR 1.2 phase timings (eb97c97).
+- MIT `LICENSE` file (a3ae4ea).
 
 ### Changed
 
-- `sw inspect` on a folder with no source files is an error run (exit 5), not a pass (ec5d5b1).
-- Code formatted with Biome and imports ordered; no behaviour change (ef70d91).
+- `sw inspect` on a folder with no source files is an error run (exit 5), not a pass (8d8b386).
+- Code formatted with Biome and imports ordered; no behaviour change (3e106c1).
 
 ### Security
 
-- `localhost` resolving to a LAN address was allowed; loopback names must resolve to loopback (9af9d93).
+- `localhost` resolving to a LAN address was allowed; loopback names must resolve to loopback (2e82ba2).
 - `sw replay` could import an invariant module from anywhere named in a shared artifact; only in-project
-  modules load now (9af9d93).
+  modules load now (2e82ba2).
 - Secrets leaked through curl reproductions (cookies, API keys, secret query params) and through free-text
-  redaction gaps; curl and HAR share one redaction rule (9af9d93).
-- DNS lookups in the Safety Guard have a timeout (`dnsTimeoutMs`, 10 s) (9af9d93).
-- `safety.maxRps` is enforced per World, not per engine lease (0029b25).
+  redaction gaps; curl and HAR share one redaction rule (2e82ba2).
+- DNS lookups in the Safety Guard have a timeout (`dnsTimeoutMs`, 10 s) (2e82ba2).
+- `safety.maxRps` is enforced per World, not per engine lease (8290c39).
 - A tampered history index cannot point reads outside the history folder; `sw model` Prometheus scrapes
-  no longer follow redirects (dfc23b2).
+  no longer follow redirects (9643970).
 
 ### Fixed
 
 - Concurrency: history lock races (stale-lock break, crash during lock creation, PID reuse), double Ctrl+C
   temp-file cleanup, report folders shared by parallel runs, model/arch-cache concurrent saves, audit-log
-  chain under parallel processes (df5a034, c919db3, be2e261, 0029b25).
-- `--dry-run` runs the same validation as a real run for perf, stress, reliability, bugs, agent (48e4757, ac93109).
-- Config/engine errors name the full key with a "did you mean" suggestion (5606156, 48e4757, de5bbfb).
+  chain under parallel processes (8bb320c, 43573b9, 370c83f, 8290c39).
+- `--dry-run` runs the same validation as a real run for perf, stress, reliability, bugs, agent (b8e577c, 32bf0bd).
+- Config/engine errors name the full key with a "did you mean" suggestion (ddda0af, b8e577c, f310da8).
 - `sw inspect` no longer crashes (exit 70) on 2000+ file projects with deep import chains; hashing is
-  ~4x faster (fce2e0a).
-- BOLA checks on owner-only writes when the read is public (780a9ed); no ownership false positive on
-  public reads in `sw agent` (c00db55); race findings name the mutating operation (c00db55).
-- Reports no longer crash on >120k-point series; perf errors line shows HTTP codes (48e4757).
-- Malformed history files exit 2 with a message instead of 70 (be2e261).
-- The package no longer ships source maps (946 kB instead of 2.5 MB) (c373f67).
+  ~4x faster (ac40b15).
+- BOLA checks on owner-only writes when the read is public (cc78bb7); no ownership false positive on
+  public reads in `sw agent` (40206ba); race findings name the mutating operation (40206ba).
+- Reports no longer crash on >120k-point series; perf errors line shows HTTP codes (b8e577c).
+- Malformed history files exit 2 with a message instead of 70 (370c83f).
+- The package no longer ships source maps (946 kB instead of 2.5 MB) (5751897).
 - `sw doctor` showed `✔ docker` when only the docker CLI was installed and the daemon was down; it now warns
   "daemon not reachable" and marks the docker capability unavailable.
 - `sw doctor` inside a container on Docker Desktop no longer labels the OS as WSL.
-- Error messages no longer contain ANSI colour codes when stderr is piped (ec5d5b1).
-- Stress and evolve: target and environment failures exit with their documented code instead of 70 (2ba7457).
-- A run stopped by the Safety Guard exits 3, not 70 (5369223).
-- Evolution input always ignores SECOND WORLD's own state folders (92e0d54); its working-tree checksum ignores
-  `.second-world/`; `sw inspect` on a missing path exits 2; user-caused errors exit 2/5 instead of 70 (3d5b748).
-- HTTP: custom credential headers are stripped on cross-origin redirects (63d56d7).
-- Redaction: sensitive names in free text are redacted regardless of entropy (2c21870); camelCase sensitive keys
-  such as `accessToken` are redacted (1544fd3).
-- Safety: hex-form IPv4-mapped IPv6 addresses (`[::ffff:7f00:1]`) are classified like their IPv4 address (021d7c7).
-- Agent export escapes U+2028/U+2029 in generated code; `sw analyze` handles an unknown severity (4d6c64e).
-- A target that is down: `sw bugs`/`sw agent` no longer report PASS; perf, stress, bugs and agent exit 5 (77582e4).
-- One history id per run; an unwritable report directory fails fast (c7b391e).
-- Evolve/what-if: an app that never starts gets a hint, is skipped after two tries and exits 5 (1faacab).
-- Reliability: paginated invariants, a safe fault ledger, reset after response, timeout-window rule (a79f58c).
-- Artifact paths, gzipped OTLP input and exact multi-worker tick percentiles (dc0e69e).
-- `typescript` is an optional peer dependency instead of being bundled; the tarball went from 10.2 MB to 2.4 MB (7e10dc0).
-- Performance Lab: the iterations model ignores warm-up; a run with zero measurements is invalid (a159296).
-- `sw doctor --quick` reports unprobed tools as info instead of missing (f0ca054).
-- Every planted defect in the example apps is found from the app's own `sw.config.ts` (4ec683c).
-- Documentation and UX mismatches found by end-to-end QA (86c665c, 2c299dd).
+- Error messages no longer contain ANSI colour codes when stderr is piped (8d8b386).
+- Stress and evolve: target and environment failures exit with their documented code instead of 70 (89ad7d8).
+- A run stopped by the Safety Guard exits 3, not 70 (65f618e).
+- Evolution input always ignores SECOND WORLD's own state folders (58ab836); its working-tree checksum ignores
+  `.second-world/`; `sw inspect` on a missing path exits 2; user-caused errors exit 2/5 instead of 70 (6f7978b).
+- HTTP: custom credential headers are stripped on cross-origin redirects (4dcb570).
+- Redaction: sensitive names in free text are redacted regardless of entropy (42f3aa3); camelCase sensitive keys
+  such as `accessToken` are redacted (0e10afe).
+- Safety: hex-form IPv4-mapped IPv6 addresses (`[::ffff:7f00:1]`) are classified like their IPv4 address (529d668).
+- Agent export escapes U+2028/U+2029 in generated code; `sw analyze` handles an unknown severity (753c4bc).
+- A target that is down: `sw bugs`/`sw agent` no longer report PASS; perf, stress, bugs and agent exit 5 (2f319b5).
+- One history id per run; an unwritable report directory fails fast (f53b6be).
+- Evolve/what-if: an app that never starts gets a hint, is skipped after two tries and exits 5 (c49d9f5).
+- Reliability: paginated invariants, a safe fault ledger, reset after response, timeout-window rule (542f410).
+- Artifact paths, gzipped OTLP input and exact multi-worker tick percentiles (00a349b).
+- `typescript` is an optional peer dependency instead of being bundled; the tarball went from 10.2 MB to 2.4 MB (a01b3c8).
+- Performance Lab: the iterations model ignores warm-up; a run with zero measurements is invalid (abe1419).
+- `sw doctor --quick` reports unprobed tools as info instead of missing (35c53c5).
+- Every planted defect in the example apps is found from the app's own `sw.config.ts` (e7f5357).
+- Documentation and UX mismatches found by end-to-end QA (d707815, 2b721a8).
 
 ### Removed
 
 - All AI/LLM features. SECOND WORLD is fully deterministic: `sw analyze` is a counted summary and the Agent
-  planner is heuristic only (729fec9).
+  planner is heuristic only (b96bf07).
 
-## Baseline (729fec9)
+## Baseline (b96bf07)
 
 The first commit in this repository contains the engines that make up 0.1.0: Performance Lab, Stress & Capacity
 Lab, Architecture Inspector, API Bug Hunter (with replay), Adversarial Test Agent, Reliability Lab, System Model,

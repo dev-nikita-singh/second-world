@@ -8,7 +8,7 @@
  * fails as it would after `npm i`. typescript is an optional peer: linked only for the inspect case.
  *
  * Regression: the bundled TypeScript crashed `sw inspect` in the ESM bin with
- * "__filename is not defined in ES module scope" (exit 70). Fixed in 7e10dc0 (typescript = optional peer).
+ * "__filename is not defined in ES module scope" (exit 70). Fixed in a01b3c8 (typescript = optional peer).
  */
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";

@@ -94,7 +94,7 @@ describe("experiments flag / config mapping", () => {
       repo: cfg.cwd,
       workload: { vus: 2, duration: "1s" },
     });
-    // SECOND WORLD's own state dirs are never counted as working-tree changes (92e0d54).
+    // SECOND WORLD's own state dirs are never counted as working-tree changes (58ab836).
     expect(built.ignorePaths).toContain(resolve(cfg.cwd, ".second-world"));
   });
 });

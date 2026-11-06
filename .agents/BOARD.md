@@ -164,7 +164,7 @@ FINAL wave 4 (main): full suite 148 files, 1315 passed / 1 skipped / 1 failed �
 
 ## Wave 5 — fixes + testing (user 2026-10-29: "git init, do the fixes, do testing, keep the work going")
 
-Git: baseline commit 729fec9 on `master`; wave 5 works on branch `wave-5`. Agents do NOT commit — main reviews and commits per agent.
+Git: baseline commit b96bf07 on `master`; wave 5 works on branch `wave-5`. Agents do NOT commit — main reviews and commits per agent.
 LF line endings enforced by .gitattributes.
 
 | Agent | Owns | Task |
@@ -173,53 +173,53 @@ LF line endings enforced by .gitattributes.
 | `sw-examples` | `examples/**`, `tests/integration/examples/**`, `tests/helpers/examples.ts` | shop-fastify: add GET /orders + concurrency/invariants config so every planted defect is detectable from the example configs; expected-findings kept exact |
 | `sw-reliability` | `src/engines/reliability/**`, `src/adapters/faults/**`, their tests | Paginated invariant collections; watchdog clears its ledger entry; review the slow-body/black-hole-only duplicate production |
 | `sw-fixes` | listed per item in its brief | Small known defects: reproduction.artifacts path rename, gzipped .pb detection, exact live perf.tick percentiles |
-FIXED by main (sw-qa reports): f0ca054 doctor --quick false "not found" warnings · a159296 perf iterations ignores warmup + zero-measurement run = error, no breach findings · 7e10dc0 typescript optional peer (packaged `sw inspect` crashed with __filename; tarball 10.2 MB → 2.4 MB). Open: LICENSE file needs owner's copyright name (asked user).
+FIXED by main (sw-qa reports): 35c53c5 doctor --quick false "not found" warnings · abe1419 perf iterations ignores warmup + zero-measurement run = error, no breach findings · a01b3c8 typescript optional peer (packaged `sw inspect` crashed with __filename; tarball 10.2 MB → 2.4 MB). Open: LICENSE file needs owner's copyright name (asked user).
 | sw-fixes | DONE | artifact paths relocated, gzip OTLP (+bomb guard), exact merged tick percentiles; 1173 tests |
 | sw-coverage | running | wave 5: measure coverage, test top risky gaps (safety first), report bugs as it.fails |
 BUG (sw-examples → main → sw-reliability): reliability/outbound-no-timeout false positive when client timeout / fault shorter than app's timeout budget (shop-fastify 2s×4). Assigned to sw-reliability: must be inconclusive, not a defect.
-FIXED by main (wave 5, sw-qa/sw-coverage reports): 1faacab evolve app-never-healthy (hint, skip, exit 5, runs-needed floor) · c7b391e history id = report runId; unwritable -o fails fast (exit 2) · 1544fd3 redact camelCase keys · 021d7c7 hex IPv4-mapped IPv6 · 77582e4 down target: bugs/agent no PASS, perf/stress/bugs/agent exit 5.
-| sw-reliability | DONE (a79f58c) | pagination, ledger lock + watchdog clear, reset after-response, timeout-window rule |
+FIXED by main (wave 5, sw-qa/sw-coverage reports): c49d9f5 evolve app-never-healthy (hint, skip, exit 5, runs-needed floor) · f53b6be history id = report runId; unwritable -o fails fast (exit 2) · 0e10afe redact camelCase keys · 529d668 hex IPv4-mapped IPv6 · 2f319b5 down target: bugs/agent no PASS, perf/stress/bugs/agent exit 5.
+| sw-reliability | DONE (542f410) | pagination, ledger lock + watchdog clear, reset after-response, timeout-window rule |
 | sw-fixes2 | running | evolve working-tree checksum ignores .second-world; inspect missing path exit 2; sweep user-caused exit 70s |
-| sw-examples | DONE (4ec683c) | every planted defect found from its own sw.config.ts; recall/precision 1.0; discovered shop-express no-circuit-breaker |
-| sw-coverage | DONE (ed1f6c9) | 206 tests; unit lines 81.4→84.1%, branches 67.4→70.9%; 4 bugs found + 2 "non-bugs" fixed as bugs (63d56d7 redirect custom credential headers, 2c21870 hex tokens after sensitive names) |
-| sw-qa | DONE (de2e30f) | 32 e2e/system tests; 12 bugs (9 behavioural, all fixed) |
-FIXED by main: 4d6c64e agent export U+2028/U+2029 code injection + analyze unknown severity · 86c665c docs/UX batch.
-| sw-fixes2 | DONE (3d5b748) | evolve own-state checksum; inspect missing path exit 2; user-side 70s → 2/5 |
-FINAL wave 5 (main): full suite 185 files, 1649 passed / 1 skipped / 0 failed; tsc clean. Extra fixes: 92e0d54 world evolution ignorePaths · 5369223 safety stop → exit 3 · 3ace138 test fixes (92e0d54 expectation; two load-sensitive assertions). Branch wave-5 not merged to master (awaiting user). Open: LICENSE copyright name (user).
+| sw-examples | DONE (e7f5357) | every planted defect found from its own sw.config.ts; recall/precision 1.0; discovered shop-express no-circuit-breaker |
+| sw-coverage | DONE (678b91a) | 206 tests; unit lines 81.4→84.1%, branches 67.4→70.9%; 4 bugs found + 2 "non-bugs" fixed as bugs (4dcb570 redirect custom credential headers, 42f3aa3 hex tokens after sensitive names) |
+| sw-qa | DONE (4d70533) | 32 e2e/system tests; 12 bugs (9 behavioural, all fixed) |
+FIXED by main: 753c4bc agent export U+2028/U+2029 code injection + analyze unknown severity · d707815 docs/UX batch.
+| sw-fixes2 | DONE (6f7978b) | evolve own-state checksum; inspect missing path exit 2; user-side 70s → 2/5 |
+FINAL wave 5 (main): full suite 185 files, 1649 passed / 1 skipped / 0 failed; tsc clean. Extra fixes: 58ab836 world evolution ignorePaths · 65f618e safety stop → exit 3 · f3b015e test fixes (58ab836 expectation; two load-sensitive assertions). Branch wave-5 not merged to master (awaiting user). Open: LICENSE copyright name (user).
 
-## Wave 6 (2026-10-30, branch `wave-6`; master = fec02cc after merging wave-5)
+## Wave 6 (2026-10-30, branch `wave-6`; master = a3ae4ea after merging wave-5)
 | Agent | Status | Owns | Task |
 |---|---|---|---|
-| sw-exit6 | DONE (2ba7457) | src/engines/stress/**, src/engines/experiments/{worktree,git,evolution}.ts, tests/unit/stress/**, tests/unit/experiments/** (new files) | Exit 70 → correct code: (a) stress where every stage errors for a non-unreachable reason; (b) evolve git worktree / gitOk failures |
-| sw-bugs6 | DONE (fedb0a1) | src/cli/commands/bugs.ts, src/engines/bugs/har.ts (+ minimal engine.ts wiring), tests/unit/bugs/**, tests/unit/cli/** (new files), docs/03-engines/api-bug-hunter.md | `--mix` CLI flag for concurrency tests; HAR send/wait/receive (+ connect/dns) phase timings |
+| sw-exit6 | DONE (89ad7d8) | src/engines/stress/**, src/engines/experiments/{worktree,git,evolution}.ts, tests/unit/stress/**, tests/unit/experiments/** (new files) | Exit 70 → correct code: (a) stress where every stage errors for a non-unreachable reason; (b) evolve git worktree / gitOk failures |
+| sw-bugs6 | DONE (eb97c97) | src/cli/commands/bugs.ts, src/engines/bugs/har.ts (+ minimal engine.ts wiring), tests/unit/bugs/**, tests/unit/cli/** (new files), docs/03-engines/api-bug-hunter.md | `--mix` CLI flag for concurrency tests; HAR send/wait/receive (+ connect/dns) phase timings |
 
 ## Wave 7 (2026-11-01, branch `wave-7`; master = wave-6). Plan + rules: .agents/PLAN-wave7.md
 | Agent | Status | Owns | Task |
 |---|---|---|---|
-| sw-race7 | DONE (df5a034) | src/engines/history/**, src/core/world.ts, src/cli/run-common.ts, src/shared/util/fs*.ts (new fs helpers ok), src/engines/experiments/{worktree,sandbox,app}.ts (lifecycle only), tests/unit/concurrency/**, tests/integration/concurrency/**, docs/02-architecture.md | Plan §A: races/leaks/crash-consistency inside the tool |
-| sw-design7 | DONE (5606156) | docs/16-system-design.md, src/adapters/**, src/core/{config,errors.ts,log}/**, tests/unit/design/** (import rules, API snapshot, schema freeze, startup budget) | Plan §B: system design doc + enforcement tests + resilience |
-| sw-real7 | DONE (415599d) | examples/conduit-api/**, tests/system/conduit*.test.ts (+ helpers in tests/system/conduit/**) | Plan §C: realistic app + packed-tarball user journey |
-| sw-ship7 | DONE (e226325) | .github/**, action.yml, Dockerfile, .dockerignore, CHANGELOG.md, SECURITY.md, CONTRIBUTING.md, README.md, docs/quickstart.md, src/cli/commands/{doctor,init}.ts, src/core/probe/** | Plan §D: CI, Action, Docker, release docs, first-run UX (repo-wide lint pass only when main says go) |
+| sw-race7 | DONE (8bb320c) | src/engines/history/**, src/core/world.ts, src/cli/run-common.ts, src/shared/util/fs*.ts (new fs helpers ok), src/engines/experiments/{worktree,sandbox,app}.ts (lifecycle only), tests/unit/concurrency/**, tests/integration/concurrency/**, docs/02-architecture.md | Plan §A: races/leaks/crash-consistency inside the tool |
+| sw-design7 | DONE (ddda0af) | docs/16-system-design.md, src/adapters/**, src/core/{config,errors.ts,log}/**, tests/unit/design/** (import rules, API snapshot, schema freeze, startup budget) | Plan §B: system design doc + enforcement tests + resilience |
+| sw-real7 | DONE (c1c5b2e) | examples/conduit-api/**, tests/system/conduit*.test.ts (+ helpers in tests/system/conduit/**) | Plan §C: realistic app + packed-tarball user journey |
+| sw-ship7 | DONE (bf5d160) | .github/**, action.yml, Dockerfile, .dockerignore, CHANGELOG.md, SECURITY.md, CONTRIBUTING.md, README.md, docs/quickstart.md, src/cli/commands/{doctor,init}.ts, src/core/probe/** | Plan §D: CI, Action, Docker, release docs, first-run UX (repo-wide lint pass only when main says go) |
 Shared files nobody owns (src/index.ts, src/cli/main.ts, package.json, engines not listed): message main.
-main fixes: ec5d5b1 (piped error colour, inspect no-files exit 5, prepack) · ef521db restore planted examples (my ef70d91 format pass had shifted their lines) · 780a9ed BOLA on owner-only writes with public read.
+main fixes: 8d8b386 (piped error colour, inspect no-files exit 5, prepack) · 0d78b38 restore planted examples (my 3e106c1 format pass had shifted their lines) · cc78bb7 BOLA on owner-only writes with public read.
 ### Wave 7b (follow-ups found by wave 7; sw-race7 still RUNNING)
 | Agent | Status | Owns | Task |
 |---|---|---|---|
-| sw-agent8 | DONE (c00db55) | src/engines/agent/**, src/engines/bugs/{dictionary,engine,cases,invariants}.ts, tests/unit/agent/**, tests/integration/agent/** (new files), docs/03-engines/{adversarial-test-agent,api-bug-hunter}.md | Agent uses resources/idPointer + no ownership FP on public reads; dictionary harvests slug/username-like ids; race finding attributed to the right op |
-| sw-ux8 | DONE (48e4757) | src/cli/commands/{perf,stress,init,config,reliability}.ts, src/engines/reporting/**, src/engines/*/index.ts (input error paths only), docs/02,08,09,11 (+ docs/03 reliability/perf), tests/unit/cli/** (new files), tests/unit/reporting/** | dry-run threshold validation, error paths with section, Math.min/max spread, init uses OpenAPI servers + a working perf scenario, TTY status code, reliability wording, stale docs |
-| sw-infra8 | DONE (0029b25) | src/core/safety/**, src/engines/experiments/sandbox.ts, tests/integration/docker/**, src/engines/architecture/**, src/cli/commands/history.ts, tests/unit/safety/**, tests/unit/architecture/** (new files) | world-wide maxRps GCRA, podman-compatible container probe + Linux docker test fixes, inspect: node:http/node:sqlite awareness or an honest limitation, `sw history verify` checks the audit-log chain |
-main (7b): c919db3 shared atomic writer (model/arch cache concurrent saves) · 6dd8722 docs: sqlite backend not implemented · de5bbfb model/whatif/scenario error paths · 7ed78a6 lint 0/0 at --error-on-warnings · docs/16 gaps refreshed.
+| sw-agent8 | DONE (40206ba) | src/engines/agent/**, src/engines/bugs/{dictionary,engine,cases,invariants}.ts, tests/unit/agent/**, tests/integration/agent/** (new files), docs/03-engines/{adversarial-test-agent,api-bug-hunter}.md | Agent uses resources/idPointer + no ownership FP on public reads; dictionary harvests slug/username-like ids; race finding attributed to the right op |
+| sw-ux8 | DONE (b8e577c) | src/cli/commands/{perf,stress,init,config,reliability}.ts, src/engines/reporting/**, src/engines/*/index.ts (input error paths only), docs/02,08,09,11 (+ docs/03 reliability/perf), tests/unit/cli/** (new files), tests/unit/reporting/** | dry-run threshold validation, error paths with section, Math.min/max spread, init uses OpenAPI servers + a working perf scenario, TTY status code, reliability wording, stale docs |
+| sw-infra8 | DONE (8290c39) | src/core/safety/**, src/engines/experiments/sandbox.ts, tests/integration/docker/**, src/engines/architecture/**, src/cli/commands/history.ts, tests/unit/safety/**, tests/unit/architecture/** (new files) | world-wide maxRps GCRA, podman-compatible container probe + Linux docker test fixes, inspect: node:http/node:sqlite awareness or an honest limitation, `sw history verify` checks the audit-log chain |
+main (7b): 43573b9 shared atomic writer (model/arch cache concurrent saves) · 4c8f657 docs: sqlite backend not implemented · f310da8 model/whatif/scenario error paths · 0cfea6a lint 0/0 at --error-on-warnings · docs/16 gaps refreshed.
 
-## Wave 8 (2026-11-01, branch `wave-8`; master = wave-7 merged at a960a7f, full suite 1885 passed / 3 skipped). Plan + DoD: .agents/PLAN-wave8.md
+## Wave 8 (2026-11-01, branch `wave-8`; master = wave-7 merged at b9d4f8e, full suite 1885 passed / 3 skipped). Plan + DoD: .agents/PLAN-wave8.md
 | Agent | Status | Owns | Task |
 |---|---|---|---|
-| sw-cli-w8 | DONE (ac93109) | src/cli/** (not run-common.ts), docs/09-cli-and-api.md, tests/unit/cli/** + tests/e2e/** (new files) | CLI completeness (plan §sw-cli-w8) |
-| sw-robust-w8 | DONE (be2e261) | src/core/** (not safety/**, not log/**), src/cli/run-common.ts, src/engines/history/**, tests/unit/robust/**, tests/integration/robust/** | Tool robustness + soak (plan §sw-robust-w8) |
-| sw-sec-w8 | DONE (9af9d93) | src/core/safety/**, src/core/log/**, src/engines/agent/export.ts, src/engines/bugs/{har,artifact}.ts, docs/11, SECURITY.md, .github/workflows/release.yml, tests/unit/security/** | Security review + fuzz (plan §sw-sec-w8) |
-| sw-real2-w8 | DONE (fce2e0a) | examples/orders-jobs-api/**, src/engines/architecture/**, tests/system/orders-jobs*.test.ts (+ tests/system/orders-jobs/**), tests/unit/architecture/** (new files) | Second realistic app + node:http routes in inspect |
+| sw-cli-w8 | DONE (32bf0bd) | src/cli/** (not run-common.ts), docs/09-cli-and-api.md, tests/unit/cli/** + tests/e2e/** (new files) | CLI completeness (plan §sw-cli-w8) |
+| sw-robust-w8 | DONE (370c83f) | src/core/** (not safety/**, not log/**), src/cli/run-common.ts, src/engines/history/**, tests/unit/robust/**, tests/integration/robust/** | Tool robustness + soak (plan §sw-robust-w8) |
+| sw-sec-w8 | DONE (2e82ba2) | src/core/safety/**, src/core/log/**, src/engines/agent/export.ts, src/engines/bugs/{har,artifact}.ts, docs/11, SECURITY.md, .github/workflows/release.yml, tests/unit/security/** | Security review + fuzz (plan §sw-sec-w8) |
+| sw-real2-w8 | DONE (ac40b15) | examples/orders-jobs-api/**, src/engines/architecture/**, tests/system/orders-jobs*.test.ts (+ tests/system/orders-jobs/**), tests/unit/architecture/** (new files) | Second realistic app + node:http routes in inspect |
 Unowned files (src/index.ts, package.json, other engines, docs/16): message main.
-| sw-gaps-w8 | DONE (ea7537e) | src/core/world.ts (stress input mapping only), src/engines/stress/**, src/engines/agent/planner/**, src/engines/bugs/{property,generate,cases}.ts (stateful only), tests/unit/{stress,agent,bugs}/** + tests/integration/{stress,agent,bugs}/** (new files) | 4 engine gaps found by sw-real2-w8 on orders-jobs-api |
-FINAL wave 8 (main): version 0.1.0 (c85e9f4); full suite twice in a row: 253 files, 2021 passed / 5 skipped / 0 failed (both runs); lint 0/0 --error-on-warnings; tsc clean. Merged to master.
+| sw-gaps-w8 | DONE (66354c8) | src/core/world.ts (stress input mapping only), src/engines/stress/**, src/engines/agent/planner/**, src/engines/bugs/{property,generate,cases}.ts (stateful only), tests/unit/{stress,agent,bugs}/** + tests/integration/{stress,agent,bugs}/** (new files) | 4 engine gaps found by sw-real2-w8 on orders-jobs-api |
+FINAL wave 8 (main): version 0.1.0 (c197f7c); full suite twice in a row: 253 files, 2021 passed / 5 skipped / 0 failed (both runs); lint 0/0 --error-on-warnings; tsc clean. Merged to master.
 
 ## Wave 9 (2026-11-04, branch `main`; master renamed to main). Plan + DoD: .agents/PLAN-wave9.md
 GitHub repo dev-nikita-singh/second-world (public) — blocked: the gh token cannot create repos (asked user). npm publish: NOT wanted yet.
@@ -228,5 +228,5 @@ GitHub repo dev-nikita-singh/second-world (public) — blocked: the gh token can
 | sw-sqlite-w9 | running | see plan | real node:sqlite history backend + JSONL import + contract tests |
 | sw-plugins-w9 | DONE (uncommitted; commit with sw-sqlite-w9: world.ts uses history store.ts) | see plan | plugin system (docs/10) + `sw plugins list/check` |
 | sw-cli-w9 | DONE (uncommitted; quickstart issues were already fixed, regression tests added; plugins CLI wired) | see plan | `sw report`, `sw run`, quickstart known issues |
-| sw-linux-w9 | running | src/engines/performance/**, src/engines/reliability/** (detector), tests/integration/{performance,concurrency,examples,reliability}/** | 4 Linux-only integration failures (WSL run of 0d02d76) |
+| sw-linux-w9 | running | src/engines/performance/**, src/engines/reliability/** (detector), tests/integration/{performance,concurrency,examples,reliability}/** | 4 Linux-only integration failures (WSL run of 3ae5722) |
 | main | running | .github/**, package.json, CHANGELOG.md | GitHub repo + CI (Linux/macOS/Windows/docker/podman/Action), release rehearsal, local WSL Linux run |

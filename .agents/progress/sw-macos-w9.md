@@ -1,6 +1,6 @@
 # sw-macos-w9 progress (macOS Node 24 CI failures)
 
-Branch: ci-macos-w9 (pushed). Temporary debug files removed in 425c9bf. Branch head 425c9bf.
+Branch: ci-macos-w9 (pushed). Temporary debug files removed in c11ad19. Branch head c11ad19.
 NOTE: working tree is shared; other agents' uncommitted edits (src/engines/bugs/*) — commit only own files by path, never stash.
 
 ## Done
@@ -16,5 +16,5 @@ NOTE: working tree is shared; other agents' uncommitted edits (src/engines/bugs/
 
 ## Status: DONE
 - CI on branch: 41935742606 all green; 41938184362 all green except macOS 22 (whatif-shop fastify flake, out of lane); 41938205192 all green.
-- Commit 2daf035 (bugs/agent base path) by another agent landed on ci-macos-w9 because the shared tree is on this branch; told main.
+- Commit 4d6a421 (bugs/agent base path) by another agent landed on ci-macos-w9 because the shared tree is on this branch; told main.
 ## Out of lane (reported to main): whatif-shop A/A (ubuntu regressed under load), calibrated /fixed/50 p95<75 macOS, detailed-timing Little's law <1.3, reliability engine unit recovered.

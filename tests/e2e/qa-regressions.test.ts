@@ -65,7 +65,7 @@ function writeConfig(extra: Record<string, unknown> = {}): void {
 }
 
 describe("sw doctor --quick", () => {
-  // Fixed (main f0ca054): quick mode reported unprobed git/docker as "not found" warnings.
+  // Fixed (main 35c53c5): quick mode reported unprobed git/docker as "not found" warnings.
   it("does not claim tools are missing when it did not probe them", async () => {
     const r = await sw(["doctor", "--quick"]);
     expect(r.exitCode).toBe(0);
@@ -76,7 +76,7 @@ describe("sw doctor --quick", () => {
 });
 
 describe("sw perf --model iterations with a configured warmup", () => {
-  // Fixed (main a159296): all iterations ran inside the warmup → 0 measured, 2 threshold breaches on n/a, exit 1.
+  // Fixed (main abe1419): all iterations ran inside the warmup → 0 measured, 2 threshold breaches on n/a, exit 1.
   it("measures every requested iteration and keeps thresholds on real data", async () => {
     writeConfig();
     const r = await sw([
@@ -144,7 +144,7 @@ describe("invalid paths and outputs", () => {
     expect(r.exitCode).toBe(2);
   });
 
-  // Fixed (main c7b391e): an unwritable -o dir gave "Internal error ENOTDIR" + stack, exit 70, after the whole
+  // Fixed (main f53b6be): an unwritable -o dir gave "Internal error ENOTDIR" + stack, exit 70, after the whole
   // load test had run, and the run was not saved to history. Now a pre-run check refuses it (exit 2, no load).
   it("an unwritable -o dir is refused before any load (exit 2, clear message)", async () => {
     writeConfig();
