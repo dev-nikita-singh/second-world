@@ -42,9 +42,10 @@ describe("What-If on shop-fastify", () => {
       },
       metrics: ["p50", "p95", "rps", "error_rate"],
       success: { p95: { improvement: ">= 15%" }, error_rate: { notWorse: true } },
-      // 4 metrics → the first Holm step needs p < 0.0125; with 5 runs per arm that is only reachable with
-      // complete separation, so one stalled run on a starved 3-vCPU macOS runner made p95 "inconclusive".
-      design: { repetitions: 7, order: "interleaved", seed: 7 },
+      // 4 metrics → Holm steps at p < 0.0125 / 0.0167 / 0.025. With 5 or 7 runs per arm, ONE stalled variant
+      // run on a starved 3-vCPU macOS runner was enough to make p95 "inconclusive" (seen at 7 runs: -95.7%,
+      // CI [-96.1, -94.8], pHolm 0.052). With 10 runs per arm a single outlier still gives pHolm ≈ 0.01.
+      design: { repetitions: 10, order: "interleaved", seed: 7 },
     });
     const d = res.data!;
     console.log(
@@ -55,7 +56,7 @@ describe("What-If on shop-fastify", () => {
         )
         .join("\n"),
     );
-    expect(d.runs.filter((r) => r.status === "ok")).toHaveLength(14);
+    expect(d.runs.filter((r) => r.status === "ok")).toHaveLength(20);
     expect(d.runs.map((r) => r.arm).slice(0, 4)).toEqual(["baseline", "fixed", "fixed", "baseline"]);
     const p95 = d.comparisons.find((c) => c.metric === "p95")!;
     expect(p95.verdict).toBe("improved");
@@ -65,7 +66,7 @@ describe("What-If on shop-fastify", () => {
     expect(d.verdicts[0]!.hypothesis).toBe("supported");
     expect(res.status).toBe("passed");
     expect(d.arms.every((a) => a.fingerprint !== null)).toBe(true);
-  }, 90_000);
+  }, 180_000);
 });
 
 describe("What-If A/A on the calibrated child server", () => {
