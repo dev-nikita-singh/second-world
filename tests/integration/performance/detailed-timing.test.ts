@@ -48,9 +48,11 @@ describe("Little's Law self-check (F3 regression, sw-stress case)", () => {
       expect(g).toBeDefined();
       if (!g) return;
       expect(g.reasons.join(" ")).not.toMatch(/Little/);
-      // λW ≈ 50/s × ~21 ms ≈ 1.05; exact integration lands right there (sampling gave 2.00)
+      // λW ≈ 50/s × ~21 ms ≈ 1.05; exact integration lands right there (sampling gave 2.00 against that).
+      // Compared with λ·W of THIS run: on a starved macOS runner the 20 ms endpoint answered in ~40 ms, so
+      // the true concurrency was ~2 (seen: 2.08). The old fixed 1.3 bound failed a correct measurement.
       expect(g.meanInFlight).toBeGreaterThan(0.85);
-      expect(g.meanInFlight).toBeLessThan(1.3);
+      expect(g.meanInFlight).toBeLessThan(g.littlesLawExpected * 1.2 + 0.05);
       if (duration === "3s") expect(g.littlesLawMismatch).toBeLessThan(0.1);
     }
   });

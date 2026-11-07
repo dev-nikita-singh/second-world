@@ -114,5 +114,5 @@ describe("Bug Hunter vs shop-express (seeded defects)", () => {
       const stolen = await runCurlLine(curl[1] as string, env, useCurl);
       expect([created, stolen], useCurl ? "curl" : "undici").toEqual([201, 200]); // contract says 404 for bob
     }
-  });
+  }, 60_000);
 });

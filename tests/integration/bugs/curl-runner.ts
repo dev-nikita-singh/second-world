@@ -109,11 +109,15 @@ export async function runCurlLine(
       "-w",
       "%{http_code}",
     ];
-    const stdout = await new Promise<string>((resolve, reject) => {
-      execFile("curl", args, { shell: false, timeout: 15_000, encoding: "utf8" }, (err, out, errOut) =>
-        err ? reject(new Error(`curl failed: ${err.message} ${errOut}`)) : resolve(out),
-      );
-    });
+    // One retry: on a busy Windows CI runner a curl process once hung long enough to time the test out.
+    // The point of the test is that the reproduction line is correct, which one more attempt does not change.
+    const once = () =>
+      new Promise<string>((resolve, reject) => {
+        execFile("curl", args, { shell: false, timeout: 10_000, encoding: "utf8" }, (err, out, errOut) =>
+          err ? reject(new Error(`curl failed: ${err.message} ${errOut}`)) : resolve(out),
+        );
+      });
+    const stdout = await once().catch(() => once());
     return Number(stdout.trim());
   }
   const p = parseCurl(argv);
