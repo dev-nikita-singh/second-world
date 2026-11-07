@@ -101,7 +101,9 @@ describe("correct-by-design policies are not flagged", () => {
         dependency: "payments",
         workload: { rate: 20, routes },
         steady: "2s",
-        duration: "4s",
+        // 6 s, not 4 s: ~190 dependency calls once scored z=4.98 against the z ≥ 5 threshold on a Windows
+        // runner (15.6 ms timers smear the lag peak); z grows with √calls, so 6 s gives ~1.5x the evidence.
+        duration: "6s",
         recovery: "2s",
         seed: 33,
       },
@@ -113,5 +115,5 @@ describe("correct-by-design policies are not flagged", () => {
       JSON.stringify(r.data?.runs[0]?.jitter),
     ).toContain("reliability/retry-without-jitter");
     await assertNothingLeft(s.proxy);
-  }, 30_000);
+  }, 45_000);
 });
