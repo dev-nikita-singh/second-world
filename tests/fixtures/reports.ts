@@ -526,6 +526,8 @@ export function makeReliabilityData(over: Partial<ReliabilityData> = {}): Reliab
       factor: 26,
       proxyRequests: 780,
       clientRequests: 30,
+      steadyProxyRequests: 30,
+      steadyClientRequests: 30,
       storm: true,
     },
     jitter: null,

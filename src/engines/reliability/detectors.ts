@@ -272,8 +272,12 @@ export interface Amplification {
   steadyRatio: number | null;
   /** faultRatio / steadyRatio (or faultRatio when no baseline). */
   factor: number;
+  /** Dependency calls / client requests during the fault. */
   proxyRequests: number;
   clientRequests: number;
+  /** Same during steady state. 0 calls in both phases while requests were made = the app never called the proxy. */
+  steadyProxyRequests: number;
+  steadyClientRequests: number;
   storm: boolean;
 }
 
@@ -311,6 +315,8 @@ export function amplification(
     factor,
     proxyRequests: fp,
     clientRequests: fc,
+    steadyProxyRequests: sp,
+    steadyClientRequests: sc,
     storm: factor > stormFactor,
   };
 }

@@ -1141,6 +1141,50 @@ export async function executeReliability(
         impact: "reduces-confidence",
       });
     }
+    // The fault proxy saw no dependency call at all (steady AND fault) while the app served requests: the app
+    // is not routed through the proxy, the fault never reached it, and "held" would be a false PASS.
+    const bypassed = runs.find(
+      (r) =>
+        r.fault.applied &&
+        r.amplification !== null &&
+        r.amplification.proxyRequests === 0 &&
+        r.amplification.steadyProxyRequests === 0 &&
+        r.amplification.clientRequests + r.amplification.steadyClientRequests > 0,
+    );
+    const proxyUrl = inj.injector instanceof BuiltinFaultProxy ? inj.injector.url : undefined;
+    if (bypassed?.amplification) {
+      const a = bypassed.amplification;
+      const at = proxyUrl ? ` (${proxyUrl})` : "";
+      limitations.push({
+        code: "fault-not-exercised",
+        message:
+          `The fault never reached the app: the ${input.dependency} fault proxy${at} received 0 calls while ` +
+          `the app answered ${a.steadyClientRequests + a.clientRequests} requests in run ${bypassed.index + 1}. ` +
+          `The app calls ${input.dependency} directly, not through the proxy. Point the app's ${input.dependency} ` +
+          `address at the proxy (reliability.dependencies.${input.dependency}.listen) and run again; nothing about ` +
+          "resilience can be concluded from this run.",
+        impact: "invalidates",
+      });
+    } else {
+      // Called before the fault but not during it: the requests made during the fault did not need it.
+      const quiet = runs.find(
+        (r) =>
+          r.fault.applied &&
+          r.amplification !== null &&
+          r.amplification.proxyRequests === 0 &&
+          r.amplification.steadyProxyRequests > 0 &&
+          r.amplification.clientRequests > 0,
+      );
+      if (quiet)
+        limitations.push({
+          code: "fault-not-exercised-during-fault",
+          message:
+            `${input.dependency} was called before the fault but not during it (run ${quiet.index + 1}): ` +
+            "the requests made during the fault did not need it, so the fault's effect was barely tested. " +
+            "Check the workload routes and their dependsOn.",
+          impact: "reduces-confidence",
+        });
+    }
     const data: ReliabilityData = {
       schema: 1,
       scenario: input.scenario,
@@ -1183,7 +1227,7 @@ export async function executeReliability(
     };
     const okRuns = runs.filter((r) => r.steadyOk && r.fault.applied);
     data.verdict =
-      okRuns.length === 0 || cancelled
+      okRuns.length === 0 || cancelled || bypassed
         ? "inconclusive"
         : okRuns.some((r) => r.checks.some((c) => c.phase === "fault" && !c.passed))
           ? "violated"
@@ -1193,6 +1237,7 @@ export async function executeReliability(
     const status: EngineResult["status"] = cancelled
       ? "cancelled"
       : runs.some((r) => !r.steadyOk) ||
+          bypassed !== undefined ||
           data.verdict === "violated" ||
           findings.some((f) => f.severity !== "info" && f.severity !== "low")
         ? "failed"
