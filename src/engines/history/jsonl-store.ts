@@ -15,7 +15,14 @@ import { promisify } from "node:util";
 import { gunzip as gunzipCb } from "node:zlib";
 import { sha256 } from "../../shared/util/hash.js";
 import { ulid } from "../../shared/util/ulid.js";
-import { appendLine, atomicWrite, type LockOptions, TMP_MARKER, withLock } from "./fsutil.js";
+import {
+  appendLine,
+  atomicWrite,
+  clearAbandonedBreaker,
+  type LockOptions,
+  TMP_MARKER,
+  withLock,
+} from "./fsutil.js";
 import { captureGitMetadata } from "./git.js";
 import { migrateRun, UnsupportedSchemaError } from "./migrations.js";
 import {
@@ -330,6 +337,8 @@ export function createJsonlStore(opts: JsonlStoreOptions = {}): HistoryStore {
           } catch {
             // no dir
           }
+          // ...and the `.lock.break` of a writer SIGKILLed while breaking a stale lock.
+          await clearAbandonedBreaker(lockFile);
         }
         return { kept: keep.size, compacted, removed, dryRun };
       });

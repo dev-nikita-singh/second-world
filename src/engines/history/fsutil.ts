@@ -214,6 +214,23 @@ async function unreadableLockIsOld(file: string, staleMs: number): Promise<boole
 const BREAK_STALE_MS = 5_000;
 
 /**
+ * Removes `<lock>.break` when its breaker is gone: the pid written into it is not alive on this host
+ * (SIGKILL inside the critical section, which no cleanup can catch), or it is older than BREAK_STALE_MS
+ * (pid reuse, another host, or a pre-pid file). Never removes a live breaker's file. Best effort.
+ */
+export async function clearAbandonedBreaker(lockFile: string): Promise<void> {
+  const breaker = `${lockFile}.break`;
+  try {
+    const [text, st] = await Promise.all([readFile(breaker, "utf8"), stat(breaker)]);
+    const pid = Number(text.trim());
+    const deadOwner = Number.isInteger(pid) && pid > 0 && pid !== process.pid && !pidAlive(pid);
+    if (deadOwner || Date.now() - st.mtimeMs > BREAK_STALE_MS) await unlink(breaker).catch(() => {});
+  } catch {
+    // no breaker file (or it vanished while we looked)
+  }
+}
+
+/**
  * Removes a stale lock without ever removing a live one. Waiters that judged the same lock stale are
  * serialised through `<lock>.break` (O_EXCL) and re-check staleness under it: the first removes the
  * stale lock, a later one finds the fresh lock of whoever won the next `wx` open and leaves it alone.
@@ -229,16 +246,12 @@ async function breakStaleLock(
 ): Promise<void> {
   const breaker = `${file}.break`;
   try {
-    createTempSync(breaker); // registered: a hard exit inside the critical section removes it
+    // registered: a hard exit inside the critical section removes it; the pid lets others spot a SIGKILLed one
+    createTempSync(breaker, String(process.pid));
   } catch (e) {
     if (code(e) !== "EEXIST" && !RETRY_CODES.has(code(e) ?? "")) throw e;
     // Another waiter is breaking it right now; clear a breaker file abandoned by a crashed process.
-    try {
-      const st = await stat(breaker);
-      if (Date.now() - st.mtimeMs > BREAK_STALE_MS) await unlink(breaker).catch(() => {});
-    } catch {
-      // gone already
-    }
+    await clearAbandonedBreaker(file);
     await delay(1);
     return;
   }
