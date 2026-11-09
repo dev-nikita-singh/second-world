@@ -33,6 +33,11 @@ const REVIEWED = new Set([
   "src/engines/experiments/git.ts",
   "src/engines/experiments/sandbox.ts",
   "src/engines/history/git.ts",
+  // wave 10 (`sw ui`): jobs.ts spawns `node <cli> <argv>` with an argv built from a per-engine allow-list
+  // (src/ui/server/engines.ts), shell: false. ui.ts opens the browser; the only accepted input is
+  // http://127.0.0.1:<port>/#t=<[A-Za-z0-9_-]+> (regex-checked), so no quote or metacharacter reaches it.
+  "src/cli/commands/ui.ts",
+  "src/ui/server/jobs.ts",
 ]);
 
 describe("child processes: no shell", () => {

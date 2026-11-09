@@ -86,6 +86,16 @@ export function buildProgram(): Command {
       return doctorCommand(o, cmd.optsWithGlobals<GlobalOptions>());
     });
 
+  program
+    .command("ui")
+    .description("open the local browser UI: run tests, see runs, findings and reports")
+    .option("--port <n>", "port on 127.0.0.1 (default 4777; a free one if taken)")
+    .option("--no-open", "print the link instead of opening the browser")
+    .action(async (o: { port?: string; open?: boolean }, cmd: Command) => {
+      const { uiCommand } = await import("./commands/ui.js");
+      return uiCommand(o, cmd.optsWithGlobals<GlobalOptions>());
+    });
+
   const config = program.command("config").description("config tools");
   config
     .command("print")
@@ -646,8 +656,26 @@ export function ignoreClosedPipes(
   }
 }
 
+/**
+ * Started by `sw ui` (src/ui/server/jobs.ts): the UI's Stop button arrives over the IPC channel as
+ * `{ type: "sw-ui-interrupt" }` and becomes a SIGINT, i.e. the normal graceful Ctrl+C path (cancelled report,
+ * history, exit 130). Windows cannot deliver SIGINT to a child process, so this is the portable way.
+ * A command without a SIGINT handler (nothing to clean up) exits with 130 directly.
+ */
+export function listenForUiInterrupt(): void {
+  if (process.env.SECOND_WORLD_UI_JOB !== "1" || typeof process.send !== "function") return;
+  process.on("message", (m: unknown) => {
+    if (!m || typeof m !== "object" || (m as { type?: unknown }).type !== "sw-ui-interrupt") return;
+    if (process.listenerCount("SIGINT") > 0) process.emit("SIGINT", "SIGINT");
+    else process.exit(130);
+  });
+  // The IPC channel must not keep a finished command alive.
+  process.channel?.unref();
+}
+
 if (isEntry()) {
   ignoreClosedPipes();
+  listenForUiInterrupt();
   main().then(
     (code) => {
       process.exitCode = code;

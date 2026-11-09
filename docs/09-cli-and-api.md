@@ -71,6 +71,7 @@ Global flags go before or after the command (`sw --dry-run bugs …` or `sw bugs
 | `sw run <workflow>` | Run a workflow from the config (a DAG of engine steps); `sw run --list` lists them |
 | `sw history list\|show\|diff\|baseline\|trend\|verify\|prune\|export` | Experiment History |
 | `sw plugins list\|check` | Plugins from the config (docs/10) |
+| `sw ui` | Local browser UI: start tests, watch them live, browse runs, findings and reports |
 
 Engine commands that produce a report (perf, stress, inspect, bugs, agent, reliability run,
 whatif, evolve, run) share `--json` (print the combined report JSON on stdout) and `--no-history`
@@ -475,6 +476,40 @@ auto-discovery. Neither command runs an engine or sends anything.
 | `sw plugins check` | Load and validate the plugins and the config's references to them (exit 2 if a required plugin is broken); `--json` |
 
 With `--no-plugins` (or `--no-config-code` for config plugins) nothing is imported and the plugins are listed as disabled.
+
+### `sw ui`
+
+A browser UI for everything the CLI does. `sw ui` starts a small server on **127.0.0.1 only**, prints a link
+and opens it in the default browser. Global flags (`--config`, `--profile`, `--set`, `--no-config-code`,
+`--no-plugins`, `--fail-on`) apply to the UI and to every test started from it. Ctrl+C stops the UI (a
+running test is stopped gracefully first).
+
+```
+$ sw --config examples/shop-express/sw.config.ts ui
+SECOND WORLD UI → http://127.0.0.1:4777/#t=<session key>
+```
+
+| Option | Meaning |
+|---|---|
+| `--port <n>` | Port on 127.0.0.1 (default 4777; a free port is used if it is taken; `0` = any free port) |
+| `--no-open` | Print the link only (e.g. to open it in another browser) |
+
+Screens:
+
+| Screen | What it shows |
+|---|---|
+| Dashboard | Target health (checked every 10 s), open findings by severity, latest run per test type, quick start |
+| New test | One card per engine (inspect, bugs, perf, stress, reliability, agent, whatif, model) with a form prefilled from the config; **Dry run** and **Start**; disruptive or data-changing tests ask for confirmation first |
+| Live run | The command line, streamed output, elapsed time, **Stop** (= Ctrl+C: graceful, partial report, exit 130; press again to force) |
+| Runs | History (filter by test type and status, search, paging); tick two runs to compare them (`sw history diff`) |
+| Run | Verdict and exit code in words, findings (filter by severity), a details drawer per finding (what happened, how to fix, where, copy-paste reproduction, **Replay** for Bug Hunter findings), load-test charts and per-endpoint tables, stress levels, limitations, report download (HTML, Markdown, JSON, SARIF, JUnit) |
+| Findings | Every finding across the last 50 runs, grouped by fingerprint: open (still reported by the latest run of that test type) or gone |
+| Settings | Project, config (secrets masked, read-only), `sw doctor` checks, theme (auto / light / dark) |
+
+How it works: each test is a child `sw` process with exactly the command line shown on the screen, so the
+Safety Guard, confirmations (logged to the audit log like `--yes` / `--approve-disruptive`), history and exit
+codes are the CLI's. One test runs at a time. The UI reads history, reports and the config; it stores nothing
+of its own. Config edits are picked up without a restart. Security: see docs/11 §1.7.
 
 ### Interaction
 

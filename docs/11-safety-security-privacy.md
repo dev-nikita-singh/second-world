@@ -101,6 +101,26 @@ Set `SW_FUZZ_RUNS` / `SW_FUZZ_SEED` for a longer or different run, e.g.
 | SSRF via templates/data files | Data file injects a URL | Hosts are checked at request time, after template expansion |
 | Supply chain | Compromised dependency | Minimal deps, lockfile, provenance, `npm audit signatures`, Renovate with review |
 
+### 1.7 Local UI server (`sw ui`, wave 10)
+
+`sw ui` (src/ui/server) is an HTTP server that can start load tests and fault injection, so any web page
+the user has open is an attacker that can send requests to it. Controls:
+
+| Threat | Control |
+|---|---|
+| Another machine on the network drives it | Listens on `127.0.0.1` only; there is no host option |
+| A web page in the browser calls the API (CSRF) | Every `/api` request needs the per-start session key (32 random bytes) as `Authorization: Bearer`; a page on another origin cannot read it. The key travels in the URL **fragment** (`#t=…`), which browsers never send to a server or put in Referer; the app moves it to `sessionStorage` (this tab) and removes it from the address bar. EventSource (live output) cannot send headers, so only that endpoint also accepts `?t=` |
+| DNS rebinding (a hostile domain re-pointed at 127.0.0.1) | The `Host` header must be `127.0.0.1:<port>` or `localhost:<port>` (else 421) |
+| Cross-origin writes | A request with an `Origin` other than the UI's own is refused (403); JSON bodies only (415 otherwise, so HTML forms cannot post); no CORS headers; 64 kB body limit |
+| Command injection through test options | The browser sends `{ engine, options }`. Each option is checked against a per-engine allow-list (type, range, choices; text values match a strict character set, never start with `-` and contain no spaces) and the server builds the argv itself; the child is spawned with `shell: false` (src/ui/server/engines.ts, tests/unit/ui/server/engines.test.ts) |
+| Bypassing confirmations | Disruptive or data-changing tests return 428 until the user confirms in a dialog; the confirmation becomes `--approve-disruptive` / `--yes` on the child's command line, which the audit log records like any CLI approval |
+| Path traversal | Run ids must be ULIDs and are looked up in the history index; static files are an allow-list read at start-up |
+| XSS / injected content | Strict CSP (`default-src 'self'`, no inline scripts or styles, `frame-ancestors 'none'`), `nosniff`, no external fonts or CDNs; the app renders text, never HTML from reports |
+| Secrets in the UI | The config is masked with the config printer's redactor; reports are shown as recorded (already redacted) |
+
+The UI never runs engine code itself: each test is a child `sw` process with the same Safety Guard, budgets
+and exit codes as the CLI. Tests: tests/unit/ui/server/security.test.ts, tests/integration/ui/ui-server.test.ts.
+
 ## 2. Safety Guard
 
 ```ts

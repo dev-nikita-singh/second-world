@@ -8,6 +8,17 @@ All notable changes to SECOND WORLD are documented here. The format follows
 
 ### Added
 
+- `sw ui`: a local browser UI (127.0.0.1 only). Dashboard (target health, open findings, latest run per test
+  type), New test (a form per engine prefilled from the config, Dry run / Start, confirmation dialogs for
+  data-changing and disruptive tests), live output with a graceful Stop, Runs (filters, compare two runs),
+  Run detail (findings drawer with reproduction and Replay, load-test chart, per-endpoint and stress tables,
+  limitations, report download in five formats), Findings across runs (open / gone), Settings (masked config,
+  doctor). Every test is a child `sw` process with the CLI's safety rules, audit log, history and exit codes.
+  Security: session key in the URL fragment, Host and Origin checks, an allow-list for every option, strict
+  CSP (docs/11 §1.7). Preact is bundled into the 88 kB app: no new runtime dependency.
+- Commands started by `sw ui` stop gracefully on Windows too (an IPC message replaces SIGINT, which Windows
+  cannot deliver to a child process).
+
 - Real SQLite history backend: `history.backend: "sqlite"` uses Node's built-in `node:sqlite`
   (`.second-world/history/history.db`, WAL, transactions, schema migrations). It behaves the same as the
   JSONL store (one contract suite runs against both). Existing JSONL history is imported once and left
@@ -41,6 +52,13 @@ All notable changes to SECOND WORLD are documented here. The format follows
 
 ### Fixed
 
+- `sw reliability run`: when the app did not call its dependency through the fault proxy (e.g. shop-express
+  started without `PAYMENTS_URL` pointing at the proxy), the fault reached nothing and the run printed PASS
+  (exit 0). Now: limitation `fault-not-exercised` (invalidates), verdict inconclusive, status failed (exit 1),
+  with the proxy address and how to fix the wiring. Found in manual testing.
+- History: a writer killed (SIGKILL) while breaking a stale lock left `.lock.break` behind until another
+  stale lock was broken. The breaker now writes its pid; the next breaker and `sw history prune` remove the
+  file of a dead process at once.
 - `sw bugs` / `sw agent` ignored the OpenAPI `servers` path (`servers: [{ url: "/api" }]`, or an absolute URL's
   path, or Swagger 2 `basePath`): every request went to `/transactions` instead of `/api/transactions`. The path
   now applies when the target URL has none. Found by testing a real open-source API (gunjit-web/expense-tracker-api).

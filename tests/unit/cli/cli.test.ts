@@ -22,6 +22,7 @@ describe("program definition (in-process)", () => {
     const p = buildProgram();
     expect(p.commands.map((c) => c.name())).toEqual([
       "doctor",
+      "ui",
       "config",
       "perf",
       "stress",

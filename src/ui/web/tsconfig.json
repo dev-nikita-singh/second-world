@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "declaration": false,
+    "rootDir": "../.."
+  },
+  "files": [],
+  "include": ["./**/*.ts", "./**/*.tsx", "../shared/**/*.ts"],
+  "exclude": ["./build.ts"]
+}

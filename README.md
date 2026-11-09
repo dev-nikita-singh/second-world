@@ -172,6 +172,25 @@ ID                          CREATED                   LABEL     STATUS    FINDIN
 [`docs/quickstart.md`](docs/quickstart.md) is the full walkthrough, covering `sw init`, stress,
 fault injection, cross-run summaries, statistical history diffs, combined reports and workflows, with captured output.
 
+## Browser UI
+
+Prefer clicking to typing? Run `sw ui` once: it opens a local web app in your browser.
+
+```bash
+sw --config path/to/sw.config.ts ui
+```
+
+- **Dashboard:** target health, open findings by severity, the latest run of each test type.
+- **New test:** a card per engine with a form prefilled from your config, **Dry run** and **Start**; tests
+  that change data or inject failures ask for confirmation first.
+- **Live run:** streamed output and a **Stop** button (a graceful Ctrl+C with a partial report).
+- **Runs and Findings:** history with filters, compare two runs, every finding with an explanation, how to
+  fix it, a copy-paste reproduction and a **Replay** button; download reports as HTML, Markdown, JSON, SARIF or JUnit.
+- Light and dark theme, keyboard accessible.
+
+It runs only on your computer (127.0.0.1, private session key, strict CSP), and every test is the same `sw`
+command the CLI runs, with the same safety rules. Details: [docs/09 `sw ui`](docs/09-cli-and-api.md#sw-ui).
+
 ## Commands
 
 Global flags go **before** the command (`sw --yes bugs …`, `sw --dry-run perf`). Run `sw <command> --help` for every option.
@@ -195,6 +214,7 @@ Global flags go **before** the command (`sw --yes bugs …`, `sw --dry-run perf`
 | `sw report [reports...] [--last] [--run <id>]` | Combine and/or re-render earlier `report.json` files and history runs into any format (`-f`, `-o`); verdict recomputed at `--fail-on`. No network |
 | `sw run <workflow>` / `sw run --list` | Run a config workflow (`workflows.<name>`: a DAG of engine steps) as one run: one combined report, one history entry; `--dry-run` validates every step |
 | `sw plugins list\|check [--json]` | Plugins from the config (`plugins: [...]`): what they contribute, and whether they load (exit 2 if a required one is broken) |
+| `sw ui [--port N] [--no-open]` | Local browser UI on 127.0.0.1: start any test from a form, watch it live, browse runs, findings and reports (see [Browser UI](#browser-ui)) |
 | `sw history list\|show\|diff\|baseline\|trend\|verify\|prune\|export` | Run history: list, show, compare (`id[,id…]`, `last:N`, `label:<name>[:N]`, `baseline:<name>`; statistics with ≥ 5 runs per side), named baselines, trends, integrity check, retention, `export --to jsonl` (copy SQLite history back to JSONL) |
 
 Global flags: `-c/--config`, `-p/--profile`, `--set key=value`, `-f/--format`, `-o/--out`, `--fail-on`,
